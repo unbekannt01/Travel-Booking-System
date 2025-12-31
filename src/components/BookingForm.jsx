@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
+import { useState, useMemo } from "react";
 import {
   ArrowLeft,
   Save,
@@ -16,14 +16,25 @@ import {
   Layout,
   X,
   LockKeyhole,
-} from "lucide-react"
+} from "lucide-react";
 
-const CustomSelect = ({ label, value, options, onChange, placeholder, className = "" }) => {
-  const [isOpen, setIsOpen] = useState(false)
+const CustomSelect = ({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+  className = "",
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className={`space-y-2 relative ${className}`}>
-      {label && <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">{label}</label>}
+      {label && (
+        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+          {label}
+        </label>
+      )}
       <div className="relative">
         <button
           type="button"
@@ -35,13 +46,18 @@ const CustomSelect = ({ label, value, options, onChange, placeholder, className 
           </span>
           <ChevronDown
             size={18}
-            className={`text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            className={`text-slate-400 transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
           />
         </button>
 
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setIsOpen(false)}
+            />
             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="max-h-60 overflow-y-auto custom-scrollbar p-2">
                 {options.map((option) => (
@@ -49,11 +65,13 @@ const CustomSelect = ({ label, value, options, onChange, placeholder, className 
                     key={option.value}
                     type="button"
                     onClick={() => {
-                      onChange(option.value)
-                      setIsOpen(false)
+                      onChange(option.value);
+                      setIsOpen(false);
                     }}
                     className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                      value === option.value ? "bg-indigo-600 text-white" : "text-slate-700 hover:bg-slate-50"
+                      value === option.value
+                        ? "bg-indigo-600 text-white"
+                        : "text-slate-700 hover:bg-slate-50"
                     }`}
                   >
                     {option.label}
@@ -66,14 +84,14 @@ const CustomSelect = ({ label, value, options, onChange, placeholder, className 
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
 const GenderSelector = ({ value, onChange }) => {
   const options = [
     { label: "Male", value: "Male" },
     { label: "Female", value: "Female" },
-  ]
+  ];
 
   return (
     <div className="flex gap-2 w-full">
@@ -92,18 +110,18 @@ const GenderSelector = ({ value, onChange }) => {
         </button>
       ))}
     </div>
-  )
-}
+  );
+};
 
-const rows = [1, 2, 3, 4, 5, 6]
+const rows = [1, 2, 3, 4, 5, 6];
 
 const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
-  const getSeatInfo = (id) => passengers.find((p) => p.seatId === id)
-  const occupant = getSeatInfo(id)
-  const isSelectedInCurrentBooking = !!occupant
+  const getSeatInfo = (id) => passengers.find((p) => p.seatId === id);
+  const occupant = getSeatInfo(id);
+  const isSelectedInCurrentBooking = !!occupant;
 
-  const bookedBy = bookedSeats.find((bs) => bs.seatId === id)
-  const isBookedByOther = !!bookedBy
+  const bookedBy = bookedSeats.find((bs) => bs.seatId === id);
+  const isBookedByOther = !!bookedBy;
 
   return (
     <button
@@ -114,13 +132,17 @@ const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
         isBookedByOther
           ? "border-red-300 bg-red-50 cursor-not-allowed opacity-75"
           : isSelectedInCurrentBooking
-            ? "border-indigo-600 bg-indigo-50 cursor-pointer"
-            : "border-slate-200 bg-white hover:border-indigo-300 cursor-pointer"
+          ? "border-indigo-600 bg-indigo-50 cursor-pointer"
+          : "border-slate-200 bg-white hover:border-indigo-300 cursor-pointer"
       }`}
     >
       <span
         className={`text-[8px] md:text-[9px] font-black mb-0.5 ${
-          isBookedByOther ? "text-red-600" : isSelectedInCurrentBooking ? "text-indigo-600" : "text-slate-400"
+          isBookedByOther
+            ? "text-red-600"
+            : isSelectedInCurrentBooking
+            ? "text-indigo-600"
+            : "text-slate-400"
         }`}
       >
         {label}
@@ -140,8 +162,8 @@ const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
         <div className="w-1 h-1 rounded-full bg-slate-200 group-hover:bg-indigo-300" />
       )}
     </button>
-  )
-}
+  );
+};
 
 const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
   <div className="flex flex-col items-center space-y-4">
@@ -198,21 +220,38 @@ const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
       </div>
     </div>
   </div>
-)
+);
 
 const SeatLayout = ({ passengers, bookedSeats, onSeatSelect }) => {
   return (
     <div className="flex flex-col md:flex-row items-start justify-center gap-8 md:gap-16 p-4 overflow-x-auto custom-scrollbar min-h-150">
-      <DeckGrid deck="lower" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
-      <DeckGrid deck="upper" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+      <DeckGrid
+        deck="lower"
+        passengers={passengers}
+        onSeatSelect={onSeatSelect}
+        bookedSeats={bookedSeats}
+      />
+      <DeckGrid
+        deck="upper"
+        passengers={passengers}
+        onSeatSelect={onSeatSelect}
+        bookedSeats={bookedSeats}
+      />
     </div>
-  )
-}
+  );
+};
 
-export default function BookingForm({ onSave, tours, editData, onCancel, bookings = [] }) {
+export default function BookingForm({
+  onSave,
+  tours,
+  editData,
+  onCancel,
+  bookings = [],
+}) {
   const [formData, setFormData] = useState(() => ({
     id: editData?.id || Date.now().toString(),
-    invoiceNo: editData?.invoiceNo || `SBT-${Math.floor(Math.random() * 9000) + 1000}`,
+    invoiceNo:
+      editData?.invoiceNo || `SBT-${Math.floor(Math.random() * 9000) + 1000}`,
     date: editData?.date || new Date().toISOString().split("T")[0],
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
@@ -235,29 +274,42 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         seatId: "",
       },
     ],
-  }))
+    isFixedPrice: false, // Track if the selected tour has fixed pricing
+  }));
 
-  const [showSeatMap, setShowSeatMap] = useState(false)
-  const [activePassengerIndex, setActivePassengerIndex] = useState(0)
+  const [showSeatMap, setShowSeatMap] = useState(false);
+  const [activePassengerIndex, setActivePassengerIndex] = useState(0);
 
   const calculateTotal = (passengers, tourName) => {
-    const tour = tours.find((t) => t.name === tourName)
-    if (!tour) return 0
+    const tour = tours.find((t) => t.name === tourName);
+    if (!tour) return 0;
+
     return passengers.reduce((sum, p) => {
-      const isUpper = p.seatId?.startsWith("upper")
-      const price = isUpper ? Number(tour.upperPrice) || 0 : Number(tour.lowerPrice) || 0
-      return sum + price
-    }, 0)
-  }
+      // Check if tour uses fixed pricing
+      if (
+        tour.pricingType === "fixed" ||
+        (tour.fixedPrice && !tour.pricingType)
+      ) {
+        return sum + (Number(tour.fixedPrice) || 0);
+      }
+
+      // Otherwise use berth-based pricing
+      const isUpper = p.seatId?.startsWith("upper");
+      const price = isUpper
+        ? Number(tour.upperPrice) || 0
+        : Number(tour.lowerPrice) || 0;
+      return sum + price;
+    }, 0);
+  };
 
   const handleTourSelect = (tourName) => {
     if (tourName === "custom") {
-      setFormData({ ...formData, tourName: "" })
-      return
+      setFormData({ ...formData, tourName: "" });
+      return;
     }
-    const tour = tours.find((t) => t.name === tourName)
+    const tour = tours.find((t) => t.name === tourName);
     if (tour) {
-      const newTotal = calculateTotal(formData.passengers, tour.name)
+      const newTotal = calculateTotal(formData.passengers, tour.name);
       setFormData((prev) => ({
         ...prev,
         tourName: tour.name,
@@ -265,22 +317,24 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         busType: tour.busType,
         journeyDate: tour.journeyDate || prev.journeyDate,
         totalAmount: newTotal,
-      }))
+        isFixedPrice: tour.isFixedPrice,
+      }));
     } else {
-      setFormData({ ...formData, tourName: tourName })
+      setFormData({ ...formData, tourName: tourName });
     }
-  }
+  };
 
   const handleSeatSelection = (seatId) => {
-    const updated = [...formData.passengers]
-    const occupantIdx = updated.findIndex((p) => p.seatId === seatId)
-    if (occupantIdx !== -1 && occupantIdx !== activePassengerIndex) return
+    const updated = [...formData.passengers];
+    const occupantIdx = updated.findIndex((p) => p.seatId === seatId);
+    if (occupantIdx !== -1 && occupantIdx !== activePassengerIndex) return;
 
-    updated[activePassengerIndex].seatId = updated[activePassengerIndex].seatId === seatId ? "" : seatId
+    updated[activePassengerIndex].seatId =
+      updated[activePassengerIndex].seatId === seatId ? "" : seatId;
 
-    const newTotal = calculateTotal(updated, formData.tourName)
-    setFormData({ ...formData, passengers: updated, totalAmount: newTotal })
-  }
+    const newTotal = calculateTotal(updated, formData.tourName);
+    setFormData({ ...formData, passengers: updated, totalAmount: newTotal });
+  };
 
   const addPassenger = () => {
     setFormData({
@@ -297,35 +351,43 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
           seatId: "",
         },
       ],
-    })
-  }
+    });
+  };
 
   const removePassenger = (index) => {
     if (formData.passengers.length > 1) {
-      const updated = formData.passengers.filter((_, i) => i !== index)
-      setFormData({ ...formData, passengers: updated })
+      const updated = formData.passengers.filter((_, i) => i !== index);
+      setFormData({ ...formData, passengers: updated });
     }
-  }
+  };
 
   const updatePassenger = (index, field, value) => {
-    const updated = [...formData.passengers]
-    updated[index][field] = value
-    setFormData({ ...formData, passengers: updated })
-  }
+    const updated = [...formData.passengers];
+    updated[index][field] = value;
+    setFormData({ ...formData, passengers: updated });
+  };
 
   const handleSubmit = (e) => {
-    e.preventDefault()
-    onSave(formData)
-  }
+    e.preventDefault();
+    onSave(formData);
+  };
 
   const bookedSeats = useMemo(() => {
-    if (!formData.tourName || !formData.journeyDate) return []
+    if (!formData.tourName || !formData.journeyDate) return [];
 
-    const relevantBookings = bookings.filter(
-      (b) => b.tourName === formData.tourName && b.journeyDate === formData.journeyDate && b.id !== formData.id,
-    )
+    const targetDate = new Date(formData.journeyDate)
+      .toISOString()
+      .split("T")[0];
 
-    const seats = []
+    const relevantBookings = bookings.filter((b) => {
+      const isSameTour = b.tourName === formData.tourName;
+      const bookingDate = new Date(b.journeyDate).toISOString().split("T")[0];
+      const isSameDate = bookingDate === targetDate;
+      const isNotCurrentBooking = b.id !== formData.id && b._id !== formData.id;
+      return isSameTour && isSameDate && isNotCurrentBooking;
+    });
+
+    const seats = [];
     relevantBookings.forEach((booking) => {
       booking.passengers.forEach((passenger) => {
         if (passenger.seatId) {
@@ -334,13 +396,13 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
             passengerName: passenger.name,
             bookingId: booking.id,
             invoiceNo: booking.invoiceNo,
-          })
+          });
         }
-      })
-    })
+      });
+    });
 
-    return seats
-  }, [formData.tourName, formData.journeyDate, bookings, formData.id])
+    return seats;
+  }, [formData.tourName, formData.journeyDate, bookings, formData.id]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-10 pb-20 animate-entrance">
@@ -351,7 +413,11 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
             onClick={onCancel}
             className="flex items-center gap-2 text-slate-400 hover:text-primary font-bold text-sm mb-2 transition-colors group"
           >
-            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Dashboard
+            <ArrowLeft
+              size={16}
+              className="group-hover:-translate-x-1 transition-transform"
+            />{" "}
+            Dashboard
           </button>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">
             {editData ? "Refine Reservation" : "Plan New Journey"}
@@ -372,7 +438,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               <div className="bg-primary/10 text-primary p-3 rounded-2xl">
                 <Building size={20} />
               </div>
-              <h3 className="font-black text-xl text-slate-900">Contact Information</h3>
+              <h3 className="font-black text-xl text-slate-900">
+                Contact Information
+              </h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-2.5">
@@ -385,7 +453,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   placeholder="Full name as per ID"
                   className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:border-primary/20 transition-all outline-none"
                   value={formData.contactName}
-                  onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, contactName: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2.5">
@@ -397,13 +467,15 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   required
                   placeholder="+91 XXXX XXX XXX"
                   className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
-                  value={formData.contactPhone ? `+91 ${formData.contactPhone}` : ""}
+                  value={
+                    formData.contactPhone ? `+91 ${formData.contactPhone}` : ""
+                  }
                   onChange={(e) => {
                     const value = e.target.value
                       .replace(/^\+91\s*/, "")
                       .replace(/\D/g, "")
-                      .slice(0, 10)
-                    setFormData({ ...formData, contactPhone: value })
+                      .slice(0, 10);
+                    setFormData({ ...formData, contactPhone: value });
                   }}
                 />
               </div>
@@ -416,7 +488,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   placeholder="email@address.com"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                   value={formData.contactEmail}
-                  onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, contactEmail: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -428,7 +502,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                 <div className="bg-blue-50 text-blue-600 p-2.5 rounded-xl">
                   <Users size={20} />
                 </div>
-                <h3 className="font-black text-lg text-slate-900">Passenger Manifest</h3>
+                <h3 className="font-black text-lg text-slate-900">
+                  Passenger Manifest
+                </h3>
               </div>
               <button
                 type="button"
@@ -463,41 +539,58 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Name</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Name
+                        </label>
                         <input
                           type="text"
                           required
                           className="w-full px-0 py-1 bg-transparent border-b border-slate-200 text-sm font-bold focus:border-indigo-600 transition-all outline-none"
                           value={p.name}
-                          onChange={(e) => updatePassenger(i, "name", e.target.value)}
+                          onChange={(e) =>
+                            updatePassenger(i, "name", e.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">City</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          City
+                        </label>
                         <input
                           type="text"
                           required
                           className="w-full px-0 py-1 bg-transparent border-b border-slate-200 text-sm font-bold focus:border-indigo-600 transition-all outline-none"
                           value={p.city}
-                          onChange={(e) => updatePassenger(i, "city", e.target.value)}
+                          onChange={(e) =>
+                            updatePassenger(i, "city", e.target.value)
+                          }
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Age</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Age
+                        </label>
                         <input
                           type="number"
                           required
                           className="w-full px-0 py-1 bg-transparent border-b border-slate-200 text-sm font-bold focus:border-indigo-600 transition-all outline-none"
                           value={p.age}
-                          onChange={(e) => updatePassenger(i, "age", e.target.value)}
+                          onChange={(e) =>
+                            updatePassenger(i, "age", e.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-2.5">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Gender</label>
-                        <GenderSelector value={p.gender} onChange={(val) => updatePassenger(i, "gender", val)} />
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          Gender
+                        </label>
+                        <GenderSelector
+                          value={p.gender}
+                          onChange={(val) => updatePassenger(i, "gender", val)}
+                        />
                       </div>
                       <div className="space-y-2.5">
                         <label className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
@@ -506,8 +599,8 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                         <button
                           type="button"
                           onClick={() => {
-                            setActivePassengerIndex(i)
-                            setShowSeatMap(true)
+                            setActivePassengerIndex(i);
+                            setShowSeatMap(true);
                           }}
                           className={`w-full py-2.5 rounded-xl text-xs font-black border-2 transition-all flex items-center justify-center gap-2 ${
                             p.seatId
@@ -530,7 +623,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                           placeholder="Private phone number"
                           className="w-full px-4 py-2 bg-white border-transparent rounded-xl text-xs font-bold focus:ring-1 focus:ring-indigo-100 transition-all outline-none"
                           value={p.contact}
-                          onChange={(e) => updatePassenger(i, "contact", e.target.value)}
+                          onChange={(e) =>
+                            updatePassenger(i, "contact", e.target.value)
+                          }
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -542,7 +637,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                           placeholder="XXXX XXXX XXXX"
                           className="w-full px-4 py-2 bg-white border-transparent rounded-xl text-xs font-bold focus:ring-1 focus:ring-indigo-100 transition-all outline-none"
                           value={p.aadhar}
-                          onChange={(e) => updatePassenger(i, "aadhar", e.target.value)}
+                          onChange={(e) =>
+                            updatePassenger(i, "aadhar", e.target.value)
+                          }
                         />
                       </div>
                     </div>
@@ -557,16 +654,20 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between p-6 md:p-8 border-b border-slate-100">
                   <div>
-                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">Choose Seat</h3>
+                    <h3 className="text-2xl md:text-3xl font-black text-slate-900">
+                      Choose Seat
+                    </h3>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1.5">
                       Assigning seat for:{" "}
                       <span className="text-indigo-600">
-                        {formData.passengers[activePassengerIndex].name || "Passenger " + (activePassengerIndex + 1)}
+                        {formData.passengers[activePassengerIndex].name ||
+                          "Passenger " + (activePassengerIndex + 1)}
                       </span>
                     </p>
                     {bookedSeats.length > 0 && (
                       <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide mt-2 flex items-center gap-1.5 bg-red-50 px-3 py-1.5 rounded-full">
-                        <LockKeyhole size={12} /> {bookedSeats.length} seats already booked
+                        <LockKeyhole size={12} /> {bookedSeats.length} seats
+                        already booked
                       </p>
                     )}
                   </div>
@@ -607,7 +708,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl">
                 <Bus size={20} />
               </div>
-              <h3 className="font-black text-lg text-slate-900">Tour Logistics</h3>
+              <h3 className="font-black text-lg text-slate-900">
+                Tour Logistics
+              </h3>
             </div>
             <div className="space-y-6">
               <CustomSelect
@@ -631,31 +734,44 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   placeholder="e.g. Nepal-Special Package"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                   value={formData.tourName}
-                  onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tourName: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Journey Date</label>
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  Journey Date
+                </label>
                 <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <Calendar
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={18}
+                  />
                   <input
                     type="date"
                     required
                     className="w-full pl-12 pr-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                     value={formData.journeyDate}
-                    onChange={(e) => setFormData({ ...formData, journeyDate: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, journeyDate: e.target.value })
+                    }
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Bus Arrangement</label>
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  Bus Arrangement
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 2x1 Sleeper Luxury"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                   value={formData.busType}
-                  onChange={(e) => setFormData({ ...formData, busType: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, busType: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -666,7 +782,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               <div className="bg-emerald-50 text-emerald-600 p-2.5 rounded-xl">
                 <CreditCard size={20} />
               </div>
-              <h3 className="font-black text-lg text-slate-900">Billing Summary</h3>
+              <h3 className="font-black text-lg text-slate-900">
+                Billing Summary
+              </h3>
             </div>
             <div className="space-y-6">
               <div className="space-y-2">
@@ -710,7 +828,10 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   Balance Due
                 </span>
                 <div className="text-3xl font-black">
-                  ₹{(formData.totalAmount - formData.advanceReceived).toLocaleString()}
+                  ₹
+                  {(
+                    formData.totalAmount - formData.advanceReceived
+                  ).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -718,5 +839,5 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         </aside>
       </div>
     </form>
-  )
+  );
 }

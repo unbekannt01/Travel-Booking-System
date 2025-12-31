@@ -1,296 +1,258 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import {
-  Bus,
-  Plus,
-  Users,
-  LayoutDashboard,
-  Search,
-  Eye,
-  Edit3,
-  Trash2,
-  TrendingUp,
-  MapPin,
-  Menu,
-  X,
-  Compass,
-  Filter,
-  FileText,
-  LogOut,
-  Edit2,
-  Check,
-} from "lucide-react";
-import BookingForm from "./components/BookingForm";
-import InvoiceView from "./components/InvoiceView";
-import TourInventory from "./components/TourInventory";
-import PassengerManagement from "./components/PassengerManagement";
-import Auth from "./components/Auth";
+import { useState, useEffect } from "react"
+import { Bus, Plus, Users, LayoutDashboard, Search, Eye, Edit3, Trash2, TrendingUp, MapPin, Menu, X, Compass, Filter, FileText, LogOut, Edit2, Check } from "lucide-react"
+import BookingForm from "./components/BookingForm"
+import InvoiceView from "./components/InvoiceView"
+import TourInventory from "./components/TourInventory"
+import PassengerManagement from "./components/PassengerManagement"
+import Auth from "./components/Auth"
 
 export default function App() {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("user");
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [bookings, setBookings] = useState([]);
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [editingBooking, setEditingBooking] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [tours, setTours] = useState([]);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showAllInvoices, setShowAllInvoices] = useState(false);
-  const [invoiceTourFilter, setInvoiceTourFilter] = useState("all");
+    const saved = localStorage.getItem("user")
+    return saved ? JSON.parse(saved) : null
+  })
+  const [bookings, setBookings] = useState([])
+  const [activeTab, setActiveTab] = useState("dashboard")
+  const [selectedBooking, setSelectedBooking] = useState(null)
+  const [editingBooking, setEditingBooking] = useState(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [tours, setTours] = useState([])
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [showAllInvoices, setShowAllInvoices] = useState(false)
+  const [invoiceTourFilter, setInvoiceTourFilter] = useState("all")
 
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [newName, setNewName] = useState(user?.name || "SB TOURISM");
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [newName, setNewName] = useState(user?.name || "SB TOURISM")
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch bookings
-        const bookingsRes = await fetch("http://localhost:5000/api/bookings");
+        const bookingsRes = await fetch("http://localhost:5000/api/bookings")
         if (bookingsRes.ok) {
-          const bookingsData = await bookingsRes.json();
-          console.log("[v0] Fetched bookings from backend:", bookingsData);
+          const bookingsData = await bookingsRes.json()
+          console.log("[v0] Fetched bookings from backend:", bookingsData)
           // Convert MongoDB _id to id for compatibility
           const formattedBookings = bookingsData.map((b) => ({
             ...b,
             id: b._id || b.id,
-          }));
-          setBookings(formattedBookings);
+          }))
+          setBookings(formattedBookings)
         }
 
         // Fetch tours
-        const toursRes = await fetch("http://localhost:5000/api/tours");
+        const toursRes = await fetch("http://localhost:5000/api/tours")
         if (toursRes.ok) {
-          const toursData = await toursRes.json();
-          console.log("[v0] Fetched tours from backend:", toursData);
+          const toursData = await toursRes.json()
+          console.log("[v0] Fetched tours from backend:", toursData)
           const formattedTours = toursData.map((t) => ({
             ...t,
             id: t._id || t.id,
-          }));
-          setTours(formattedTours);
+          }))
+          setTours(formattedTours)
         } else {
-          console.log(
-            "[v0] No tours found in database. Please create tours using the Tour Inventory page."
-          );
-          setTours([]);
+          console.log("[v0] No tours found in database. Please create tours using the Tour Inventory page.")
+          setTours([])
         }
       } catch (error) {
-        console.error("[v0] Error fetching data from backend:", error);
-        setTours([]);
+        console.error("[v0] Error fetching data from backend:", error)
+        setTours([])
       }
-    };
+    }
 
-    fetchData();
-  }, []);
+    fetchData()
+  }, [])
+
+  useEffect(() => {
+    const mainContent = document.getElementById("main-content")
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }, [activeTab])
 
   const handleLogout = () => {
-    localStorage.removeItem("auth-token");
-    localStorage.removeItem("user");
-    setUser(null);
-  };
+    localStorage.removeItem("auth-token")
+    localStorage.removeItem("user")
+    setUser(null)
+  }
 
   const handleUpdateName = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim()) return
 
     try {
       const res = await fetch("http://localhost:5000/api/auth/update-name", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id || user._id, newName }),
-      });
+      })
 
-      const data = await res.json();
+      const data = await res.json()
 
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) throw new Error(data.message)
 
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setUser(data.user);
-      setIsEditingName(false);
-      console.log("[v0] Name updated successfully");
+      localStorage.setItem("user", JSON.stringify(data.user))
+      setUser(data.user)
+      setIsEditingName(false)
+      console.log("[v0] Name updated successfully")
     } catch (err) {
-      console.error("[v0] Error updating name:", err.message);
-      alert("Failed to update name: " + err.message);
+      console.error("[v0] Error updating name:", err.message)
+      alert("Failed to update name: " + err.message)
     }
-  };
+  }
 
   const handleSaveBooking = async (bookingData) => {
-    console.log("[v0] Saving booking data to backend:", bookingData);
+    console.log("[v0] Saving booking data to backend:", bookingData)
     try {
       const url = editingBooking
-        ? `http://localhost:5000/api/bookings/${
-            bookingData._id || bookingData.id
-          }`
-        : "http://localhost:5000/api/bookings";
+        ? `http://localhost:5000/api/bookings/${bookingData._id || bookingData.id}`
+        : "http://localhost:5000/api/bookings"
 
-      const method = editingBooking ? "PUT" : "POST";
+      const method = editingBooking ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingData),
-      });
+      })
 
       if (response.ok) {
-        const savedBooking = await response.json();
-        console.log("[v0] Booking saved successfully:", savedBooking);
+        const savedBooking = await response.json()
+        console.log("[v0] Booking saved successfully:", savedBooking)
 
         setBookings((prev) => {
           if (editingBooking) {
             return prev.map((b) =>
               (b._id || b.id) === (savedBooking._id || savedBooking.id)
                 ? { ...savedBooking, id: savedBooking._id || savedBooking.id }
-                : b
-            );
+                : b,
+            )
           } else {
-            return [
-              { ...savedBooking, id: savedBooking._id || savedBooking.id },
-              ...prev,
-            ];
+            return [{ ...savedBooking, id: savedBooking._id || savedBooking.id }, ...prev]
           }
-        });
+        })
 
-        setActiveTab("dashboard");
-        setEditingBooking(null);
+        setActiveTab("dashboard")
+        setEditingBooking(null)
       } else {
-        const error = await response.json();
-        console.error("[v0] Error saving booking:", error);
-        alert("Failed to save booking: " + error.message);
+        const error = await response.json()
+        console.error("[v0] Error saving booking:", error)
+        alert("Failed to save booking: " + error.message)
       }
     } catch (error) {
-      console.error("[v0] Network error saving booking:", error);
-      alert(
-        "Failed to connect to server. Please ensure the backend is running."
-      );
+      console.error("[v0] Network error saving booking:", error)
+      alert("Failed to connect to server. Please ensure the backend is running.")
     }
-  };
+  }
 
   const handleDeleteBooking = async (id) => {
     if (confirm("Are you sure you want to delete this booking?")) {
-      console.log("[v0] Deleting booking from backend:", id);
+      console.log("[v0] Deleting booking from backend:", id)
       try {
-        const response = await fetch(
-          `http://localhost:5000/api/bookings/${id}`,
-          {
-            method: "DELETE",
-          }
-        );
+        const response = await fetch(`http://localhost:5000/api/bookings/${id}`, {
+          method: "DELETE",
+        })
 
         if (response.ok) {
-          console.log("[v0] Booking deleted successfully");
-          setBookings((prev) => prev.filter((b) => (b._id || b.id) !== id));
+          console.log("[v0] Booking deleted successfully")
+          setBookings((prev) => prev.filter((b) => (b._id || b.id) !== id))
         } else {
-          const error = await response.json();
-          console.error("[v0] Error deleting booking:", error);
-          alert("Failed to delete booking: " + error.message);
+          const error = await response.json()
+          console.error("[v0] Error deleting booking:", error)
+          alert("Failed to delete booking: " + error.message)
         }
       } catch (error) {
-        console.error("[v0] Network error deleting booking:", error);
-        alert("Failed to connect to server.");
+        console.error("[v0] Network error deleting booking:", error)
+        alert("Failed to connect to server.")
       }
     }
-  };
+  }
 
   const handleSaveTour = async (tourData) => {
-    console.log("[v0] Saving tour to backend:", tourData);
+    console.log("[v0] Saving tour to backend:", tourData)
     try {
       const url =
         tourData._id || tourData.id
           ? `http://localhost:5000/api/tours/${tourData._id || tourData.id}`
-          : "http://localhost:5000/api/tours";
+          : "http://localhost:5000/api/tours"
 
-      const method = tourData._id || tourData.id ? "PUT" : "POST";
+      const method = tourData._id || tourData.id ? "PUT" : "POST"
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tourData),
-      });
+      })
 
       if (response.ok) {
-        const savedTour = await response.json();
-        console.log("[v0] Tour saved successfully:", savedTour);
+        const savedTour = await response.json()
+        console.log("[v0] Tour saved successfully:", savedTour)
 
         setTours((prev) => {
-          const existingIndex = prev.findIndex(
-            (t) => (t._id || t.id) === (savedTour._id || savedTour.id)
-          );
+          const existingIndex = prev.findIndex((t) => (t._id || t.id) === (savedTour._id || savedTour.id))
           if (existingIndex !== -1) {
-            const updated = [...prev];
+            const updated = [...prev]
             updated[existingIndex] = {
               ...savedTour,
               id: savedTour._id || savedTour.id,
-            };
-            return updated;
+            }
+            return updated
           } else {
-            return [
-              ...prev,
-              { ...savedTour, id: savedTour._id || savedTour.id },
-            ];
+            return [...prev, { ...savedTour, id: savedTour._id || savedTour.id }]
           }
-        });
+        })
       } else {
-        const error = await response.json();
-        console.error("[v0] Error saving tour:", error);
-        alert("Failed to save tour: " + error.message);
+        const error = await response.json()
+        console.error("[v0] Error saving tour:", error)
+        alert("Failed to save tour: " + error.message)
       }
     } catch (error) {
-      console.error("[v0] Network error saving tour:", error);
-      alert("Failed to connect to server.");
+      console.error("[v0] Network error saving tour:", error)
+      alert("Failed to connect to server.")
     }
-  };
+  }
 
   const handleDeleteTour = async (id) => {
     if (confirm("Delete this tour template?")) {
-      console.log("[v0] Deleting tour from backend:", id);
+      console.log("[v0] Deleting tour from backend:", id)
       try {
         const response = await fetch(`http://localhost:5000/api/tours/${id}`, {
           method: "DELETE",
-        });
+        })
 
         if (response.ok) {
-          console.log("[v0] Tour deleted successfully");
-          setTours((prev) => prev.filter((t) => (t._id || t.id) !== id));
+          console.log("[v0] Tour deleted successfully")
+          setTours((prev) => prev.filter((t) => (t._id || t.id) !== id))
         } else {
-          const error = await response.json();
-          console.error("[v0] Error deleting tour:", error);
-          alert("Failed to delete tour: " + error.message);
+          const error = await response.json()
+          console.error("[v0] Error deleting tour:", error)
+          alert("Failed to delete tour: " + error.message)
         }
       } catch (error) {
-        console.error("[v0] Network error deleting tour:", error);
-        alert("Failed to connect to server.");
+        console.error("[v0] Network error deleting tour:", error)
+        alert("Failed to connect to server.")
       }
     }
-  };
+  }
 
   const filteredBookings = bookings.filter(
     (b) =>
       b.contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       b.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.tourName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      b.tourName.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
 
-  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
-    Boolean
-  );
+  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
   const filteredInvoices =
-    invoiceTourFilter === "all"
-      ? bookings
-      : bookings.filter((b) => b.tourName === invoiceTourFilter);
+    invoiceTourFilter === "all" ? bookings : bookings.filter((b) => b.tourName === invoiceTourFilter)
 
   if (!user) {
-    return <Auth onAuthSuccess={(userData) => setUser(userData)} />;
+    return <Auth onAuthSuccess={(userData) => setUser(userData)} />
   }
 
   if (selectedBooking) {
-    return (
-      <InvoiceView
-        booking={selectedBooking}
-        onBack={() => setSelectedBooking(null)}
-      />
-    );
+    return <InvoiceView booking={selectedBooking} onBack={() => setSelectedBooking(null)} />
   }
 
   return (
@@ -301,9 +263,7 @@ export default function App() {
           <div className="bg-primary p-1.5 rounded-lg text-white shadow-lg shadow-primary/20">
             <Compass size={18} strokeWidth={2.5} />
           </div>
-          <h1 className="font-black text-sm tracking-tight text-slate-900">
-            {user?.name || "SB TOURISM"}
-          </h1>
+          <h1 className="font-black text-sm tracking-tight text-slate-900">{user?.name || "SB TOURISM"}</h1>
         </div>
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -317,11 +277,7 @@ export default function App() {
       <aside
         className={`
         fixed inset-y-0 left-0 z-40 w-72 bg-white transform transition-all duration-300 lg:relative lg:translate-x-0 flex flex-col border-r border-slate-200/60
-        ${
-          isMobileMenuOpen
-            ? "translate-x-0 shadow-2xl"
-            : "-translate-x-full lg:translate-x-0"
-        }
+        ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"}
       `}
       >
         <div className="p-8 hidden lg:block">
@@ -341,10 +297,7 @@ export default function App() {
                     onBlur={() => !newName.trim() && setIsEditingName(false)}
                     onKeyDown={(e) => e.key === "Enter" && handleUpdateName()}
                   />
-                  <button
-                    onClick={handleUpdateName}
-                    className="text-green-500 hover:text-green-600 transition-colors"
-                  >
+                  <button onClick={handleUpdateName} className="text-green-500 hover:text-green-600 transition-colors">
                     <Check size={18} strokeWidth={3} />
                   </button>
                 </div>
@@ -360,8 +313,8 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
-                      setNewName(user?.name || "SB TOURISM");
-                      setIsEditingName(true);
+                      setNewName(user?.name || "SB TOURISM")
+                      setIsEditingName(true)
                     }}
                     className="opacity-0 group-hover/name:opacity-100 p-1 hover:bg-slate-100 rounded-lg transition-all text-slate-400 hover:text-primary"
                   >
@@ -374,13 +327,8 @@ export default function App() {
         </div>
 
         <div className="lg:hidden p-6 border-b border-slate-100 flex items-center justify-between">
-          <span className="font-black text-primary/60 uppercase tracking-widest text-xs">
-            Navigation Menu
-          </span>
-          <button
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="text-slate-400"
-          >
+          <span className="font-black text-primary/60 uppercase tracking-widest text-xs">Navigation Menu</span>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400">
             <X size={20} />
           </button>
         </div>
@@ -398,8 +346,8 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => {
-                setActiveTab(tab.id);
-                setIsMobileMenuOpen(false);
+                setActiveTab(tab.id)
+                setIsMobileMenuOpen(false)
               }}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-bold text-sm ${
                 activeTab === tab.id
@@ -421,14 +369,9 @@ export default function App() {
         <div className="p-6">
           <div className="bg-primary rounded-2xl p-5 text-white relative overflow-hidden group shadow-xl shadow-primary/20">
             <div className="relative z-10">
-              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">
-                Total Revenue
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Total Revenue</p>
               <h3 className="text-2xl font-black">
-                ₹
-                {bookings
-                  .reduce((acc, b) => acc + b.totalAmount, 0)
-                  .toLocaleString()}
+                ₹{bookings.reduce((acc, b) => acc + b.totalAmount, 0).toLocaleString()}
               </h3>
               <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-primary/10">
                 <TrendingUp size={14} /> +12% from last month
@@ -442,8 +385,8 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-20 bg-white border-b border-slate-200 hidden lg:flex items-center justify-between px-10 sticky top-0 z-20">
+      <main id="main-content" className="flex-1 flex flex-col min-w-0 overflow-y-auto scroll-smooth">
+        <header className="h-20 bg-white border-b border-slate-200 hidden lg:flex items-center justify-between px-10 sticky top-0 z-30 shrink-0">
           <div className="flex-1 max-w-xl relative group">
             <Search
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary/60 transition-colors"
@@ -460,8 +403,8 @@ export default function App() {
           <div className="flex items-center gap-4 ml-8">
             <button
               onClick={() => {
-                setEditingBooking(null);
-                setActiveTab("form");
+                setEditingBooking(null)
+                setActiveTab("form")
               }}
               className="bg-primary hover:bg-primary/80 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 transition-all flex items-center gap-2"
             >
@@ -472,10 +415,7 @@ export default function App() {
 
         <div className="lg:hidden px-6 pt-6 pb-2">
           <div className="relative">
-            <Search
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
-            />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
               type="text"
               placeholder="Search bookings..."
@@ -495,12 +435,8 @@ export default function App() {
                     <div className="bg-blue-50 text-blue-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
                       <LayoutDashboard size={22} />
                     </div>
-                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">
-                      Active Bookings
-                    </p>
-                    <h3 className="text-3xl font-black text-slate-900">
-                      {bookings.length}
-                    </h3>
+                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Active Bookings</p>
+                    <h3 className="text-3xl font-black text-slate-900">{bookings.length}</h3>
                   </div>
                 </div>
                 <div className="bg-white p-7 rounded-3xl shadow-sm border border-slate-100 relative group overflow-hidden">
@@ -508,14 +444,9 @@ export default function App() {
                     <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300">
                       <Users size={22} />
                     </div>
-                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">
-                      Total Travelers
-                    </p>
+                    <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Total Travelers</p>
                     <h3 className="text-3xl font-black text-slate-900">
-                      {bookings.reduce(
-                        (acc, b) => acc + b.passengers.length,
-                        0
-                      )}
+                      {bookings.reduce((acc, b) => acc + b.passengers.length, 0)}
                     </h3>
                   </div>
                 </div>
@@ -527,9 +458,7 @@ export default function App() {
                     <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">
                       Destinations Cover
                     </p>
-                    <h3 className="text-3xl font-black text-slate-900">
-                      {tours.length}
-                    </h3>
+                    <h3 className="text-3xl font-black text-slate-900">{tours.length}</h3>
                   </div>
                 </div>
               </div>
@@ -537,9 +466,7 @@ export default function App() {
               {/* Recent Bookings Table - Added overflow handling for mobile */}
               <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-7 border-b border-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <h2 className="text-lg font-black text-slate-900">
-                    Recent Booking Invoices
-                  </h2>
+                  <h2 className="text-lg font-black text-slate-900">Recent Booking Invoices</h2>
                   <button
                     onClick={() => setShowAllInvoices(true)}
                     className="text-primary/60 text-sm font-bold hover:underline flex items-center gap-2"
@@ -560,10 +487,7 @@ export default function App() {
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredBookings.map((b) => (
-                        <tr
-                          key={b.id}
-                          className="hover:bg-slate-50/50 transition-colors group"
-                        >
+                        <tr key={b.id} className="hover:bg-slate-50/50 transition-colors group">
                           <td className="px-8 py-5">
                             <span className="font-black text-slate-900 group-hover:text-primary/60 transition-colors">
                               #{b.invoiceNo}
@@ -573,21 +497,15 @@ export default function App() {
                             </span>
                           </td>
                           <td className="px-8 py-5">
-                            <span className="font-bold text-slate-700">
-                              {b.contactName}
-                            </span>
-                            <span className="block text-xs text-slate-400 mt-0.5">
-                              {b.contactPhone}
-                            </span>
+                            <span className="font-bold text-slate-700">{b.contactName}</span>
+                            <span className="block text-xs text-slate-400 mt-0.5">{b.contactPhone}</span>
                           </td>
                           <td className="px-8 py-5">
                             <span className="bg-primary text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
                               {b.tourName}
                             </span>
                           </td>
-                          <td className="px-8 py-5 font-black text-slate-900">
-                            ₹{b.totalAmount.toLocaleString()}
-                          </td>
+                          <td className="px-8 py-5 font-black text-slate-900">₹{b.totalAmount.toLocaleString()}</td>
                           <td className="px-8 py-5">
                             <div className="flex items-center justify-end gap-2">
                               <button
@@ -598,8 +516,8 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => {
-                                  setEditingBooking(b);
-                                  setActiveTab("form");
+                                  setEditingBooking(b)
+                                  setActiveTab("form")
                                 }}
                                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                               >
@@ -617,10 +535,7 @@ export default function App() {
                       ))}
                       {filteredBookings.length === 0 && (
                         <tr>
-                          <td
-                            colSpan={5}
-                            className="px-8 py-12 text-center text-slate-400 font-medium"
-                          >
+                          <td colSpan={5} className="px-8 py-12 text-center text-slate-400 font-medium">
                             No bookings found matching your search.
                           </td>
                         </tr>
@@ -639,8 +554,8 @@ export default function App() {
               editData={editingBooking}
               bookings={bookings}
               onCancel={() => {
-                setActiveTab("dashboard");
-                setEditingBooking(null);
+                setActiveTab("dashboard")
+                setEditingBooking(null)
               }}
             />
           )}
@@ -649,15 +564,14 @@ export default function App() {
             <PassengerManagement
               bookings={bookings}
               onUpdateBooking={handleSaveBooking}
+              onDeleteBooking={handleDeleteBooking}
+              onEditBooking={(booking) => {
+                setEditingBooking(booking)
+                setActiveTab("form")
+              }}
             />
           )}
-          {activeTab === "tours" && (
-            <TourInventory
-              tours={tours}
-              onAdd={handleSaveTour}
-              onDelete={handleDeleteTour}
-            />
-          )}
+          {activeTab === "tours" && <TourInventory tours={tours} onAdd={handleSaveTour} onDelete={handleDeleteTour} />}
         </div>
       </main>
 
@@ -670,9 +584,7 @@ export default function App() {
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    All Booking Invoices
-                  </h3>
+                  <h3 className="text-xl font-black text-slate-900">All Booking Invoices</h3>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     {filteredInvoices.length} Total Invoices
                   </p>
@@ -680,10 +592,7 @@ export default function App() {
               </div>
               <div className="flex items-center gap-3 w-full lg:w-auto">
                 <div className="relative flex-1 lg:flex-none lg:min-w-60">
-                  <Filter
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    size={16}
-                  />
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <select
                     value={invoiceTourFilter}
                     onChange={(e) => setInvoiceTourFilter(e.target.value)}
@@ -699,8 +608,8 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => {
-                    setShowAllInvoices(false);
-                    setInvoiceTourFilter("all");
+                    setShowAllInvoices(false)
+                    setInvoiceTourFilter("all")
                   }}
                   className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
                 >
@@ -717,12 +626,8 @@ export default function App() {
                       <Filter size={14} />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-                        Filtered
-                      </p>
-                      <p className="text-sm font-black text-indigo-900">
-                        {invoiceTourFilter}
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Filtered</p>
+                      <p className="text-sm font-black text-indigo-900">{invoiceTourFilter}</p>
                     </div>
                   </div>
                   <button
@@ -752,14 +657,9 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredInvoices.map((b) => (
-                      <tr
-                        key={b.id}
-                        className="hover:bg-slate-50/50 transition-colors group"
-                      >
+                      <tr key={b.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-4">
-                          <span className="font-black text-slate-900">
-                            #{b.invoiceNo}
-                          </span>
+                          <span className="font-black text-slate-900">#{b.invoiceNo}</span>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm font-bold text-slate-600">
@@ -768,12 +668,8 @@ export default function App() {
                         </td>
                         <td className="px-6 py-4">
                           <div>
-                            <span className="font-bold text-slate-700 block">
-                              {b.contactName}
-                            </span>
-                            <span className="text-xs text-slate-400">
-                              {b.contactPhone}
-                            </span>
+                            <span className="font-bold text-slate-700 block">{b.contactName}</span>
+                            <span className="text-xs text-slate-400">{b.contactPhone}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -787,21 +683,17 @@ export default function App() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="font-black text-indigo-600">
-                            {b.passengers.length} PAX
-                          </span>
+                          <span className="font-black text-indigo-600">{b.passengers.length} PAX</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="font-black text-slate-900">
-                            ₹{b.totalAmount.toLocaleString()}
-                          </span>
+                          <span className="font-black text-slate-900">₹{b.totalAmount.toLocaleString()}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => {
-                                setSelectedBooking(b);
-                                setShowAllInvoices(false);
+                                setSelectedBooking(b)
+                                setShowAllInvoices(false)
                               }}
                               className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                             >
@@ -809,9 +701,9 @@ export default function App() {
                             </button>
                             <button
                               onClick={() => {
-                                setEditingBooking(b);
-                                setActiveTab("form");
-                                setShowAllInvoices(false);
+                                setEditingBooking(b)
+                                setActiveTab("form")
+                                setShowAllInvoices(false)
                               }}
                               className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                             >
@@ -819,9 +711,9 @@ export default function App() {
                             </button>
                             <button
                               onClick={() => {
-                                handleDeleteBooking(b.id);
+                                handleDeleteBooking(b.id)
                                 if (filteredInvoices.length === 1) {
-                                  setShowAllInvoices(false);
+                                  setShowAllInvoices(false)
                                 }
                               }}
                               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -839,9 +731,7 @@ export default function App() {
                             <div className="bg-slate-100 p-4 rounded-2xl">
                               <FileText size={32} className="text-slate-300" />
                             </div>
-                            <p className="text-slate-400 font-bold">
-                              No invoices found for this tour
-                            </p>
+                            <p className="text-slate-400 font-bold">No invoices found for this tour</p>
                           </div>
                         </td>
                       </tr>
@@ -854,5 +744,5 @@ export default function App() {
         </div>
       )}
     </div>
-  );
+  )
 }

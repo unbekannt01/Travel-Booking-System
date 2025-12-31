@@ -1,30 +1,55 @@
-"use client"
+/* eslint-disable no-unused-vars */
+"use client";
 
-import { useState } from "react"
-import { ShieldCheck, MapPin, Phone, User, Fingerprint, FileDown, Eye, Filter, X, Printer } from "lucide-react"
+import { useState } from "react";
+import {
+  ShieldCheck,
+  MapPin,
+  Phone,
+  User,
+  Fingerprint,
+  FileDown,
+  Eye,
+  Filter,
+  X,
+  Printer,
+  Edit3,
+} from "lucide-react";
 
-export default function PassengerManagement({ bookings }) {
-  const [selectedTour, setSelectedTour] = useState("all")
-  const [showPreview, setShowPreview] = useState(false)
-  const [includeAadhar, setIncludeAadhar] = useState(true)
+export default function PassengerManagement({
+  bookings,
+  onUpdateBooking,
+  onDeleteBooking,
+  onEditBooking,
+}) {
+  const [selectedTour, setSelectedTour] = useState("all");
+  const [showPreview, setShowPreview] = useState(false);
+  const [includeAadhar, setIncludeAadhar] = useState(true);
 
-  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
+  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
+    Boolean
+  );
 
-  const filteredBookings = selectedTour === "all" ? bookings : bookings.filter((b) => b.tourName === selectedTour)
+  const filteredBookings =
+    selectedTour === "all"
+      ? bookings
+      : bookings.filter((b) => b.tourName === selectedTour);
 
   const getJourneyDate = () => {
-    const booking = filteredBookings[0]
-    return booking?.journeyDate ? new Date(booking.journeyDate).toLocaleDateString() : "N/A"
-  }
+    const booking = filteredBookings[0];
+    return booking?.journeyDate
+      ? new Date(booking.journeyDate).toLocaleDateString()
+      : "N/A";
+  };
 
   const handleExport = (withAadhar) => {
-    setIncludeAadhar(withAadhar)
-    setShowPreview(true)
-  }
+    setIncludeAadhar(withAadhar);
+    setShowPreview(true);
+  };
 
   const handlePrint = () => {
-    window.print()
-  }
+    window.print();
+  };
 
   return (
     <div className="space-y-8 animate-in">
@@ -34,14 +59,21 @@ export default function PassengerManagement({ bookings }) {
             <ShieldCheck size={28} />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Admin: Internal Manifest</h2>
-            <p className="text-sm font-medium text-slate-500">Confidential traveler documents and contact database</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              Admin: Internal Manifest
+            </h2>
+            <p className="text-sm font-medium text-slate-500">
+              Confidential traveler documents and contact database
+            </p>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
           <div className="relative min-w-50">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Filter
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={16}
+            />
             <select
               value={selectedTour}
               onChange={(e) => setSelectedTour(e.target.value)}
@@ -82,8 +114,12 @@ export default function PassengerManagement({ bookings }) {
               <Filter size={18} />
             </div>
             <div>
-              <p className="text-xs font-black uppercase tracking-wider text-indigo-600">Filtered by Tour</p>
-              <p className="text-sm font-black text-indigo-900">{selectedTour}</p>
+              <p className="text-xs font-black uppercase tracking-wider text-indigo-600">
+                Filtered by Tour
+              </p>
+              <p className="text-sm font-black text-indigo-900">
+                {selectedTour}
+              </p>
             </div>
           </div>
           <button
@@ -106,12 +142,17 @@ export default function PassengerManagement({ bookings }) {
                 <th className="px-8 py-5">Aadhar Card</th>
                 <th className="px-8 py-5">Location</th>
                 <th className="px-8 py-5 text-center">Age/Sex</th>
+                <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredBookings.flatMap((booking) =>
-                booking.passengers.map((p, idx) => (
-                  <tr key={`${booking.id}-${idx}`} className="hover:bg-slate-50/50 transition-colors group">
+              {filteredBookings.flatMap((booking) => {
+                const firstPassengerIndex = 0;
+                return booking.passengers.map((p, idx) => (
+                  <tr
+                    key={`${booking.id}-${idx}`}
+                    className="hover:bg-slate-50/50 transition-colors group"
+                  >
                     <td className="px-8 py-5">
                       <span className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider block w-fit">
                         {booking.tourName}
@@ -130,28 +171,45 @@ export default function PassengerManagement({ bookings }) {
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                        <Phone size={14} className="text-indigo-400" /> {p.contact || "NOT PROVIDED"}
+                        <Phone size={14} className="text-indigo-400" />{" "}
+                        {p.contact || "NOT PROVIDED"}
                       </div>
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                        <Fingerprint size={14} className="text-indigo-400" /> {p.aadhar || "MISSING"}
+                        <Fingerprint size={14} className="text-indigo-400" />{" "}
+                        {p.aadhar || "MISSING"}
                       </div>
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
-                        <MapPin size={14} className="text-indigo-400" /> {p.city}
+                        <MapPin size={14} className="text-indigo-400" />{" "}
+                        {p.city}
                       </div>
                     </td>
                     <td className="px-8 py-5 text-center font-black text-slate-900 text-xs">
                       {p.age}Y / {p.gender.toUpperCase()}
                     </td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => onEditBooking(booking)}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          title="Edit Passenger Details"
+                        >
+                          <Edit3 size={18} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                )),
-              )}
+                ));
+              })}
               {filteredBookings.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-20 text-center text-slate-400 font-bold">
+                  <td
+                    colSpan={7}
+                    className="px-8 py-20 text-center text-slate-400 font-bold"
+                  >
                     No passenger records available in system.
                   </td>
                 </tr>
@@ -170,9 +228,13 @@ export default function PassengerManagement({ bookings }) {
                   <Eye size={20} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">Passenger Manifest Preview</h3>
+                  <h3 className="text-xl font-black text-slate-900">
+                    Passenger Manifest Preview
+                  </h3>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    {includeAadhar ? "With Aadhar Numbers" : "Without Aadhar Numbers"}
+                    {includeAadhar
+                      ? "With Aadhar Numbers"
+                      : "Without Aadhar Numbers"}
                   </p>
                 </div>
               </div>
@@ -192,11 +254,16 @@ export default function PassengerManagement({ bookings }) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-50" id="pdf-content">
+            <div
+              className="flex-1 overflow-y-auto p-8 bg-slate-50"
+              id="pdf-content"
+            >
               <div className="bg-white p-10 rounded-2xl shadow-sm mx-auto max-w-3xl print-content">
                 {/* PDF Header */}
                 <div className="text-center mb-8 border-b-2 border-indigo-600 pb-6">
-                  <h1 className="text-3xl font-black text-indigo-600 mb-2">SHREE BHAGAVAT TOURISM</h1>
+                  <h1 className="text-3xl font-black text-indigo-600 mb-2">
+                    SHREE BHAGAVAT TOURISM
+                  </h1>
                   <p className="text-sm font-bold text-slate-600 uppercase tracking-widest">
                     Internal Passenger Manifest
                   </p>
@@ -206,7 +273,9 @@ export default function PassengerManagement({ bookings }) {
                 <div className="mb-8 bg-indigo-50 p-6 rounded-xl border-2 border-indigo-100">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">Tour Name</p>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
+                        Tour Name
+                      </p>
                       <p className="font-black text-indigo-900">
                         {selectedTour === "all" ? "All Tours" : selectedTour}
                       </p>
@@ -215,21 +284,28 @@ export default function PassengerManagement({ bookings }) {
                       <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
                         Journey Date
                       </p>
-                      <p className="font-black text-indigo-900">{getJourneyDate()}</p>
+                      <p className="font-black text-indigo-900">
+                        {getJourneyDate()}
+                      </p>
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
                         Total Passengers
                       </p>
                       <p className="font-black text-indigo-900">
-                        {filteredBookings.reduce((acc, b) => acc + b.passengers.length, 0)}
+                        {filteredBookings.reduce(
+                          (acc, b) => acc + b.passengers.length,
+                          0
+                        )}
                       </p>
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
                         Generated On
                       </p>
-                      <p className="font-black text-indigo-900">{new Date().toLocaleDateString()}</p>
+                      <p className="font-black text-indigo-900">
+                        {new Date().toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -238,11 +314,15 @@ export default function PassengerManagement({ bookings }) {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b-2 border-slate-200">
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">#</th>
+                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        #
+                      </th>
                       <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
                         Passenger Name
                       </th>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">City</th>
+                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        City
+                      </th>
                       <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
                         Contact
                       </th>
@@ -260,24 +340,39 @@ export default function PassengerManagement({ bookings }) {
                     {filteredBookings.flatMap((booking, bookingIdx) =>
                       booking.passengers.map((p, idx) => {
                         const globalIndex =
-                          filteredBookings.slice(0, bookingIdx).reduce((acc, b) => acc + b.passengers.length, 0) +
+                          filteredBookings
+                            .slice(0, bookingIdx)
+                            .reduce((acc, b) => acc + b.passengers.length, 0) +
                           idx +
-                          1
+                          1;
                         return (
-                          <tr key={`${booking.id}-${idx}`} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 text-sm font-bold text-slate-400">{globalIndex}</td>
-                            <td className="px-4 py-3 text-sm font-black text-slate-900">{p.name}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-slate-600">{p.city}</td>
-                            <td className="px-4 py-3 text-sm font-bold text-slate-600">{p.contact || "N/A"}</td>
+                          <tr
+                            key={`${booking.id}-${idx}`}
+                            className="hover:bg-slate-50"
+                          >
+                            <td className="px-4 py-3 text-sm font-bold text-slate-400">
+                              {globalIndex}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-black text-slate-900">
+                              {p.name}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-bold text-slate-600">
+                              {p.city}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-bold text-slate-600">
+                              {p.contact || "N/A"}
+                            </td>
                             {includeAadhar && (
-                              <td className="px-4 py-3 text-sm font-bold text-slate-600">{p.aadhar || "MISSING"}</td>
+                              <td className="px-4 py-3 text-sm font-bold text-slate-600">
+                                {p.aadhar || "MISSING"}
+                              </td>
                             )}
                             <td className="px-4 py-3 text-sm font-bold text-slate-700 text-center">
                               {p.age}Y / {p.gender[0]}
                             </td>
                           </tr>
-                        )
-                      }),
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -287,7 +382,9 @@ export default function PassengerManagement({ bookings }) {
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     This is a confidential document for internal use only
                   </p>
-                  <p className="text-xs font-bold text-indigo-600 mt-2">www.shreebhagavattourism.com</p>
+                  <p className="text-xs font-bold text-indigo-600 mt-2">
+                    www.shreebhagavattourism.com
+                  </p>
                 </div>
               </div>
             </div>
@@ -317,5 +414,5 @@ export default function PassengerManagement({ bookings }) {
         }
       `}</style>
     </div>
-  )
+  );
 }

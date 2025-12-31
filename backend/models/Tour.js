@@ -14,14 +14,23 @@ const tourSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    defaultJourneyDate: {
-      type: Date,
+    journeyDate: {
+      type: String,
     },
-    lowerBerth: {
+    pricingType: {
+      type: String,
+      enum: ["berth", "fixed"],
+      default: "berth",
+    },
+    fixedPrice: {
       type: Number,
       default: 0,
     },
-    upperBerth: {
+    lowerPrice: {
+      type: Number,
+      default: 0,
+    },
+    upperPrice: {
       type: Number,
       default: 0,
     },

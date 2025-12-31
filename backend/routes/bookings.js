@@ -29,15 +29,34 @@ router.post("/", async (req, res) => {
 // Update booking
 router.put("/:id", async (req, res) => {
   try {
-    const updatedBooking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    )
+    const updatedBooking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true })
     console.log("[v0] Booking updated in MongoDB:", updatedBooking)
     res.json(updatedBooking)
   } catch (error) {
     console.error("[v0] Error updating booking:", error)
+    res.status(400).json({ message: error.message })
+  }
+})
+
+router.put("/:bookingId/passengers/:passengerIndex", async (req, res) => {
+  try {
+    const { bookingId, passengerIndex } = req.params
+    const updatedPassengerData = req.body
+
+    const booking = await Booking.findById(bookingId)
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+
+    // Update the specific passenger in the array
+    booking.passengers[passengerIndex] = {
+      ...booking.passengers[passengerIndex],
+      ...updatedPassengerData,
+    }
+
+    await booking.save()
+    console.log("[v0] Individual passenger updated in MongoDB:", updatedPassengerData)
+    res.json(booking)
+  } catch (error) {
+    console.error("[v0] Error updating passenger:", error)
     res.status(400).json({ message: error.message })
   }
 })
