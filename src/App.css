@@ -1,0 +1,14 @@
+/* Global print styles */
+@media print {
+  body {
+    background: white !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Custom fonts or specific adjustments */
+.MuiTypography-root {
+  letter-spacing: -0.01em;
+}
