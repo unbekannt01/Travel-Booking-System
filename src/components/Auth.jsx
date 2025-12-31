@@ -7,10 +7,13 @@ export default function Auth({ onAuthSuccess }) {
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({ name: "", email: "", password: "" })
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError("")
+    setLoading(true)
+
     const baseUrl = "http://localhost:5000"
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
 
@@ -18,6 +21,7 @@ export default function Auth({ onAuthSuccess }) {
       const res = await fetch(`${baseUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(formData),
       })
 
@@ -30,11 +34,15 @@ export default function Auth({ onAuthSuccess }) {
       console.log(`[v0] ${isLogin ? "Login" : "Registration"} successful`, data)
 
       localStorage.setItem("auth-token", data.token)
+      localStorage.setItem("tokenId", data.tokenId)
       localStorage.setItem("user", JSON.stringify(data.user))
+
       onAuthSuccess(data.user)
     } catch (err) {
       console.error("[v0] Auth Error:", err.message)
       setError(err.message || "Authentication failed. Please check your connection.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -65,6 +73,7 @@ export default function Auth({ onAuthSuccess }) {
                     className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -81,6 +90,7 @@ export default function Auth({ onAuthSuccess }) {
                   className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -96,6 +106,7 @@ export default function Auth({ onAuthSuccess }) {
                   className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -104,10 +115,11 @@ export default function Auth({ onAuthSuccess }) {
 
             <button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2 mt-4"
+              disabled={loading}
+              className="w-full bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2 mt-4"
             >
               {isLogin ? <LogIn size={18} strokeWidth={3} /> : <UserPlus size={18} strokeWidth={3} />}
-              {isLogin ? "Sign In Now" : "Create Account"}
+              {loading ? "Processing..." : isLogin ? "Sign In Now" : "Create Account"}
             </button>
           </form>
 

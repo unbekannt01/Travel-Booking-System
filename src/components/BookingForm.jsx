@@ -619,13 +619,18 @@ export default function BookingForm({
                           Internal Contact (Admin Only)
                         </label>
                         <input
-                          type="text"
-                          placeholder="Private phone number"
+                          type="tel"
+                          placeholder="+91 XXXXXXXXXX"
                           className="w-full px-4 py-2 bg-white border-transparent rounded-xl text-xs font-bold focus:ring-1 focus:ring-indigo-100 transition-all outline-none"
-                          value={p.contact}
-                          onChange={(e) =>
-                            updatePassenger(i, "contact", e.target.value)
-                          }
+                          value={p.contact ? `+91 ${p.contact}` : ""}
+                          onChange={(e) => {
+                            const value = e.target.value
+                              .replace(/^\+91\s*/, "") // remove +91
+                              .replace(/\D/g, "") // only digits
+                              .slice(0, 10); // max 10 digits
+
+                            updatePassenger(i, "contact", value);
+                          }}
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -635,11 +640,20 @@ export default function BookingForm({
                         <input
                           type="text"
                           placeholder="XXXX XXXX XXXX"
+                          maxLength={14}
                           className="w-full px-4 py-2 bg-white border-transparent rounded-xl text-xs font-bold focus:ring-1 focus:ring-indigo-100 transition-all outline-none"
-                          value={p.aadhar}
-                          onChange={(e) =>
-                            updatePassenger(i, "aadhar", e.target.value)
+                          value={
+                            p.aadhar
+                              ? p.aadhar.replace(/(\d{4})(?=\d)/g, "$1 ")
+                              : ""
                           }
+                          onChange={(e) => {
+                            const raw = e.target.value
+                              .replace(/\D/g, "") // only digits
+                              .slice(0, 12); // max 12 digits
+
+                            updatePassenger(i, "aadhar", raw);
+                          }}
                         />
                       </div>
                     </div>
@@ -811,7 +825,6 @@ export default function BookingForm({
                 </label>
                 <input
                   type="number"
-                  required
                   placeholder="0"
                   className="w-full px-5 py-3.5 bg-emerald-50 text-emerald-700 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                   value={formData.advanceReceived || ""}

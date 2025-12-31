@@ -34,8 +34,9 @@ const tourSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true }
+  { timestamps: true },
 )
 
 export default mongoose.model("Tour", tourSchema)

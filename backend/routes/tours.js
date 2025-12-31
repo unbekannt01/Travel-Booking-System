@@ -1,53 +1,76 @@
-import express from "express"
-import Tour from "../models/Tour.js"
+import express from "express";
+import Tour from "../models/Tour.js";
+import verifyToken from "../middleware/auth.js";
 
-const router = express.Router()
+const router = express.Router();
 
-// Get all tours
-router.get("/", async (req, res) => {
+router.get("/", verifyToken, async (req, res) => {
   try {
-    const tours = await Tour.find().sort({ createdAt: -1 })
-    res.json(tours)
+    const tours = await Tour.find({ userId: req.user.id }).sort({
+      createdAt: -1,
+    });
+    res.json(tours);
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    console.error("[v0] Error fetching tours:", error.message);
+    res.status(500).json({ message: error.message });
   }
-})
+});
 
-// Create a new tour
-router.post("/", async (req, res) => {
+router.post("/", verifyToken, async (req, res) => {
   try {
-    const tour = new Tour(req.body)
-    await tour.save()
-    res.status(201).json(tour)
+    const tour = new Tour({ ...req.body, userId: req.user.id });
+    await tour.save();
+    res.status(201).json(tour);
   } catch (error) {
-    res.status(400).json({ message: error.message })
+    console.error("[v0] Error creating tour:", error.message);
+    res.status(400).json({ message: error.message });
   }
-})
+});
 
-// Update a tour
-router.put("/:id", async (req, res) => {
+router.put("/:id", verifyToken, async (req, res) => {
   try {
-    const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const tour = await Tour.findById(req.params.id);
+
     if (!tour) {
-      return res.status(404).json({ message: "Tour not found" })
+      return res.status(404).json({ message: "Tour not found" });
     }
-    res.json(tour)
-  } catch (error) {
-    res.status(400).json({ message: error.message })
-  }
-})
 
-// Delete a tour
-router.delete("/:id", async (req, res) => {
+    if (tour.userId.toString() !== req.user.id) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to update this tour" });
+    }
+
+    const updatedTour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    res.json(updatedTour);
+  } catch (error) {
+    console.error("[v0] Error updating tour:", error.message);
+    res.status(400).json({ message: error.message });
+  }
+});
+
+router.delete("/:id", verifyToken, async (req, res) => {
   try {
-    const tour = await Tour.findByIdAndDelete(req.params.id)
-    if (!tour) {
-      return res.status(404).json({ message: "Tour not found" })
-    }
-    res.json({ message: "Tour deleted successfully" })
-  } catch (error) {
-    res.status(500).json({ message: error.message })
-  }
-})
+    const tour = await Tour.findById(req.params.id);
 
-export default router
+    if (!tour) {
+      return res.status(404).json({ message: "Tour not found" });
+    }
+
+    if (tour.userId.toString() !== req.user.id) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this tour" });
+    }
+
+    await Tour.findByIdAndDelete(req.params.id);
+    res.json({ message: "Tour deleted successfully" });
+  } catch (error) {
+    console.error("[v0] Error deleting tour:", error.message);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+export default router;
