@@ -1,7 +1,10 @@
+/* eslint-disable no-unused-vars */
 /* eslint-disable no-undef */
 import express from "express"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
+import speakeasy from "speakeasy"
+import QRCode from "qrcode"
 import User from "../models/User.js"
 
 const router = express.Router()
@@ -45,6 +48,86 @@ router.post("/register", async (req, res) => {
   }
 })
 
+router.post("/setup-2fa", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized. Please login." })
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const user = await User.findById(decoded.id)
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    // Generate secret for TOTP
+    const secret = speakeasy.generateSecret({
+      name: `YatraHub (${user.email})`,
+      issuer: "YatraHub",
+    })
+
+    // Save the secret temporarily (not enabled yet)
+    user.twoFactorSecret = secret.base32
+    await user.save()
+
+    // Generate QR code
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url)
+
+    res.json({
+      message: "2FA setup initiated",
+      secret: secret.base32,
+      qrCode: qrCodeUrl,
+    })
+  } catch (error) {
+    console.error("[v0] Setup 2FA error:", error.message)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+router.post("/verify-2fa-setup", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]
+    const { code } = req.body
+
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized. Please login." })
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const user = await User.findById(decoded.id)
+
+    if (!user || !user.twoFactorSecret) {
+      return res.status(400).json({ message: "2FA setup not initiated" })
+    }
+
+    // Verify the code
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: "base32",
+      token: code,
+      window: 2,
+    })
+
+    if (!verified) {
+      return res.status(400).json({ message: "Invalid verification code" })
+    }
+
+    // Enable 2FA
+    user.twoFactorEnabled = true
+    await user.save()
+
+    res.json({
+      message: "2FA enabled successfully",
+      twoFactorEnabled: true,
+    })
+  } catch (error) {
+    console.error("[v0] Verify 2FA setup error:", error.message)
+    res.status(500).json({ message: error.message })
+  }
+})
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body
@@ -59,6 +142,26 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Incorrect password. Please try again." })
     }
 
+    const now = new Date()
+    user.activeTokens = user.activeTokens.filter((t) => t.expiresAt > now)
+
+    // Check if 2FA is enabled
+    if (user.twoFactorEnabled) {
+      // Create a temporary token for 2FA verification
+      const tempToken = jwt.sign(
+        { id: user._id, temp: true, purpose: "2fa-verification" },
+        process.env.JWT_SECRET || "secret",
+        { expiresIn: "10m" },
+      )
+
+      return res.json({
+        requires2FA: true,
+        tempToken,
+        message: "Please enter your 2FA code",
+      })
+    }
+
+    // No 2FA required, proceed with normal login
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
     const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
 
@@ -87,6 +190,70 @@ router.post("/login", async (req, res) => {
   }
 })
 
+router.post("/verify-2fa-login", async (req, res) => {
+  try {
+    const { tempToken, code } = req.body
+
+    if (!tempToken || !code) {
+      return res.status(400).json({ message: "Missing required fields" })
+    }
+
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET || "secret")
+
+    if (!decoded.temp || decoded.purpose !== "2fa-verification") {
+      return res.status(400).json({ message: "Invalid token" })
+    }
+
+    const user = await User.findById(decoded.id)
+
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({ message: "2FA not enabled for this user" })
+    }
+
+    // Verify the 2FA code
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: "base32",
+      token: code,
+      window: 2,
+    })
+
+    if (!verified) {
+      return res.status(400).json({ message: "Invalid 2FA code" })
+    }
+
+    const now = new Date()
+    user.activeTokens = user.activeTokens.filter((t) => t.expiresAt > now)
+
+    // Create the actual session token
+    const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
+    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
+
+    user.activeTokens.push({
+      token,
+      tokenId,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    })
+
+    if (user.activeTokens.length > 5) {
+      user.activeTokens = user.activeTokens.slice(-5)
+    }
+
+    await user.save()
+
+    res.json({
+      token,
+      tokenId,
+      user: { id: user._id, name: user.name, email: user.email },
+      message: "Login successful",
+    })
+  } catch (error) {
+    console.error("[v0] Verify 2FA login error:", error.message)
+    res.status(500).json({ message: error.message })
+  }
+})
+
 router.post("/logout", async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1]
@@ -94,16 +261,29 @@ router.post("/logout", async (req, res) => {
       return res.status(400).json({ message: "No token provided" })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
-    const user = await User.findById(decoded.id)
+    // ensuring we can still clean up the database even if the token is old.
+    let userId
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+      userId = decoded.id
+    } catch (err) {
+      const decoded = jwt.decode(token)
+      if (decoded) userId = decoded.id
+    }
 
-    if (user) {
-      user.activeTokens = user.activeTokens.filter((t) => t.token !== token)
-      await user.save()
+    if (userId) {
+      const user = await User.findById(userId)
+      if (user) {
+        // Remove current token and any expired ones
+        const now = new Date()
+        user.activeTokens = user.activeTokens.filter((t) => t.token !== token && t.expiresAt > now)
+        await user.save()
+      }
     }
 
     res.json({ message: "Logout successful" })
   } catch (error) {
+    console.error("[v0] Logout error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })

@@ -1,8 +1,11 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client"
 
 import { useState, useEffect } from "react"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
+import TwoFactorSetup from "./components/TwoFactorSetup"
+import TwoFactorVerify from "./components/TwoFactorVerify"
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -22,6 +25,9 @@ export default function App() {
   const [newName, setNewName] = useState(user?.name || "SB TOURISM")
   const [loading, setLoading] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [twoFactorToken, setTwoFactorToken] = useState(null)
+  const [show2FASetup, setShow2FASetup] = useState(false)
+  const [temp2FAToken, setTemp2FAToken] = useState(null)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("auth-token")
@@ -108,13 +114,28 @@ export default function App() {
       }
     }
     setIsLoading(false)
-  },[user])
+  }, [user])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("auth-token")
+      if (token) {
+        await fetch("http://localhost:5000/api/auth/logout", {
+          method: "POST",
+          headers: getAuthHeaders(),
+        })
+      }
+    } catch (error) {
+      console.error("[v0] Error during backend logout:", error)
+    }
+
     localStorage.removeItem("auth-token")
     localStorage.removeItem("tokenId")
     localStorage.removeItem("user")
     setUser(null)
+    setTwoFactorToken(null)
+    setShow2FASetup(false)
+    setTemp2FAToken(null)
   }
 
   const handleUpdateName = async () => {
@@ -299,6 +320,39 @@ export default function App() {
     )
   }
 
+  if (temp2FAToken) {
+    return (
+      <TwoFactorVerify
+        tempToken={temp2FAToken}
+        onVerifySuccess={(user) => {
+          setTemp2FAToken(null)
+          setUser(user)
+        }}
+      />
+    )
+  }
+
+  if (show2FASetup && twoFactorToken) {
+    return (
+      <TwoFactorSetup
+        token={twoFactorToken}
+        onSetupComplete={() => {
+          setShow2FASetup(false)
+          setTwoFactorToken(null)
+          // User is already "logged in" but we might want to refresh their state
+          const savedUser = JSON.parse(localStorage.getItem("user"))
+          setUser(savedUser)
+        }}
+        onSkip={() => {
+          setShow2FASetup(false)
+          setTwoFactorToken(null)
+          const savedUser = JSON.parse(localStorage.getItem("user"))
+          setUser(savedUser)
+        }}
+      />
+    )
+  }
+
   return user ? (
     <Dashboard
       user={user}
@@ -335,6 +389,13 @@ export default function App() {
       handleDeleteTour={handleDeleteTour}
     />
   ) : (
-    <Auth onAuthSuccess={setUser} />
+    <Auth
+      onAuthSuccess={setUser}
+      onRequire2FA={(tempToken) => setTemp2FAToken(tempToken)}
+      onShow2FASetup={(token) => {
+        setTwoFactorToken(token)
+        setShow2FASetup(true)
+      }}
+    />
   )
 }

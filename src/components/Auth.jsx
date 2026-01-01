@@ -1,13 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { LogIn, UserPlus, Mail, Lock, User, Bus } from "lucide-react"
+import { LogIn, UserPlus, Mail, Lock, User, Bus, Shield, Check, X } from "lucide-react"
 
-export default function Auth({ onAuthSuccess }) {
+export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({ name: "", email: "", password: "" })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [show2FAPrompt, setShow2FAPrompt] = useState(false)
+  const [pendingAuthData, setPendingAuthData] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -33,11 +35,21 @@ export default function Auth({ onAuthSuccess }) {
 
       console.log(`[v0] ${isLogin ? "Login" : "Registration"} successful`, data)
 
+      if (data.requires2FA) {
+        onRequire2FA(data.tempToken)
+        return
+      }
+
       localStorage.setItem("auth-token", data.token)
       localStorage.setItem("tokenId", data.tokenId)
       localStorage.setItem("user", JSON.stringify(data.user))
 
-      onAuthSuccess(data.user)
+      if (!isLogin) {
+        setPendingAuthData(data)
+        setShow2FAPrompt(true)
+      } else {
+        onAuthSuccess(data.user)
+      }
     } catch (err) {
       console.error("[v0] Auth Error:", err.message)
       setError(err.message || "Authentication failed. Please check your connection.")
@@ -46,8 +58,71 @@ export default function Auth({ onAuthSuccess }) {
     }
   }
 
+  const handle2FAChoice = (wants2FA) => {
+    setShow2FAPrompt(false)
+    if (wants2FA) {
+      onShow2FASetup(pendingAuthData.token)
+    } else {
+      onAuthSuccess(pendingAuthData.user)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      {show2FAPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-slate-100 animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center bg-blue-500 p-4 rounded-2xl text-white shadow-xl shadow-blue-500/20 mb-6">
+                <Shield size={32} strokeWidth={2.5} />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Enable 2FA?</h2>
+              <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-xs">
+                Recommended for Account Security
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3">
+                <Check className="text-green-500 shrink-0" size={20} strokeWidth={3} />
+                <p className="text-sm font-bold text-slate-600">
+                  Protects your account from unauthorized login attempts.
+                </p>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3">
+                <Check className="text-green-500 shrink-0" size={20} strokeWidth={3} />
+                <p className="text-sm font-bold text-slate-600">
+                  Requires a 6-digit code from Google Authenticator app.
+                </p>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex gap-3">
+                <Shield className="text-blue-500 shrink-0" size={20} strokeWidth={3} />
+                <p className="text-sm font-black text-blue-700 uppercase tracking-wider text-[10px]">
+                  Highly Recommended for your Safety
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handle2FAChoice(false)}
+                className="py-4 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+              >
+                <X size={18} strokeWidth={3} />
+                Maybe Later
+              </button>
+              <button
+                onClick={() => handle2FAChoice(true)}
+                className="bg-primary hover:bg-primary/90 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2"
+              >
+                <Check size={18} strokeWidth={3} />
+                Activate Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center bg-primary p-4 rounded-2xl text-white shadow-xl shadow-primary/20 mb-6 rotate-3">
