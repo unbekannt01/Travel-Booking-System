@@ -1,15 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { LogIn, UserPlus, Mail, Lock, User, Bus, Shield, Check, X } from "lucide-react"
 
 export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
   const [isLogin, setIsLogin] = useState(true)
-  const [formData, setFormData] = useState({ name: "", email: "", password: "" })
+  const [formData, setFormData] = useState({ userName: "", email: "", loginIdentifier: "", password: "" })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [show2FAPrompt, setShow2FAPrompt] = useState(false)
   const [pendingAuthData, setPendingAuthData] = useState(null)
+
+  // Reset form data when switching between login and register, or when component mounts
+  useEffect(() => {
+    setFormData({ userName: "", email: "", loginIdentifier: "", password: "" })
+    setError("")
+  }, [isLogin])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -19,12 +25,17 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     const baseUrl = "http://localhost:5000"
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
 
+    // For login, send loginIdentifier (email or username) instead of separate fields
+    const requestData = isLogin
+      ? { loginIdentifier: formData.loginIdentifier, password: formData.password }
+      : { userName: formData.userName, email: formData.email, password: formData.password }
+
     try {
       const res = await fetch(`${baseUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(formData),
+        body: JSON.stringify(requestData),
       })
 
       const data = await res.json()
@@ -43,6 +54,9 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
       localStorage.setItem("auth-token", data.token)
       localStorage.setItem("tokenId", data.tokenId)
       localStorage.setItem("user", JSON.stringify(data.user))
+
+      // Clear form data after successful authentication
+      setFormData({ userName: "", email: "", loginIdentifier: "", password: "" })
 
       if (!isLogin) {
         setPendingAuthData(data)
@@ -138,37 +152,55 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Full Name</label>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Username</label>
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
                     type="text"
                     required
-                    placeholder="Enter your name"
+                    placeholder="Enter your username"
                     className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={formData.userName}
+                    onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
                     disabled={loading}
                   />
                 </div>
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  type="email"
-                  required
-                  placeholder="name@example.com"
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  disabled={loading}
-                />
+            {isLogin ? (
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Email or Username</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter email or username"
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
+                    value={formData.loginIdentifier}
+                    onChange={(e) => setFormData({ ...formData, loginIdentifier: e.target.value })}
+                    disabled={loading}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Password</label>
@@ -201,7 +233,14 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
           <div className="mt-8 pt-8 border-t border-slate-50 text-center">
             <p className="text-sm font-bold text-slate-500">
               {isLogin ? "Don't have an account?" : "Already a member?"}
-              <button onClick={() => setIsLogin(!isLogin)} className="ml-2 text-primary hover:underline font-black">
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin)
+                  setFormData({ userName: "", email: "", loginIdentifier: "", password: "" })
+                  setError("")
+                }}
+                className="ml-2 text-primary hover:underline font-black"
+              >
                 {isLogin ? "Register Here" : "Login Instead"}
               </button>
             </p>

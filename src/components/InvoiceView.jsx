@@ -1,16 +1,32 @@
 "use client"
 
-import { Printer, Share2, ArrowLeft, Bus, MapPin, Phone, IndianRupee, ShieldCheck, CheckCircle2 } from "lucide-react"
+import {
+  Printer,
+  Share2,
+  ArrowLeft,
+  Bus,
+  MapPin,
+  Phone,
+  IndianRupee,
+  ShieldCheck,
+  CheckCircle2,
+  Download,
+} from "lucide-react"
 
-export default function InvoiceView({ booking, onBack }) {
+export default function InvoiceView({ booking, onBack, user }) {
   const handlePrint = () => {
     window.print()
   }
 
   const handleShare = () => {
-    const text = `*SHREE BHAGAVAT TOURISM*\n*Tour Confirmation: #${booking.invoiceNo}*\n\n*Destination:* ${booking.tourName}\n*Traveler:* ${booking.contactName}\n*Departure:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*Travelers:* ${booking.passengers.length} PAX\n\n*Payment Summary*\nTotal Package: ₹${booking.totalAmount.toLocaleString()}\nAdvance Paid: ₹${booking.advanceReceived.toLocaleString()}\n*BALANCE PAYABLE: ₹${(booking.totalAmount - booking.advanceReceived).toLocaleString()}*\n\n_Thank you for choosing us for your journey!_`
+    const companyName = user?.companyName || "SHREE BHAGAVAT TOURISM"
+    const text = `*${companyName.toUpperCase()}*\n*Tour Confirmation: #${booking.invoiceNo}*\n\n*Destination:* ${booking.tourName}\n*Traveler:* ${booking.contactName}\n*Departure:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*Travelers:* ${booking.passengers.length} PAX\n\n*Payment Summary*\nTotal Package: ₹${booking.totalAmount.toLocaleString()}\nAdvance Paid: ₹${booking.advanceReceived.toLocaleString()}\n*BALANCE PAYABLE: ₹${(booking.totalAmount - booking.advanceReceived).toLocaleString()}*\n\n_Thank you for choosing us for your journey!_`
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, "_blank")
+  }
+
+  const handleDownload = () => {
+    window.print()
   }
 
   return (
@@ -32,10 +48,17 @@ export default function InvoiceView({ booking, onBack }) {
             <span className="sm:hidden">Share</span>
           </button>
           <button
+            onClick={handleDownload}
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-50 text-blue-700 rounded-xl font-black text-sm hover:bg-blue-100 transition-all"
+          >
+            <Download size={18} /> <span className="hidden sm:inline">Download PDF</span>{" "}
+            <span className="sm:hidden">PDF</span>
+          </button>
+          <button
             onClick={handlePrint}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-sm hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all"
           >
-            <Printer size={18} /> <span className="hidden sm:inline">Print / Save as PDF</span>{" "}
+            <Printer size={18} /> <span className="hidden sm:inline">Print</span>{" "}
             <span className="sm:hidden">Print</span>
           </button>
         </div>
@@ -50,13 +73,25 @@ export default function InvoiceView({ booking, onBack }) {
           <div className="bg-indigo-600 p-8 lg:p-12 text-white relative overflow-hidden">
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 lg:gap-8">
               <div className="flex items-center gap-4 lg:gap-6">
-                <div className="bg-white p-3 lg:p-4 rounded-2xl lg:rounded-3xl text-indigo-600 shadow-xl">
-                  <Bus size={32} className="lg:w-12 lg:h-12" strokeWidth={2.5} />
-                </div>
+                {user?.companyLogo ? (
+                  <div className="bg-white p-2 lg:p-3 rounded-2xl lg:rounded-3xl shadow-xl">
+                    <img
+                      src={user.companyLogo || "/placeholder.svg"}
+                      alt="Company Logo"
+                      className="w-12 h-12 lg:w-16 lg:h-16 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white p-3 lg:p-4 rounded-2xl lg:rounded-3xl text-indigo-600 shadow-xl">
+                    <Bus size={32} className="lg:w-12 lg:h-12" strokeWidth={2.5} />
+                  </div>
+                )}
                 <div>
-                  <h1 className="text-4xl font-black tracking-tighter leading-none mb-1">SHREE BHAGAVAT</h1>
+                  <h1 className="text-4xl font-black tracking-tighter leading-none mb-1">
+                    {user?.companyName?.toUpperCase() || "SHREE BHAGAVAT"}
+                  </h1>
                   <p className="text-indigo-100 text-lg font-bold tracking-[0.3em] uppercase opacity-90">
-                    Tourism & Travels
+                    {user?.companyTagline || "Tourism & Travels"}
                   </p>
                 </div>
               </div>
@@ -80,12 +115,23 @@ export default function InvoiceView({ booking, onBack }) {
                 <div className="space-y-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Headquarters</p>
                   <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <MapPin size={14} className="text-indigo-600" /> Junagadh, Gujarat, 362001
+                    <MapPin size={14} className="text-indigo-600" />{" "}
+                    {user?.companyHeadquarters || "Junagadh, Gujarat, 362001"}
                   </p>
                   <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                    <Phone size={14} className="text-indigo-600" /> +91 88662 29022
+                    <Phone size={14} className="text-indigo-600" /> {user?.companyPhone || "+91 88662 29022"}
                   </p>
                 </div>
+                {user?.organizers && user.organizers.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tour Organizers</p>
+                    {user.organizers.map((organizer, index) => (
+                      <p key={index} className="text-sm font-bold text-indigo-600 flex items-center gap-2">
+                        <Phone size={14} className="text-indigo-400" /> {organizer.name} - {organizer.phone}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Customer Details</p>
                   <p className="text-2xl font-black text-indigo-600">{booking.contactName}</p>
@@ -240,7 +286,7 @@ export default function InvoiceView({ booking, onBack }) {
           <div className="p-8 lg:p-12 bg-slate-50 text-center border-t border-slate-100">
             <p className="text-slate-900 font-black text-xl mb-1 tracking-tight">We wish you a magnificent journey!</p>
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.4em] opacity-80">
-              shreebhagavattourism.com
+              {user?.companyName?.toLowerCase().replace(/\s+/g, "") || "shreebhagavattourism"}.com
             </p>
           </div>
         </div>

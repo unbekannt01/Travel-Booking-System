@@ -11,7 +11,7 @@ const router = express.Router()
 
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body
+    const { userName, email, password } = req.body
 
     const existingUser = await User.findOne({ email })
     if (existingUser) {
@@ -21,7 +21,7 @@ router.post("/register", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10)
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
 
-    const newUser = new User({ name, email, password: hashedPassword })
+    const newUser = new User({ userName, email, password: hashedPassword })
     await newUser.save()
 
     const token = jwt.sign({ id: newUser._id, tokenId }, process.env.JWT_SECRET || "secret", {
@@ -39,7 +39,18 @@ router.post("/register", async (req, res) => {
     res.status(201).json({
       token,
       tokenId,
-      user: { id: newUser._id, name, email },
+      user: { 
+        id: newUser._id, 
+        userName, 
+        email,
+        companyName: newUser.companyName,
+        companyTagline: newUser.companyTagline,
+        companyHeadquarters: newUser.companyHeadquarters,
+        companyPhone: newUser.companyPhone,
+        companyLogo: newUser.companyLogo,
+        organizers: newUser.organizers,
+        twoFactorEnabled: newUser.twoFactorEnabled
+      },
       message: "Registration successful",
     })
   } catch (error) {
@@ -130,11 +141,19 @@ router.post("/verify-2fa-setup", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body
+    const { loginIdentifier, password } = req.body
 
-    const user = await User.findOne({ email })
+    if (!loginIdentifier || !password) {
+      return res.status(400).json({ message: "Email/Username and password are required" })
+    }
+
+    // Try to find user by email or username
+    const user = await User.findOne({
+      $or: [{ email: loginIdentifier }, { userName: loginIdentifier }],
+    })
+
     if (!user) {
-      return res.status(404).json({ message: "No account found with this email. Please register first." })
+      return res.status(404).json({ message: "No account found with this email or username. Please register first." })
     }
 
     const isMatch = await bcrypt.compare(password, user.password)
@@ -181,7 +200,18 @@ router.post("/login", async (req, res) => {
     res.json({
       token,
       tokenId,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { 
+        id: user._id, 
+        userName: user.userName, 
+        email: user.email,
+        companyName: user.companyName,
+        companyTagline: user.companyTagline,
+        companyHeadquarters: user.companyHeadquarters,
+        companyPhone: user.companyPhone,
+        companyLogo: user.companyLogo,
+        organizers: user.organizers,
+        twoFactorEnabled: user.twoFactorEnabled
+      },
       message: "Login successful",
     })
   } catch (error) {
@@ -245,7 +275,18 @@ router.post("/verify-2fa-login", async (req, res) => {
     res.json({
       token,
       tokenId,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { 
+        id: user._id, 
+        userName: user.userName, 
+        email: user.email,
+        companyName: user.companyName,
+        companyTagline: user.companyTagline,
+        companyHeadquarters: user.companyHeadquarters,
+        companyPhone: user.companyPhone,
+        companyLogo: user.companyLogo,
+        organizers: user.organizers,
+        twoFactorEnabled: user.twoFactorEnabled
+      },
       message: "Login successful",
     })
   } catch (error) {
@@ -288,7 +329,7 @@ router.post("/logout", async (req, res) => {
   }
 })
 
-router.put("/update-name", async (req, res) => {
+router.put("/update-profile", async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1]
     if (!token) {
@@ -296,20 +337,122 @@ router.put("/update-name", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
-    const { newName } = req.body
+    const { userName } = req.body
 
-    const user = await User.findByIdAndUpdate(decoded.id, { name: newName }, { new: true })
+    const user = await User.findByIdAndUpdate(decoded.id, { userName }, { new: true })
 
     if (!user) {
       return res.status(404).json({ message: "User not found" })
     }
 
     res.json({
-      message: "Name updated successfully",
-      user: { id: user._id, name: user.name, email: user.email },
+      message: "Profile updated successfully",
+      user: { 
+        id: user._id, 
+        userName: user.userName, 
+        email: user.email,
+        companyName: user.companyName,
+        companyTagline: user.companyTagline,
+        companyHeadquarters: user.companyHeadquarters,
+        companyPhone: user.companyPhone,
+        companyLogo: user.companyLogo,
+        organizers: user.organizers,
+        twoFactorEnabled: user.twoFactorEnabled
+      },
     })
   } catch (error) {
-    console.error("[v0] Update name error:", error.message)
+    console.error("[v0] Update profile error:", error.message)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+router.put("/update-company", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized. Please login." })
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const { companyName, companyTagline, companyHeadquarters, companyPhone, companyLogo, organizers } = req.body
+
+    const updateData = {}
+    if (companyName !== undefined) updateData.companyName = companyName
+    if (companyTagline !== undefined) updateData.companyTagline = companyTagline
+    if (companyHeadquarters !== undefined) updateData.companyHeadquarters = companyHeadquarters
+    if (companyPhone !== undefined) updateData.companyPhone = companyPhone
+    if (companyLogo !== undefined) updateData.companyLogo = companyLogo
+    if (organizers !== undefined) updateData.organizers = organizers
+
+    const user = await User.findByIdAndUpdate(decoded.id, updateData, { new: true })
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    res.json({
+      message: "Company settings updated successfully",
+      user: { 
+        id: user._id, 
+        userName: user.userName, 
+        email: user.email,
+        companyName: user.companyName,
+        companyTagline: user.companyTagline,
+        companyHeadquarters: user.companyHeadquarters,
+        companyPhone: user.companyPhone,
+        companyLogo: user.companyLogo,
+        organizers: user.organizers,
+        twoFactorEnabled: user.twoFactorEnabled
+      },
+    })
+  } catch (error) {
+    console.error("[v0] Update company error:", error.message)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+router.post("/disable-2fa", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]
+    if (!token) {
+      return res.status(401).json({ message: "Unauthorized. Please login." })
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const { code } = req.body
+
+    const user = await User.findById(decoded.id)
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({ message: "2FA is not enabled" })
+    }
+
+    // Verify the code before disabling
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: "base32",
+      token: code,
+      window: 2,
+    })
+
+    if (!verified) {
+      return res.status(400).json({ message: "Invalid verification code" })
+    }
+
+    user.twoFactorEnabled = false
+    user.twoFactorSecret = null
+    await user.save()
+
+    res.json({
+      message: "2FA disabled successfully",
+      twoFactorEnabled: false,
+    })
+  } catch (error) {
+    console.error("[v0] Disable 2FA error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })

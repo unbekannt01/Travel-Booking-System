@@ -20,11 +20,16 @@ import {
   LogOut,
   Edit2,
   Check,
+  SettingsIcon,
+  Shield,
+  Building2,
+  Upload,
 } from "lucide-react"
 import BookingForm from "./BookingForm"
 import InvoiceView from "./InvoiceView"
 import TourInventory from "./TourInventory"
 import PassengerManagement from "./PassengerManagement"
+import TwoFactorSetup from "./TwoFactorSetup"
 
 export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [bookings, setBookings] = useState([])
@@ -37,8 +42,21 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [showAllInvoices, setShowAllInvoices] = useState(false)
   const [invoiceTourFilter, setInvoiceTourFilter] = useState("all")
   const [isEditingName, setIsEditingName] = useState(false)
-  const [newName, setNewName] = useState(user?.name || "SB TOURISM")
+  const [newUserName, setNewUserName] = useState(user?.userName || "")
   const [_loading, setLoading] = useState(false)
+
+  const [show2FASetup, setShow2FASetup] = useState(false)
+  const [show2FADisable, setShow2FADisable] = useState(false)
+  const [disable2FACode, setDisable2FACode] = useState("")
+  const [companySettings, setCompanySettings] = useState({
+    companyName: user?.companyName || "Shree Bhagavat Tourism",
+    companyTagline: user?.companyTagline || "Tourism & Travels",
+    companyHeadquarters: user?.companyHeadquarters || "Junagadh, Gujarat, 362001",
+    companyPhone: user?.companyPhone || "+91 88662 29022",
+    companyLogo: user?.companyLogo || "",
+    organizers: user?.organizers || [],
+  })
+  const [isEditingCompany, setIsEditingCompany] = useState(false)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("auth-token")
@@ -109,27 +127,92 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   }, [activeTab])
 
   const handleUpdateName = async () => {
-    if (!newName.trim()) return
+    if (!newUserName.trim()) return
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/update-name", {
+      const res = await fetch("http://localhost:5000/api/auth/update-profile", {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ newName }),
+        body: JSON.JSON.stringify({ userName: newUserName }),
       })
 
       const data = await res.json()
       if (!res.ok) throw new Error(data.message)
 
-      const updatedUser = { ...user, name: data.user.name }
+      const updatedUser = data.user
       localStorage.setItem("user", JSON.stringify(updatedUser))
       onUserUpdate(updatedUser)
       setIsEditingName(false)
-      console.log("[v0] Name updated")
+      console.log("[v0] Username updated")
     } catch (err) {
-      console.error("[v0] Error updating name:", err.message)
-      alert("Failed to update name: " + err.message)
+      console.error("[v0] Error updating username:", err.message)
+      alert("Failed to update username: " + err.message)
     }
+  }
+
+  const handleUpdateCompany = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/update-company", {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(companySettings),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message)
+
+      const updatedUser = data.user
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+      onUserUpdate(updatedUser)
+      setIsEditingCompany(false)
+      alert("Company settings updated successfully!")
+      console.log("[v0] Company settings updated")
+    } catch (err) {
+      console.error("[v0] Error updating company settings:", err.message)
+      alert("Failed to update company settings: " + err.message)
+    }
+  }
+
+  const handleDisable2FA = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/disable-2fa", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ code: disable2FACode }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message)
+
+      const updatedUser = { ...user, twoFactorEnabled: false }
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+      onUserUpdate(updatedUser)
+      setShow2FADisable(false)
+      setDisable2FACode("")
+      alert("2FA disabled successfully!")
+      console.log("[v0] 2FA disabled")
+    } catch (err) {
+      console.error("[v0] Error disabling 2FA:", err.message)
+      alert("Failed to disable 2FA: " + err.message)
+    }
+  }
+
+  const handle2FASetupComplete = () => {
+    const updatedUser = { ...user, twoFactorEnabled: true }
+    localStorage.setItem("user", JSON.stringify(updatedUser))
+    onUserUpdate(updatedUser)
+    setShow2FASetup(false)
+  }
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setCompanySettings({ ...companySettings, companyLogo: reader.result })
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleSaveBooking = async (bookingData) => {
@@ -265,7 +348,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     invoiceTourFilter === "all" ? bookings : bookings.filter((b) => b.tourName === invoiceTourFilter)
 
   if (selectedBooking) {
-    return <InvoiceView booking={selectedBooking} onBack={() => setSelectedBooking(null)} />
+    return <InvoiceView booking={selectedBooking} onBack={() => setSelectedBooking(null)} user={user} />
+  }
+
+  if (show2FASetup) {
+    return (
+      <TwoFactorSetup
+        token={localStorage.getItem("auth-token")}
+        onComplete={handle2FASetupComplete}
+        onSkip={() => setShow2FASetup(false)}
+      />
+    )
   }
 
   return (
@@ -276,7 +369,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           <div className="bg-primary p-1.5 rounded-lg text-white shadow-lg shadow-primary/20">
             <Compass size={18} strokeWidth={2.5} />
           </div>
-          <h1 className="font-black text-sm tracking-tight text-slate-900">{user?.name || "SB TOURISM"}</h1>
+          <h1 className="font-black text-sm tracking-tight text-slate-900">{user?.userName || "SB TOURISM"}</h1>
         </div>
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -303,11 +396,11 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
                     className="font-black text-xl tracking-tight leading-none text-slate-900 bg-slate-50 border-none rounded p-1 outline-none w-40 focus:ring-2 focus:ring-primary/20"
                     autoFocus
-                    onBlur={() => !newName.trim() && setIsEditingName(false)}
+                    onBlur={() => !newUserName.trim() && setIsEditingName(false)}
                     onKeyDown={(e) => e.key === "Enter" && handleUpdateName()}
                   />
                   <button onClick={handleUpdateName} className="text-green-500 hover:text-green-600 transition-colors">
@@ -318,7 +411,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 <div className="flex items-center gap-2">
                   <div>
                     <h1 className="font-black text-xl tracking-tight leading-none text-slate-900">
-                      {user?.name || "SB TOURISM"}
+                      {user?.userName || "SB TOURISM"}
                     </h1>
                     <span className="text-[10px] font-black uppercase tracking-widest text-primary/60 block mt-1">
                       Luxury Travels
@@ -326,7 +419,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                   </div>
                   <button
                     onClick={() => {
-                      setNewName(user?.name || "SB TOURISM")
+                      setNewUserName(user?.userName || "")
                       setIsEditingName(true)
                     }}
                     className="opacity-0 group-hover/name:opacity-100 p-1 hover:bg-slate-100 rounded-lg transition-all text-slate-400 hover:text-primary"
@@ -351,6 +444,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "Overview" },
             { id: "passengers", icon: <Users size={18} />, label: "Travelers" },
             { id: "tours", icon: <MapPin size={18} />, label: "Destinations" },
+            { id: "settings", icon: <SettingsIcon size={18} />, label: "Settings" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -581,8 +675,293 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           )}
 
           {activeTab === "tours" && <TourInventory tours={tours} onAdd={handleSaveTour} onDelete={handleDeleteTour} />}
+
+          {activeTab === "settings" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 mb-2">Settings</h2>
+                <p className="text-slate-500 font-bold text-sm">Manage your account security and company branding</p>
+              </div>
+
+              {/* Security Settings */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-7 border-b border-slate-50 flex items-center gap-3">
+                  <div className="bg-blue-50 p-2 rounded-xl text-blue-600">
+                    <Shield size={20} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900">Security Settings</h3>
+                </div>
+                <div className="p-7 space-y-6">
+                  <div className="flex items-start justify-between gap-6">
+                    <div className="flex-1">
+                      <h4 className="font-black text-slate-900 mb-1">Two-Factor Authentication (2FA)</h4>
+                      <p className="text-sm text-slate-500 font-medium">
+                        Add an extra layer of security by requiring a 6-digit code from Google Authenticator when
+                        logging in.
+                      </p>
+                      {user?.twoFactorEnabled && (
+                        <span className="inline-flex items-center gap-1.5 mt-2 text-xs font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                          <Check size={14} strokeWidth={3} /> Currently Enabled
+                        </span>
+                      )}
+                    </div>
+                    {user?.twoFactorEnabled ? (
+                      <button
+                        onClick={() => setShow2FADisable(true)}
+                        className="px-5 py-2.5 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition-all"
+                      >
+                        Disable 2FA
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShow2FASetup(true)}
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all"
+                      >
+                        Enable 2FA
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Company Settings */}
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-7 border-b border-slate-50 flex items-center gap-3">
+                  <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600">
+                    <Building2 size={20} />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900">Company Branding</h3>
+                </div>
+                <div className="p-7 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Company Name</label>
+                      <input
+                        type="text"
+                        value={companySettings.companyName}
+                        onChange={(e) => setCompanySettings({ ...companySettings, companyName: e.target.value })}
+                        disabled={!isEditingCompany}
+                        className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Tagline</label>
+                      <input
+                        type="text"
+                        value={companySettings.companyTagline}
+                        onChange={(e) => setCompanySettings({ ...companySettings, companyTagline: e.target.value })}
+                        disabled={!isEditingCompany}
+                        className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Headquarters</label>
+                      <input
+                        type="text"
+                        value={companySettings.companyHeadquarters}
+                        onChange={(e) =>
+                          setCompanySettings({ ...companySettings, companyHeadquarters: e.target.value })
+                        }
+                        disabled={!isEditingCompany}
+                        className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Phone Number</label>
+                      <input
+                        type="text"
+                        value={companySettings.companyPhone}
+                        onChange={(e) => setCompanySettings({ ...companySettings, companyPhone: e.target.value })}
+                        disabled={!isEditingCompany}
+                        className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-black text-slate-400 uppercase tracking-wider">Company Logo</label>
+                    <div className="flex items-center gap-4">
+                      {companySettings.companyLogo && (
+                        <img
+                          src={companySettings.companyLogo || "/placeholder.svg"}
+                          alt="Company Logo"
+                          className="w-16 h-16 rounded-xl object-cover border border-slate-200"
+                        />
+                      )}
+                      <label
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                          isEditingCompany
+                            ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                            : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <Upload size={18} />
+                        Upload Logo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          disabled={!isEditingCompany}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                        Tour Organizers
+                      </label>
+                      {isEditingCompany && (
+                        <button
+                          onClick={() => {
+                            const newOrganizers = [...(companySettings.organizers || [])]
+                            newOrganizers.push({ name: "", phone: "" })
+                            setCompanySettings({ ...companySettings, organizers: newOrganizers })
+                          }}
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                        >
+                          <span>+ Add Organizer</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      {(companySettings.organizers || []).map((organizer, index) => (
+                        <div key={index} className="flex gap-3 items-start">
+                          <input
+                            type="text"
+                            placeholder="Organizer Name"
+                            value={organizer.name}
+                            onChange={(e) => {
+                              const newOrganizers = [...(companySettings.organizers || [])]
+                              newOrganizers[index].name = e.target.value
+                              setCompanySettings({ ...companySettings, organizers: newOrganizers })
+                            }}
+                            disabled={!isEditingCompany}
+                            className="flex-1 px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Phone Number"
+                            value={organizer.phone}
+                            onChange={(e) => {
+                              const newOrganizers = [...(companySettings.organizers || [])]
+                              newOrganizers[index].phone = e.target.value
+                              setCompanySettings({ ...companySettings, organizers: newOrganizers })
+                            }}
+                            disabled={!isEditingCompany}
+                            className="flex-1 px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                          />
+                          {isEditingCompany && (
+                            <button
+                              onClick={() => {
+                                const newOrganizers = [...(companySettings.organizers || [])]
+                                newOrganizers.splice(index, 1)
+                                setCompanySettings({ ...companySettings, organizers: newOrganizers })
+                              }}
+                              className="px-3 py-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all"
+                            >
+                              <X size={18} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {(!companySettings.organizers || companySettings.organizers.length === 0) && (
+                        <p className="text-sm text-slate-400 italic">No organizers added yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-slate-50">
+                    {isEditingCompany ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsEditingCompany(false)
+                            setCompanySettings({
+                              companyName: user?.companyName || "Shree Bhagavat Tourism",
+                              companyTagline: user?.companyTagline || "Tourism & Travels",
+                              companyHeadquarters: user?.companyHeadquarters || "Junagadh, Gujarat, 362001",
+                              companyPhone: user?.companyPhone || "+91 88662 29022",
+                              companyLogo: user?.companyLogo || "",
+                              organizers: user?.organizers || [],
+                            })
+                          }}
+                          className="px-5 py-2.5 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleUpdateCompany}
+                          className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all flex items-center gap-2"
+                        >
+                          <Check size={18} strokeWidth={3} />
+                          Save Changes
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setIsEditingCompany(true)}
+                        className="px-5 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all flex items-center gap-2"
+                      >
+                        <Edit3 size={18} />
+                        Edit Company Info
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ... existing tab content ... */}
         </div>
       </main>
+
+      {show2FADisable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-slate-100">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center bg-red-500 p-4 rounded-2xl text-white shadow-xl shadow-red-500/20 mb-6">
+                <Shield size={32} strokeWidth={2.5} />
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Disable 2FA?</h2>
+              <p className="text-slate-500 font-bold mt-2 text-sm">Enter your current 6-digit code to confirm</p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <input
+                type="text"
+                maxLength={6}
+                value={disable2FACode}
+                onChange={(e) => setDisable2FACode(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                className="w-full px-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-black text-2xl text-center tracking-[0.5em]"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => {
+                  setShow2FADisable(false)
+                  setDisable2FACode("")
+                }}
+                className="py-4 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDisable2FA}
+                disabled={disable2FACode.length !== 6}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-red-100 transition-all"
+              >
+                Disable 2FA
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAllInvoices && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">

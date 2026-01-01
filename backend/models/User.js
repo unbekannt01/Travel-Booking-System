@@ -2,12 +2,23 @@ import mongoose from "mongoose"
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
+    userName: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, default: "admin" },
     twoFactorSecret: { type: String, default: null },
     twoFactorEnabled: { type: Boolean, default: false },
+    companyName: { type: String, default: "Shree Bhagavat Tourism" },
+    companyTagline: { type: String, default: "Tourism & Travels" },
+    companyHeadquarters: { type: String, default: "Junagadh, Gujarat, 362001" },
+    companyPhone: { type: String, default: "+91 88662 29022" },
+    companyLogo: { type: String, default: "" },
+    organizers: [
+      {
+        name: { type: String, required: true },
+        phone: { type: String, required: true },
+      },
+    ],
     activeTokens: [
       {
         token: String,
