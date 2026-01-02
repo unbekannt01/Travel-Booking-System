@@ -262,7 +262,7 @@ export default function PassengerManagement({
                 {/* PDF Header */}
                 <div className="text-center mb-8 border-b-2 border-indigo-600 pb-6">
                   <h1 className="text-3xl font-black text-indigo-600 mb-2">
-                    SHREE BHAGAVAT TOURISM
+                    YATRA HUB
                   </h1>
                   <p className="text-sm font-bold text-slate-600 uppercase tracking-widest">
                     Internal Passenger Manifest
@@ -383,7 +383,7 @@ export default function PassengerManagement({
                     This is a confidential document for internal use only
                   </p>
                   <p className="text-xs font-bold text-indigo-600 mt-2">
-                    www.shreebhagavattourism.com
+                    www.yatrahub.com
                   </p>
                 </div>
               </div>

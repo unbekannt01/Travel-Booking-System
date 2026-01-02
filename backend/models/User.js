@@ -8,10 +8,10 @@ const userSchema = new mongoose.Schema(
     role: { type: String, default: "admin" },
     twoFactorSecret: { type: String, default: null },
     twoFactorEnabled: { type: Boolean, default: false },
-    companyName: { type: String, default: "Shree Bhagavat Tourism" },
+    companyName: { type: String, default: "Xyz Tourism" },
     companyTagline: { type: String, default: "Tourism & Travels" },
-    companyHeadquarters: { type: String, default: "Junagadh, Gujarat, 362001" },
-    companyPhone: { type: String, default: "+91 88662 29022" },
+    companyHeadquarters: { type: String, default: "City, State, Pincode" },
+    companyPhone: { type: String, default: "+91 98765 43210" },
     companyLogo: { type: String, default: "" },
     organizers: [
       {

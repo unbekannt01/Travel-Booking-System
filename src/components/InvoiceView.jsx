@@ -19,7 +19,7 @@ export default function InvoiceView({ booking, onBack, user }) {
   }
 
   const handleShare = () => {
-    const companyName = user?.companyName || "SHREE BHAGAVAT TOURISM"
+    const companyName = user?.companyName || "Xyz Tourism"
     const text = `*${companyName.toUpperCase()}*\n*Tour Confirmation: #${booking.invoiceNo}*\n\n*Destination:* ${booking.tourName}\n*Traveler:* ${booking.contactName}\n*Departure:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*Travelers:* ${booking.passengers.length} PAX\n\n*Payment Summary*\nTotal Package: ₹${booking.totalAmount.toLocaleString()}\nAdvance Paid: ₹${booking.advanceReceived.toLocaleString()}\n*BALANCE PAYABLE: ₹${(booking.totalAmount - booking.advanceReceived).toLocaleString()}*\n\n_Thank you for choosing us for your journey!_`
     const url = `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, "_blank")
@@ -88,7 +88,7 @@ export default function InvoiceView({ booking, onBack, user }) {
                 )}
                 <div>
                   <h1 className="text-4xl font-black tracking-tighter leading-none mb-1">
-                    {user?.companyName?.toUpperCase() || "SHREE BHAGAVAT"}
+                    {user?.companyName?.toUpperCase() || "XYZ TOURISM"}
                   </h1>
                   <p className="text-indigo-100 text-lg font-bold tracking-[0.3em] uppercase opacity-90">
                     {user?.companyTagline || "Tourism & Travels"}
@@ -286,7 +286,7 @@ export default function InvoiceView({ booking, onBack, user }) {
           <div className="p-8 lg:p-12 bg-slate-50 text-center border-t border-slate-100">
             <p className="text-slate-900 font-black text-xl mb-1 tracking-tight">We wish you a magnificent journey!</p>
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.4em] opacity-80">
-              {user?.companyName?.toLowerCase().replace(/\s+/g, "") || "shreebhagavattourism"}.com
+              {user?.companyName?.toLowerCase().replace(/\s+/g, "") || "yatrahub"}.com
             </p>
           </div>
         </div>
