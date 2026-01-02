@@ -251,7 +251,7 @@ export default function BookingForm({
   const [formData, setFormData] = useState(() => ({
     id: editData?.id || Date.now().toString(),
     invoiceNo:
-      editData?.invoiceNo || `SBT-${Math.floor(Math.random() * 9000) + 1000}`,
+      editData?.invoiceNo || `YHB-${Math.floor(Math.random() * 9000) + 1000}`,
     date: editData?.date || new Date().toISOString().split("T")[0],
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
