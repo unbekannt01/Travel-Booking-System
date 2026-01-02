@@ -669,7 +669,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {filteredBookings.slice(0, 5).map((b) => (
+                      {(searchTerm
+                        ? filteredBookings
+                        : filteredBookings.slice(0, 5)
+                      ).map((b) => (
                         <tr
                           key={b.id}
                           className="hover:bg-slate-50/50 transition-colors group"
@@ -731,8 +734,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                             colSpan={5}
                             className="px-8 py-12 text-center text-slate-400 font-medium"
                           >
-                            No bookings found. Create your first booking to get
-                            started.
+                            {searchTerm
+                              ? `No results found for "${searchTerm}". Try a different search term.`
+                              : "No bookings found. Create your first booking to get started."}
                           </td>
                         </tr>
                       )}

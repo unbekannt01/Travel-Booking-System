@@ -257,7 +257,11 @@ export default function BookingForm({
     contactPhone: editData?.contactPhone || "",
     contactEmail: editData?.contactEmail || "",
     tourName: editData?.tourName || "",
-    journeyDate: editData?.journeyDate || "",
+    journeyDate: editData?.journeyDate
+      ? typeof editData.journeyDate === "string"
+        ? editData.journeyDate.split("T")[0]
+        : new Date(editData.journeyDate).toISOString().split("T")[0]
+      : "",
     duration: editData?.duration || "",
     busType: editData?.busType || "",
     paymentMode: editData?.paymentMode || "Cash",
