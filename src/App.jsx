@@ -1,3 +1,4 @@
+ 
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client"
 
@@ -6,6 +7,8 @@ import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
 import TwoFactorSetup from "./components/TwoFactorSetup"
 import TwoFactorVerify from "./components/TwoFactorVerify"
+import ResetPassword from "./components/ResetPassword"
+import Recover2FA from "./components/Recover2FA"
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -28,6 +31,8 @@ export default function App() {
   const [twoFactorToken, setTwoFactorToken] = useState(null)
   const [show2FASetup, setShow2FASetup] = useState(false)
   const [temp2FAToken, setTemp2FAToken] = useState(null)
+  const [resetPasswordToken, setResetPasswordToken] = useState(null)
+  const [recover2FAToken, setRecover2FAToken] = useState(null)
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem("auth-token")
@@ -115,6 +120,17 @@ export default function App() {
     }
     setIsLoading(false)
   }, [user])
+
+  useEffect(() => {
+    const path = window.location.pathname
+    if (path.startsWith("/reset-password/")) {
+      const token = path.split("/").pop()
+      setResetPasswordToken(token)
+    } else if (path.startsWith("/recover-2fa/")) {
+      const token = path.split("/").pop()
+      setRecover2FAToken(token)
+    }
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -320,6 +336,32 @@ export default function App() {
     )
   }
 
+  if (resetPasswordToken) {
+    return (
+      <ResetPassword
+        token={resetPasswordToken}
+        onComplete={() => {
+          setResetPasswordToken(null)
+          window.history.pushState({}, "", "/")
+        }}
+      />
+    )
+  }
+
+  if (recover2FAToken) {
+    return (
+      <Recover2FA
+        token={recover2FAToken}
+        onShow2FASetup={(token) => {
+          setRecover2FAToken(null)
+          setTwoFactorToken(token)
+          setShow2FASetup(true)
+          window.history.pushState({}, "", "/")
+        }}
+      />
+    )
+  }
+
   if (temp2FAToken) {
     return (
       <TwoFactorVerify
@@ -339,7 +381,6 @@ export default function App() {
         onSetupComplete={() => {
           setShow2FASetup(false)
           setTwoFactorToken(null)
-          // User is already "logged in" but we might want to refresh their state
           const savedUser = JSON.parse(localStorage.getItem("user"))
           setUser(savedUser)
         }}

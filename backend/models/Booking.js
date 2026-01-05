@@ -14,6 +14,7 @@ const bookingSchema = new mongoose.Schema(
     paymentMode: { type: String, default: "Cash" },
     totalAmount: { type: Number, required: true },
     advanceReceived: { type: Number, default: 0 },
+    isPaid: { type: Boolean, default: false },
     passengers: [
       {
         name: { type: String, required: true },
@@ -23,11 +24,12 @@ const bookingSchema = new mongoose.Schema(
         seatId: { type: String },
         contact: { type: String },
         aadhar: { type: String },
+        checkedIn: { type: Boolean, default: false },
       },
     ],
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true }
+  { timestamps: true },
 )
 
 export default mongoose.model("Booking", bookingSchema)

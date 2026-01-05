@@ -5,6 +5,7 @@ import { LogIn, UserPlus, Mail, Lock, User, Bus, Shield, Check, X } from "lucide
 
 export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
   const [isLogin, setIsLogin] = useState(true)
+  const [view, setView] = useState("login") // login, register, forgot-password, recovery-request
   const [formData, setFormData] = useState({ userName: "", email: "", loginIdentifier: "", password: "" })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -15,7 +16,7 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
   useEffect(() => {
     setFormData({ userName: "", email: "", loginIdentifier: "", password: "" })
     setError("")
-  }, [isLogin])
+  }, [isLogin, view])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -72,6 +73,46 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     }
   }
 
+  const handleForgotPassword = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message)
+      alert("Reset link sent to your email")
+      setView("login")
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handle2FARecoveryRequest = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/request-2fa-recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message)
+      alert("Recovery link sent to your email (valid for 1 hour)")
+      setView("login")
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handle2FAChoice = (wants2FA) => {
     setShow2FAPrompt(false)
     if (wants2FA) {
@@ -79,6 +120,69 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     } else {
       onAuthSuccess(pendingAuthData.user)
     }
+  }
+
+  if (view === "forgot-password") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+          <h2 className="text-2xl font-black text-slate-900 mb-6">Reset Password</h2>
+          <form onSubmit={handleForgotPassword} className="space-y-4">
+            <input
+              type="email"
+              placeholder="Email Address"
+              className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none font-bold text-sm"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+            <button className="w-full bg-primary text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all">
+              Send Reset Link
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("login")}
+              className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest"
+            >
+              Back to Login
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  if (view === "recovery-request") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+          <h2 className="text-2xl font-black text-slate-900 mb-2">2FA Recovery</h2>
+          <p className="text-slate-500 text-sm font-bold mb-6">
+            Lost access to your 2FA app? We'll send a recovery link to your email.
+          </p>
+          <form onSubmit={handle2FARecoveryRequest} className="space-y-4">
+            <input
+              type="email"
+              placeholder="Your Registered Email"
+              className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none font-bold text-sm"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+            <button className="w-full bg-primary text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all">
+              Send Recovery Link
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("login")}
+              className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest"
+            >
+              Back to Login
+            </button>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -170,7 +274,9 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
 
             {isLogin ? (
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">Email or Username</label>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">
+                  Email or Username
+                </label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
@@ -229,6 +335,25 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
               {loading ? "Processing..." : isLogin ? "Sign In Now" : "Create Account"}
             </button>
           </form>
+
+          {isLogin && (
+            <div className="flex flex-col gap-2 text-right mt-8">
+              <button
+                type="button"
+                onClick={() => setView("forgot-password")}
+                className="text-[10px] font-black text-primary/60 hover:text-primary uppercase tracking-widest"
+              >
+                Forgot Password?
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("recovery-request")}
+                className="text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+              >
+                Lost 2FA Access?
+              </button>
+            </div>
+          )}
 
           <div className="mt-8 pt-8 border-t border-slate-50 text-center">
             <p className="text-sm font-bold text-slate-500">

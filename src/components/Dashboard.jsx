@@ -23,13 +23,15 @@ import {
   SettingsIcon,
   Shield,
   Building2,
-  Upload,
 } from "lucide-react";
 import BookingForm from "./BookingForm";
 import InvoiceView from "./InvoiceView";
 import TourInventory from "./TourInventory";
 import PassengerManagement from "./PassengerManagement";
 import TwoFactorSetup from "./TwoFactorSetup";
+import PaymentTracker from "./PaymentTracker";
+import JourneyManager from "./JourneyManager";
+import TourAnalytics from "./TourAnalytics";
 
 export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [bookings, setBookings] = useState([]);
@@ -359,12 +361,15 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     }
   };
 
-  const filteredBookings = bookings.filter(
-    (b) =>
-      b.contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.tourName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredBookings = bookings.filter((b) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      b.contactName.toLowerCase().includes(searchLower) ||
+      b.invoiceNo.toLowerCase().includes(searchLower) ||
+      b.tourName.toLowerCase().includes(searchLower) ||
+      (b.contactPhone && b.contactPhone.includes(searchTerm.replace(/\D/g, "")))
+    );
+  });
 
   const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
     Boolean
@@ -373,6 +378,44 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     invoiceTourFilter === "all"
       ? bookings
       : bookings.filter((b) => b.tourName === invoiceTourFilter);
+
+  const handleMarkPaymentPaid = async (paymentData) => {
+    try {
+      const booking = bookings.find(
+        (b) => (b._id || b.id) === paymentData.bookingId
+      );
+      if (!booking) return;
+
+      const updatedBooking = {
+        ...booking,
+        advanceReceived: booking.advanceReceived + paymentData.paymentAmount,
+      };
+
+      const url = `http://localhost:5000/api/bookings/${paymentData.bookingId}`;
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(updatedBooking),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setBookings((prev) =>
+          prev.map((b) =>
+            (b._id || b.id) === updated._id
+              ? { ...updated, id: updated._id }
+              : b
+          )
+        );
+        alert("Payment recorded successfully!");
+      } else {
+        alert("Failed to record payment");
+      }
+    } catch (error) {
+      console.error("[v0] Error recording payment:", error);
+      alert("Failed to record payment");
+    }
+  };
 
   if (selectedBooking) {
     return (
@@ -388,7 +431,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     return (
       <TwoFactorSetup
         token={localStorage.getItem("auth-token")}
-        onComplete={handle2FASetupComplete}
+        onSetupComplete={handle2FASetupComplete}
         onSkip={() => setShow2FASetup(false)}
       />
     );
@@ -496,7 +539,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               label: "Overview",
             },
             { id: "passengers", icon: <Users size={18} />, label: "Travelers" },
-            { id: "tours", icon: <MapPin size={18} />, label: "Destinations" },
+            {
+              id: "journey",
+              icon: <MapPin size={18} />,
+              label: "Journeys",
+            },
+            { id: "tours", icon: <Bus size={18} />, label: "Destinations" },
+            {
+              id: "analytics",
+              icon: <TrendingUp size={18} />,
+              label: "Analytics",
+            },
             {
               id: "settings",
               icon: <SettingsIcon size={18} />,
@@ -669,10 +722,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {(searchTerm
-                        ? filteredBookings
-                        : filteredBookings.slice(0, 5)
-                      ).map((b) => (
+                      {filteredBookings.slice(0, 5).map((b) => (
                         <tr
                           key={b.id}
                           className="hover:bg-slate-50/50 transition-colors group"
@@ -734,9 +784,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                             colSpan={5}
                             className="px-8 py-12 text-center text-slate-400 font-medium"
                           >
-                            {searchTerm
-                              ? `No results found for "${searchTerm}". Try a different search term.`
-                              : "No bookings found. Create your first booking to get started."}
+                            No bookings found. Create your first booking to get
+                            started.
                           </td>
                         </tr>
                       )}
@@ -744,6 +793,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                   </table>
                 </div>
               </div>
+              <PaymentTracker
+                bookings={bookings}
+                onMarkPaid={handleMarkPaymentPaid}
+              />
             </div>
           )}
 
@@ -779,6 +832,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               onDelete={handleDeleteTour}
             />
           )}
+
+          {activeTab === "journey" && <JourneyManager bookings={bookings} />}
+
+          {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}
 
           {activeTab === "settings" && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -925,7 +982,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                       />
                     </div>
                   </div>
-                  {/* 
+                  {/*
                   <div className="space-y-2">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
                       Company Logo

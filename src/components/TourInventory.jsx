@@ -1,17 +1,7 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import {
-  Map,
-  Plus,
-  Trash2,
-  Bus,
-  Clock,
-  Calendar,
-  Edit3,
-  X,
-  Check,
-} from "lucide-react";
+import { useState } from "react"
+import { Map, Plus, Trash2, Bus, Clock, Calendar, Edit3, X, Check } from "lucide-react"
 
 export default function TourInventory({ tours, onAdd, onDelete }) {
   const [newTour, setNewTour] = useState({
@@ -24,8 +14,8 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
     fixedPrice: "",
     lowerPrice: "",
     upperPrice: "",
-  });
-  const [editingId, setEditingId] = useState(null);
+  })
+  const [editingId, setEditingId] = useState(null)
   const [editTour, setEditTour] = useState({
     name: "",
     duration: "",
@@ -35,12 +25,20 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
     fixedPrice: "",
     lowerPrice: "",
     upperPrice: "",
-  });
+  })
+
+  const getInvoicePreview = (name, date) => {
+    if (!name || !date) return "YHB-DEST-MON-XXX"
+    const destCode = name.substring(0, 3).toUpperCase()
+    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+    const monthCode = months[new Date(date).getMonth()]
+    return `YHB-${destCode}-${monthCode}-001`
+  }
 
   const handleAdd = (e) => {
-    e.preventDefault();
+    e.preventDefault()
     if (newTour.name) {
-      onAdd(newTour);
+      onAdd(newTour)
       setNewTour({
         name: "",
         duration: "",
@@ -50,32 +48,30 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
         fixedPrice: "",
         lowerPrice: "",
         upperPrice: "",
-      });
+      })
     }
-  };
+  }
 
   const startEdit = (tour) => {
-    setEditingId(tour._id || tour.id);
+    setEditingId(tour._id || tour.id)
     setEditTour({
       ...tour,
       pricingType: tour.pricingType || "berth",
       fixedPrice: tour.fixedPrice || "",
-    });
-  };
+    })
+  }
 
   const handleUpdate = () => {
-    onAdd(editTour);
-    setEditingId(null);
-  };
+    onAdd(editTour)
+    setEditingId(null)
+  }
 
   return (
     <div className="space-y-8 animate-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900">Tour Inventory</h2>
-          <p className="text-sm text-slate-500 font-medium">
-            Manage your available travel packages
-          </p>
+          <p className="text-sm text-slate-500 font-medium">Manage your available travel packages</p>
         </div>
       </div>
 
@@ -83,53 +79,39 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
         {/* Add New Tour Form */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-4xl p-8 shadow-sm border border-slate-100 sticky top-24">
-            <h3 className="font-black text-lg text-slate-900 mb-6">
-              Create Tour Template
-            </h3>
+            <h3 className="font-black text-lg text-slate-900 mb-6">Create Tour Template</h3>
             <form onSubmit={handleAdd} className="space-y-5">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Tour Name
-                </label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tour Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Nepal Special Tour"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                   value={newTour.name}
-                  onChange={(e) =>
-                    setNewTour({ ...newTour, name: e.target.value })
-                  }
+                  onChange={(e) => setNewTour({ ...newTour, name: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Duration
-                </label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Duration</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 10 Days / 11 Nights"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                   value={newTour.duration}
-                  onChange={(e) =>
-                    setNewTour({ ...newTour, duration: e.target.value })
-                  }
+                  onChange={(e) => setNewTour({ ...newTour, duration: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Bus Type
-                </label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bus Type</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. 2x1 Sleeper Luxury"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                   value={newTour.busType}
-                  onChange={(e) =>
-                    setNewTour({ ...newTour, busType: e.target.value })
-                  }
+                  onChange={(e) => setNewTour({ ...newTour, busType: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -137,32 +119,32 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                   Default Journey Date
                 </label>
                 <div className="relative">
-                  <Calendar
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                    size={16}
-                  />
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input
                     type="date"
                     className="w-full pl-11 pr-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                     value={newTour.journeyDate}
-                    onChange={(e) =>
-                      setNewTour({ ...newTour, journeyDate: e.target.value })
-                    }
+                    onChange={(e) => setNewTour({ ...newTour, journeyDate: e.target.value })}
                   />
                 </div>
               </div>
 
+              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1">
+                  Invoice Format Preview
+                </p>
+                <code className="text-sm font-black text-indigo-600">
+                  {getInvoicePreview(newTour.name, newTour.journeyDate)}
+                </code>
+              </div>
+
               {/* Added pricing type selector */}
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Pricing Type
-                </label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pricing Type</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      setNewTour({ ...newTour, pricingType: "berth" })
-                    }
+                    onClick={() => setNewTour({ ...newTour, pricingType: "berth" })}
                     className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
                       newTour.pricingType === "berth"
                         ? "bg-indigo-600 text-white shadow-md"
@@ -173,9 +155,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setNewTour({ ...newTour, pricingType: "fixed" })
-                    }
+                    onClick={() => setNewTour({ ...newTour, pricingType: "fixed" })}
                     className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
                       newTour.pricingType === "fixed"
                         ? "bg-indigo-600 text-white shadow-md"
@@ -198,9 +178,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                     placeholder="12000"
                     className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                     value={newTour.fixedPrice}
-                    onChange={(e) =>
-                      setNewTour({ ...newTour, fixedPrice: e.target.value })
-                    }
+                    onChange={(e) => setNewTour({ ...newTour, fixedPrice: e.target.value })}
                   />
                 </div>
               ) : (
@@ -214,9 +192,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       placeholder="12000"
                       className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                       value={newTour.lowerPrice}
-                      onChange={(e) =>
-                        setNewTour({ ...newTour, lowerPrice: e.target.value })
-                      }
+                      onChange={(e) => setNewTour({ ...newTour, lowerPrice: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -228,9 +204,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       placeholder="11000"
                       className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                       value={newTour.upperPrice}
-                      onChange={(e) =>
-                        setNewTour({ ...newTour, upperPrice: e.target.value })
-                      }
+                      onChange={(e) => setNewTour({ ...newTour, upperPrice: e.target.value })}
                     />
                   </div>
                 </div>
@@ -264,25 +238,19 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       type="text"
                       className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100"
                       value={editTour.name}
-                      onChange={(e) =>
-                        setEditTour({ ...editTour, name: e.target.value })
-                      }
+                      onChange={(e) => setEditTour({ ...editTour, name: e.target.value })}
                     />
                     <input
                       type="text"
                       className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100"
                       value={editTour.duration}
-                      onChange={(e) =>
-                        setEditTour({ ...editTour, duration: e.target.value })
-                      }
+                      onChange={(e) => setEditTour({ ...editTour, duration: e.target.value })}
                     />
                     <input
                       type="text"
                       className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100"
                       value={editTour.busType}
-                      onChange={(e) =>
-                        setEditTour({ ...editTour, busType: e.target.value })
-                      }
+                      onChange={(e) => setEditTour({ ...editTour, busType: e.target.value })}
                     />
                     <input
                       type="date"
@@ -301,9 +269,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       <div className="flex gap-2 mb-3">
                         <button
                           type="button"
-                          onClick={() =>
-                            setEditTour({ ...editTour, pricingType: "berth" })
-                          }
+                          onClick={() => setEditTour({ ...editTour, pricingType: "berth" })}
                           className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
                             editTour.pricingType === "berth"
                               ? "bg-indigo-600 text-white"
@@ -314,9 +280,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            setEditTour({ ...editTour, pricingType: "fixed" })
-                          }
+                          onClick={() => setEditTour({ ...editTour, pricingType: "fixed" })}
                           className={`flex-1 py-2 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
                             editTour.pricingType === "fixed"
                               ? "bg-indigo-600 text-white"
@@ -372,10 +336,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="p-2 text-slate-400 hover:text-slate-600"
-                    >
+                    <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 hover:text-slate-600">
                       <X size={20} />
                     </button>
                     <button
@@ -393,34 +354,24 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       <Map size={24} />
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-900 text-lg leading-none mb-2">
-                        {tour.name}
-                      </h4>
+                      <h4 className="font-black text-slate-900 text-lg leading-none mb-2">{tour.name}</h4>
                       <div className="flex flex-wrap gap-4">
                         <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                          <Clock size={14} className="text-indigo-400" />{" "}
-                          {tour.duration}
+                          <Clock size={14} className="text-indigo-400" /> {tour.duration}
                         </span>
                         <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                          <Bus size={14} className="text-indigo-400" />{" "}
-                          {tour.busType}
+                          <Bus size={14} className="text-indigo-400" /> {tour.busType}
                         </span>
                         {tour.journeyDate && (
                           <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                            <Calendar size={14} className="text-indigo-400" />{" "}
-                            {tour.journeyDate}
+                            <Calendar size={14} className="text-indigo-400" /> {tour.journeyDate}
                           </span>
                         )}
                         {/* Display pricing based on type */}
                         <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-wider">
-                          {tour.pricingType === "fixed" ||
-                          (!tour.pricingType && !tour.upperPrice)
-                            ? `Fixed: ₹${
-                                tour.fixedPrice || tour.lowerPrice || 0
-                              }`
-                            : `Lower: ₹${tour.lowerPrice || 0} | Upper: ₹${
-                                tour.upperPrice || 0
-                              }`}
+                          {tour.pricingType === "fixed" || (!tour.pricingType && !tour.upperPrice)
+                            ? `Fixed: ₹${tour.fixedPrice || tour.lowerPrice || 0}`
+                            : `Lower: ₹${tour.lowerPrice || 0} | Upper: ₹${tour.upperPrice || 0}`}
                         </span>
                       </div>
                     </div>
@@ -448,13 +399,11 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
               <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Map className="text-slate-300" size={32} />
               </div>
-              <p className="font-bold text-slate-400">
-                No tour templates created yet.
-              </p>
+              <p className="font-bold text-slate-400">No tour templates created yet.</p>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
+  )
 }
