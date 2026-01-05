@@ -17,8 +17,8 @@ const transporter = nodemailer.createTransport({
   port: Number.parseInt(process.env.EMAIL_PORT || "587"),
   secure: process.env.EMAIL_SECURE === "true", // Use TLS for 587
   auth: {
-    user: process.env.EMAIL_USER || "prashant07401@gmail.com", // fallback for local dev
-    pass: process.env.EMAIL_PASS || "vdnk bvvm akec hgtr", // fallback for local dev
+    user: process.env.EMAIL_USER, // fallback for local dev
+    pass: process.env.EMAIL_PASS, // fallback for local dev
   },
   // Adding debug logs to help identify transport issues
   debug: true,
