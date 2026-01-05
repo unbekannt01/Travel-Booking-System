@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tour Manager PWA</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 overflow-x-hidden">
+    <!-- Login Screen -->
+    <div id="login-screen" class="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
+        <div class="w-full max-w-md space-y-8 text-center">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-2xl shadow-lg mb-4">
+                <i class="fas fa-bus-alt text-4xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Tour Manager</h1>
+            <p class="text-gray-500">Sign in to manage your tours and passengers</p>
+            
+            <form id="login-form" class="mt-8 space-y-4">
+                <div class="text-left space-y-1">
+                    <label class="text-sm font-semibold text-gray-700 ml-1">Email</label>
+                    <input type="email" id="email" required class="w-full px-4 py-3 bg-gray-100 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none" placeholder="admin@example.com">
+                </div>
+                <div class="text-left space-y-1">
+                    <label class="text-sm font-semibold text-gray-700 ml-1">Password</label>
+                    <input type="password" id="password" required class="w-full px-4 py-3 bg-gray-100 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none" placeholder="••••••••">
+                </div>
+                <button type="submit" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transform transition active:scale-95">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="main-app" class="hidden min-h-screen flex-col pb-20">
+        <!-- Header -->
+        <header class="bg-white px-6 py-4 flex items-center justify-between sticky top-0 z-10 border-b border-gray-100">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900">Dashboard</h2>
+                <p id="operator-name" class="text-xs text-gray-500 font-medium">Loading...</p>
+            </div>
+            <button onclick="logout()" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 text-gray-600">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </header>
+
+        <!-- Search Section -->
+        <div class="px-6 py-4">
+            <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="invoice-search" placeholder="Enter Invoice Number (e.g. YHB-SOU...)" 
+                    class="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+            </div>
+        </div>
+
+        <!-- Tours List / Search Results -->
+        <div id="content-area" class="px-6 space-y-4">
+            <!-- Loading State -->
+            <div id="loading" class="flex flex-col items-center justify-center py-20 space-y-4">
+                <div class="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm text-gray-500">Fetching tour data...</p>
+            </div>
+            
+            <!-- Booking Card Template -->
+            <div id="booking-results" class="space-y-4"></div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex items-center justify-around safe-bottom z-20">
+            <button class="flex flex-col items-center space-y-1 text-blue-600">
+                <i class="fas fa-th-large text-xl"></i>
+                <span class="text-[10px] font-bold">Tours</span>
+            </button>
+            <button class="flex flex-col items-center space-y-1 text-gray-400">
+                <i class="fas fa-qrcode text-xl"></i>
+                <span class="text-[10px] font-bold">Scan</span>
+            </button>
+            <button class="flex flex-col items-center space-y-1 text-gray-400">
+                <i class="fas fa-user-circle text-xl"></i>
+                <span class="text-[10px] font-bold">Profile</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Booking Details Modal -->
+    <div id="booking-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-end sm:items-center sm:justify-center">
+        <div class="bg-white w-full max-h-[90vh] rounded-t-3xl sm:rounded-3xl sm:max-w-md overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-gray-100 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="font-bold text-lg" id="modal-tour-name">Tour Details</h3>
+                    <p class="text-xs text-gray-500" id="modal-invoice-no">#INV-000</p>
+                </div>
+                <button onclick="closeModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100">
+                    <i class="fas fa-times text-gray-400"></i>
+                </button>
+            </div>
+            <div class="overflow-y-auto p-6 space-y-6">
+                <!-- Payment Status Section -->
+                <div class="bg-gray-50 p-4 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Payment Status</p>
+                        <p id="modal-payment-amount" class="text-sm font-semibold">Total: ₹0</p>
+                    </div>
+                    <button id="mark-paid-btn" class="px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm">
+                        Mark Paid
+                    </button>
+                </div>
+
+                <!-- Passengers List -->
+                <div class="space-y-4">
+                    <h4 class="font-bold text-gray-900">Passengers</h4>
+                    <div id="modal-passengers" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        let currentUser = null;
+        let allBookings = [];
+
+        // Auth handling
+        const loginForm = document.getElementById('login-form');
+        loginForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ loginIdentifier: email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    localStorage.setItem('token', data.token);
+                    initApp();
+                } else {
+                    alert(data.message || 'Login failed');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        };
+
+        async function initApp() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            
+            // Mock operator name for now
+            document.getElementById('operator-name').innerText = 'Tour Operator';
+            
+            loadBookings();
+        }
+
+        async function loadBookings() {
+            const token = localStorage.getItem('token');
+            const resultsDiv = document.getElementById('booking-results');
+            const loading = document.getElementById('loading');
+            
+            loading.classList.remove('hidden');
+            resultsDiv.innerHTML = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/bookings`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                allBookings = await res.json();
+                loading.classList.add('hidden');
+                renderBookings(allBookings);
+            } catch (err) {
+                loading.innerText = 'Failed to load data';
+            }
+        }
+
+        function renderBookings(bookings) {
+            const resultsDiv = document.getElementById('booking-results');
+            resultsDiv.innerHTML = bookings.map(b => `
+                <div onclick="openBooking('${b._id}')" class="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm active:scale-[0.98] transition-transform">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="text-[10px] font-bold px-2 py-1 rounded-md ${b.isPaid ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">
+                            ${b.isPaid ? 'PAID' : 'PENDING'}
+                        </span>
+                        <span class="text-xs font-medium text-gray-400">${b.invoiceNo}</span>
+                    </div>
+                    <h3 class="font-bold text-gray-900 mb-1">${b.tourName}</h3>
+                    <div class="flex items-center text-xs text-gray-500 space-x-4">
+                        <span><i class="far fa-calendar mr-1"></i> ${new Date(b.journeyDate).toLocaleDateString()}</span>
+                        <span><i class="fas fa-users mr-1"></i> ${b.passengers.length} PAX</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Search logic
+        document.getElementById('invoice-search').oninput = (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = allBookings.filter(b => 
+                b.invoiceNo.toLowerCase().includes(query) || 
+                b.tourName.toLowerCase().includes(query) ||
+                b.contactName.toLowerCase().includes(query)
+            );
+            renderBookings(filtered);
+        };
+
+        function openBooking(id) {
+            const booking = allBookings.find(b => b._id === id);
+            if (!booking) return;
+
+            document.getElementById('modal-tour-name').innerText = booking.tourName;
+            document.getElementById('modal-invoice-no').innerText = booking.invoiceNo;
+            document.getElementById('modal-payment-amount').innerText = `Total: ₹${booking.totalAmount}`;
+            
+            const payBtn = document.getElementById('mark-paid-btn');
+            payBtn.innerText = booking.isPaid ? 'Payment Complete' : 'Mark as Paid';
+            payBtn.className = `px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                booking.isPaid ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white'
+            }`;
+            payBtn.onclick = () => togglePayment(id);
+
+            renderPassengers(booking);
+            document.getElementById('booking-modal').classList.remove('hidden');
+        }
+
+        function renderPassengers(booking) {
+            const container = document.getElementById('modal-passengers');
+            container.innerHTML = booking.passengers.map((p, idx) => `
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+                            ${p.name.charAt(0)}
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-gray-900">${p.name}</p>
+                            <p class="text-[10px] text-gray-400 font-medium">Seat: ${p.seatId || 'N/A'}</p>
+                        </div>
+                    </div>
+                    <button onclick="toggleCheckIn('${booking._id}', ${idx})" class="w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                        p.checkedIn ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 'bg-white text-gray-300 border border-gray-200'
+                    }">
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function toggleCheckIn(bookingId, pIdx) {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/bookings/${bookingId}/passengers/${pIdx}/checkin`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    const index = allBookings.findIndex(b => b._id === bookingId);
+                    allBookings[index] = updated;
+                    renderPassengers(updated);
+                    renderBookings(allBookings);
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function togglePayment(bookingId) {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch(`${API_BASE}/bookings/${bookingId}/toggle-payment`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    const index = allBookings.findIndex(b => b._id === bookingId);
+                    allBookings[index] = updated;
+                    openBooking(bookingId); // Refresh modal
+                    renderBookings(allBookings);
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        function closeModal() {
+            document.getElementById('booking-modal').classList.add('hidden');
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            location.reload();
+        }
+
+        // Auto-login check
+        if (localStorage.getItem('token')) {
+            initApp();
+        }
+    </script>
+</body>
+</html>

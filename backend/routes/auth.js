@@ -17,12 +17,9 @@ const transporter = nodemailer.createTransport({
   port: Number.parseInt(process.env.EMAIL_PORT || "587"),
   secure: process.env.EMAIL_SECURE === "true", // Use TLS for 587
   auth: {
-    user: process.env.EMAIL_USER, // fallback for local dev
-    pass: process.env.EMAIL_PASS, // fallback for local dev
+    user: process.env.EMAIL_USER || "prashant07401@gmail.com", // fallback for local dev
+    pass: process.env.EMAIL_PASS || "vdnk bvvm akec hgtr", // fallback for local dev
   },
-  // Adding debug logs to help identify transport issues
-  debug: true,
-  logger: true,
 })
 
 transporter.verify((error, success) => {
@@ -740,7 +737,7 @@ router.post("/finalize-2fa-recovery", async (req, res) => {
     const tempToken = jwt.sign(
       { id: user._id, temp: true, purpose: "2fa-recovery-setup" },
       process.env.JWT_SECRET || "secret",
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     )
 
     res.json({
