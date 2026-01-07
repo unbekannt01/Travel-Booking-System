@@ -3,14 +3,15 @@
 import { useState } from "react"
 import { Map, Plus, Trash2, Bus, Clock, Calendar, Edit3, X, Check } from "lucide-react"
 
+const BUS_TYPE_OPTIONS = ["2x1 Sleeper Luxury", "2x2 Sleeper Luxury"]
+
 export default function TourInventory({ tours, onAdd, onDelete }) {
   const [newTour, setNewTour] = useState({
     name: "",
     duration: "",
-    busType: "",
+    busType: "2x1 Sleeper Luxury",
     journeyDate: "",
-    // Added pricing type and fixed price support
-    pricingType: "berth", // "berth" or "fixed"
+    pricingType: "berth",
     fixedPrice: "",
     lowerPrice: "",
     upperPrice: "",
@@ -19,7 +20,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
   const [editTour, setEditTour] = useState({
     name: "",
     duration: "",
-    busType: "",
+    busType: "2x1 Sleeper Luxury",
     journeyDate: "",
     pricingType: "berth",
     fixedPrice: "",
@@ -42,7 +43,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
       setNewTour({
         name: "",
         duration: "",
-        busType: "",
+        busType: "2x1 Sleeper Luxury",
         journeyDate: "",
         pricingType: "berth",
         fixedPrice: "",
@@ -103,17 +104,25 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                   onChange={(e) => setNewTour({ ...newTour, duration: e.target.value })}
                 />
               </div>
+
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bus Type</label>
-                <input
-                  type="text"
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Bus Type & Seating Layout
+                </label>
+                <select
                   required
-                  placeholder="e.g. 2x1 Sleeper Luxury"
-                  className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                   value={newTour.busType}
                   onChange={(e) => setNewTour({ ...newTour, busType: e.target.value })}
-                />
+                  className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-all outline-none cursor-pointer"
+                >
+                  {BUS_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
               </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   Default Journey Date
@@ -138,7 +147,6 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                 </code>
               </div>
 
-              {/* Added pricing type selector */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pricing Type</label>
                 <div className="flex gap-2">
@@ -167,7 +175,6 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                 </div>
               </div>
 
-              {/* Conditionally show price fields based on pricing type */}
               {newTour.pricingType === "fixed" ? (
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -246,15 +253,20 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       value={editTour.duration}
                       onChange={(e) => setEditTour({ ...editTour, duration: e.target.value })}
                     />
-                    <input
-                      type="text"
-                      className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                    <select
                       value={editTour.busType}
                       onChange={(e) => setEditTour({ ...editTour, busType: e.target.value })}
-                    />
+                      className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer md:col-span-2"
+                    >
+                      {BUS_TYPE_OPTIONS.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="date"
-                      className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="px-4 py-2 bg-slate-50 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-100 md:col-span-2"
                       value={editTour.journeyDate}
                       onChange={(e) =>
                         setEditTour({
@@ -264,7 +276,6 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                       }
                     />
 
-                    {/* Pricing type selector in edit mode */}
                     <div className="md:col-span-2">
                       <div className="flex gap-2 mb-3">
                         <button
@@ -359,8 +370,8 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                         <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
                           <Clock size={14} className="text-indigo-400" /> {tour.duration}
                         </span>
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                          <Bus size={14} className="text-indigo-400" /> {tour.busType}
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-3 py-1.5 rounded-full">
+                          <Bus size={14} /> {tour.busType}
                         </span>
                         {tour.journeyDate && (
                           <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -368,7 +379,7 @@ export default function TourInventory({ tours, onAdd, onDelete }) {
                           </span>
                         )}
                         {/* Display pricing based on type */}
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider">
                           {tour.pricingType === "fixed" || (!tour.pricingType && !tour.upperPrice)
                             ? `Fixed: ₹${tour.fixedPrice || tour.lowerPrice || 0}`
                             : `Lower: ₹${tour.lowerPrice || 0} | Upper: ₹${tour.upperPrice || 0}`}

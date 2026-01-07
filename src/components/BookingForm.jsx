@@ -8,7 +8,6 @@ import {
   Trash2,
   Bus,
   CreditCard,
-  Users,
   Calendar,
   Building,
   ChevronDown,
@@ -96,6 +95,7 @@ const GenderSelector = ({ value, onChange }) => {
 }
 
 const rows = [1, 2, 3, 4, 5, 6]
+const rows2x2 = [1, 2, 3, 4, 5] // 2x2 has 5 rows (10 seats per deck)
 
 const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
   const getSeatInfo = (id) => passengers.find((p) => p.seatId === id)
@@ -200,11 +200,84 @@ const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
   </div>
 )
 
-const SeatLayout = ({ passengers, bookedSeats, onSeatSelect }) => {
+const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => {
+  return (
+    <div className="flex flex-col items-center space-y-4">
+      <div className="px-4 py-1.5 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 mb-2">
+        {deck} DECK
+      </div>
+      <div className="relative bg-slate-100 p-4 rounded-2xl border-4 border-slate-200 shadow-inner">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-300 px-3 py-1 rounded-full text-[8px] font-black text-slate-600 uppercase tracking-widest z-10">
+          FRONT
+        </div>
+
+        <div className="flex gap-4">
+          {/* Left side - 2 seats */}
+          <div className="grid grid-cols-2 gap-3">
+            {rows2x2.map((row) => (
+              <div key={`${deck}-L${row}-group`} className="contents">
+                <Seat
+                  id={`${deck}-L${row}-1`}
+                  label={`${deck[0].toUpperCase()}${row}-L1`}
+                  passengers={passengers}
+                  onSeatSelect={onSeatSelect}
+                  bookedSeats={bookedSeats}
+                />
+                <Seat
+                  id={`${deck}-L${row}-2`}
+                  label={`${deck[0].toUpperCase()}${row}-L2`}
+                  passengers={passengers}
+                  onSeatSelect={onSeatSelect}
+                  bookedSeats={bookedSeats}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="w-8 md:w-10 bg-slate-200/50 rounded-lg flex items-center justify-center relative overflow-hidden">
+            <div className="rotate-90 whitespace-nowrap text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-[0.5em] flex items-center gap-2">
+              <span className="opacity-20">----------</span>
+              GALLARY
+              <span className="opacity-20">----------</span>
+            </div>
+          </div>
+
+          {/* Right side - 2 seats */}
+          <div className="grid grid-cols-2 gap-3">
+            {rows2x2.map((row) => (
+              <div key={`${deck}-R${row}-group`} className="contents">
+                <Seat
+                  id={`${deck}-R${row}-1`}
+                  label={`${deck[0].toUpperCase()}${row}-R1`}
+                  passengers={passengers}
+                  onSeatSelect={onSeatSelect}
+                  bookedSeats={bookedSeats}
+                />
+                <Seat
+                  id={`${deck}-R${row}-2`}
+                  label={`${deck[0].toUpperCase()}${row}-R2`}
+                  passengers={passengers}
+                  onSeatSelect={onSeatSelect}
+                  bookedSeats={bookedSeats}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const SeatLayout = ({ passengers, bookedSeats, onSeatSelect, seatLayout = "2x1" }) => {
+  const layoutType = seatLayout.startsWith("2x2") ? "2x2" : "2x1"
+  const is2x2 = layoutType === "2x2"
+  const DeckComponent = is2x2 ? DeckGrid2x2 : DeckGrid
+
   return (
     <div className="flex flex-col md:flex-row items-start justify-center gap-8 md:gap-16 p-4 overflow-x-auto custom-scrollbar min-h-150">
-      <DeckGrid deck="lower" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
-      <DeckGrid deck="upper" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+      <DeckComponent deck="lower" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+      <DeckComponent deck="upper" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
     </div>
   )
 }
@@ -212,7 +285,7 @@ const SeatLayout = ({ passengers, bookedSeats, onSeatSelect }) => {
 export default function BookingForm({ onSave, tours, editData, onCancel, bookings = [] }) {
   const [formData, setFormData] = useState(() => ({
     id: editData?.id || Date.now().toString(),
-    invoiceNo: editData?.invoiceNo || "", // Will be set on tour selection
+    invoiceNo: editData?.invoiceNo || "",
     date: editData?.date || new Date().toISOString().split("T")[0],
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
@@ -239,7 +312,8 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         seatId: "",
       },
     ],
-    isFixedPrice: false, // Track if the selected tour has fixed pricing
+    isFixedPrice: false,
+    seatLayout: editData?.busType?.startsWith("2x2") ? "2x2" : "2x1",
   }))
 
   const [showSeatMap, setShowSeatMap] = useState(false)
@@ -299,6 +373,8 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
       const newTotal = calculateTotal(formData.passengers, tour.name)
       const newInvoiceNo = generateInvoiceNo(tour.name, tour.journeyDate || formData.journeyDate)
 
+      const seatLayoutType = tour.busType?.startsWith("2x2") ? "2x2" : "2x1"
+
       setFormData((prev) => ({
         ...prev,
         tourName: tour.name,
@@ -306,8 +382,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         busType: tour.busType,
         journeyDate: tour.journeyDate || prev.journeyDate,
         totalAmount: newTotal,
-        invoiceNo: editData?.invoiceNo || newInvoiceNo, // Don't overwrite if editing
+        invoiceNo: editData?.invoiceNo || newInvoiceNo,
         isFixedPrice: tour.isFixedPrice,
+        seatLayout: seatLayoutType,
       }))
     } else {
       setFormData({ ...formData, tourName: tourName })
@@ -474,8 +551,8 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
           <section className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
-                <div className="bg-blue-50 text-blue-600 p-2.5 rounded-xl">
-                  <Users size={20} />
+                <div className="bg-indigo-100 text-indigo-700 w-8 h-8 rounded-full flex items-center justify-center font-black text-xs">
+                  #{1}
                 </div>
                 <h3 className="font-black text-lg text-slate-900">Passenger Manifest</h3>
               </div>
@@ -647,6 +724,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                     passengers={formData.passengers}
                     bookedSeats={bookedSeats}
                     onSeatSelect={handleSeatSelection}
+                    seatLayout={formData.seatLayout || "2x1"}
                   />
                 </div>
 
@@ -712,14 +790,24 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-widest text-slate-400">Bus Arrangement</label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="e.g. 2x1 Sleeper Luxury"
-                  className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
                   value={formData.busType}
-                  onChange={(e) => setFormData({ ...formData, busType: e.target.value })}
-                />
+                  onChange={(e) => {
+                    const busType = e.target.value
+                    const layoutType = busType.startsWith("2x2") ? "2x2" : "2x1"
+                    setFormData({ ...formData, busType, seatLayout: layoutType })
+                  }}
+                  className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none cursor-pointer appearance-none bg-no-repeat bg-right"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                    paddingRight: "2.5rem",
+                  }}
+                >
+                  <option value="">Select Bus Type...</option>
+                  <option value="2x1 Sleeper Luxury">2x1 Sleeper Luxury</option>
+                  <option value="2x2 Sleeper Luxury">2x2 Sleeper Luxury</option>
+                </select>
               </div>
             </div>
           </section>

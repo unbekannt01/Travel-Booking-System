@@ -13,6 +13,7 @@ const tourSchema = new mongoose.Schema(
     busType: {
       type: String,
       required: true,
+      enum: ["2x1 Sleeper Luxury", "2x2 Sleeper Luxury"],
     },
     journeyDate: {
       type: String,
