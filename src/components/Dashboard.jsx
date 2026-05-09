@@ -248,7 +248,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             return prev.map((b) =>
               (b._id || b.id) === (savedBooking._id || savedBooking.id)
                 ? { ...savedBooking, id: savedBooking._id || savedBooking.id }
-                : b
+                : b,
             );
           } else {
             return [
@@ -278,7 +278,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           {
             method: "DELETE",
             headers: getAuthHeaders(),
-          }
+          },
         );
 
         if (response.ok) {
@@ -314,7 +314,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
 
         setTours((prev) => {
           const existingIndex = prev.findIndex(
-            (t) => (t._id || t.id) === (savedTour._id || savedTour.id)
+            (t) => (t._id || t.id) === (savedTour._id || savedTour.id),
           );
           if (existingIndex !== -1) {
             const updated = [...prev];
@@ -372,7 +372,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   });
 
   const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
-    Boolean
+    Boolean,
   );
   const filteredInvoices =
     invoiceTourFilter === "all"
@@ -382,7 +382,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const handleMarkPaymentPaid = async (paymentData) => {
     try {
       const booking = bookings.find(
-        (b) => (b._id || b.id) === paymentData.bookingId
+        (b) => (b._id || b.id) === paymentData.bookingId,
       );
       if (!booking) return;
 
@@ -404,8 +404,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           prev.map((b) =>
             (b._id || b.id) === updated._id
               ? { ...updated, id: updated._id }
-              : b
-          )
+              : b,
+          ),
         );
         alert("Payment recorded successfully!");
       } else {
@@ -678,7 +678,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                     <h3 className="text-3xl font-black text-slate-900">
                       {bookings.reduce(
                         (acc, b) => acc + b.passengers.length,
-                        0
+                        0,
                       )}
                     </h3>
                   </div>
@@ -982,40 +982,111 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                       />
                     </div>
                   </div>
-                  {/*
-                  <div className="space-y-2">
+                  {/* ─── Logo Upload Section (paste this inside the Company Branding card, 
+      replacing the commented-out section in your Dashboard.jsx) ─── */}
+
+                  {/* ── REPLACE the commented-out logo block with this ── */}
+
+                  <div className="space-y-3">
                     <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
                       Company Logo
                     </label>
                     <div className="flex items-center gap-4">
-                      {companySettings.companyLogo && (
-                        <img
-                          src={
-                            companySettings.companyLogo || "/placeholder.svg"
-                          }
-                          alt="Company Logo"
-                          className="w-16 h-16 rounded-xl object-cover border border-slate-200"
-                        />
+                      {companySettings.companyLogo ? (
+                        <div className="relative group/logo">
+                          <img
+                            src={companySettings.companyLogo}
+                            alt="Company Logo"
+                            className="w-20 h-20 rounded-2xl object-contain border-2 border-slate-200 bg-white p-1"
+                          />
+                          {isEditingCompany && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCompanySettings({
+                                  ...companySettings,
+                                  companyLogo: "",
+                                })
+                              }
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-black opacity-0 group-hover/logo:opacity-100 transition-all"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
+                          <svg
+                            width="28"
+                            height="28"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                          </svg>
+                        </div>
                       )}
-                      <label
-                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-                          isEditingCompany
-                            ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                            : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                        }`}
-                      >
-                        <Upload size={18} />
-                        Upload Logo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          disabled={!isEditingCompany}
-                          className="hidden"
-                        />
-                      </label>
+
+                      <div className="space-y-2">
+                        <label
+                          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                            isEditingCompany
+                              ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 cursor-pointer"
+                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                          }`}
+                        >
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          Upload Logo
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                            disabled={!isEditingCompany}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              // Max 2 MB guard
+                              if (file.size > 2 * 1024 * 1024) {
+                                alert("Logo file must be under 2 MB");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setCompanySettings({
+                                  ...companySettings,
+                                  companyLogo: reader.result,
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          PNG, JPG, SVG · Max 2 MB
+                        </p>
+                        {!isEditingCompany && (
+                          <p className="text-[10px] text-slate-400 font-bold italic">
+                            Click "Edit Company Info" to change logo
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div> */}
+                  </div>
 
                   <div className="space-y-3 pt-4 border-t border-slate-100">
                     <div className="flex items-center justify-between">
@@ -1100,7 +1171,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                               </button>
                             )}
                           </div>
-                        )
+                        ),
                       )}
                       {(!companySettings.organizers ||
                         companySettings.organizers.length === 0) && (
