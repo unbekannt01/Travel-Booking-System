@@ -1,7 +1,6 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import { LogIn, UserPlus, Mail, Lock, User, Bus, Shield, Check, X } from "lucide-react"
+import { API_URL } from "../config"
 
 export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
   const [isLogin, setIsLogin] = useState(true)
@@ -23,7 +22,7 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     setError("")
     setLoading(true)
 
-    const baseUrl = "http://localhost:5000"
+    const baseUrl = API_URL
     const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
 
     // For login, send loginIdentifier (email or username) instead of separate fields
@@ -44,8 +43,6 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
       if (!res.ok) {
         throw new Error(data.message || "Authentication failed")
       }
-
-      console.log(`[v0] ${isLogin ? "Login" : "Registration"} successful`, data)
 
       if (data.requires2FA) {
         onRequire2FA(data.tempToken)
@@ -77,7 +74,7 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:5000/api/auth/forgot-password", {
+      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
@@ -97,7 +94,7 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await fetch("http://localhost:5000/api/auth/request-2fa-recovery", {
+      const res = await fetch(`${API_URL}/api/auth/request-2fa-recovery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),

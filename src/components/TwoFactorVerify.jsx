@@ -1,7 +1,6 @@
-"use client"
-
 import { useState } from "react"
 import { Shield, ArrowRight } from "lucide-react"
+import { API_URL } from "../config"
 
 export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
   const [verificationCode, setVerificationCode] = useState("")
@@ -14,7 +13,7 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
     setLoading(true)
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/verify-2fa-login", {
+      const res = await fetch(`${API_URL}/api/auth/verify-2fa-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -28,8 +27,6 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
       if (!res.ok) {
         throw new Error(data.message || "Invalid verification code")
       }
-
-      console.log("[v0] 2FA verification successful", data)
 
       localStorage.setItem("auth-token", data.token)
       localStorage.setItem("tokenId", data.tokenId)

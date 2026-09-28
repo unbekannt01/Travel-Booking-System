@@ -3,11 +3,22 @@ import express from "express"
 import mongoose from "mongoose"
 import cors from "cors"
 import dotenv from "dotenv"
+import path from "path"
+import { fileURLToPath } from "url"
 import authRoutes from "./routes/auth.js"
 import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 dotenv.config()
+dotenv.config({ path: path.join(__dirname, ".env") })
+
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is missing.")
+  process.exit(1)
+}
 
 const app = express()
 

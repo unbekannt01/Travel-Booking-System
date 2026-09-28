@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useMemo } from "react"
 import { Trash2, Plus, TrendingDown, DollarSign, PieChartIcon } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"

@@ -142,7 +142,6 @@ router.put("/:id", verifyToken, async (req, res) => {
     const updatedBooking = await Booking.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     })
-    console.log("[v0] Booking updated in MongoDB:", updatedBooking)
     res.json(updatedBooking)
   } catch (error) {
     console.error("[v0] Error updating booking:", error.message)
@@ -204,7 +203,6 @@ router.put("/:bookingId/passengers/:passengerIndex", verifyToken, async (req, re
     }
 
     await booking.save()
-    console.log("[v0] Individual passenger updated in MongoDB:", updatedPassengerData)
     res.json(booking)
   } catch (error) {
     console.error("[v0] Error updating passenger:", error.message)
@@ -223,7 +221,6 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 
     await Booking.findByIdAndDelete(req.params.id)
-    console.log("[v0] Booking deleted from MongoDB")
     res.json({ message: "Booking deleted" })
   } catch (error) {
     console.error("[v0] Error deleting booking:", error.message)

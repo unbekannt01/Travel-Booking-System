@@ -1,8 +1,7 @@
 /* eslint-disable no-unused-vars */
-"use client"
-
 import { useState, useEffect } from "react"
 import { Lock, Check, ArrowLeft, Loader2, XCircle, AlertCircle } from "lucide-react"
+import { API_URL } from "../config"
 
 export default function ResetPassword({ token, onComplete }) {
   const [newPassword, setNewPassword] = useState("")
@@ -17,7 +16,7 @@ export default function ResetPassword({ token, onComplete }) {
   useEffect(() => {
     const validateToken = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/auth/validate-reset-token/${token}`)
+        const res = await fetch(`${API_URL}/api/auth/validate-reset-token/${token}`)
         const data = await res.json()
 
         if (!res.ok || !data.valid) {
@@ -48,7 +47,7 @@ export default function ResetPassword({ token, onComplete }) {
     setError("")
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/reset-password", {
+      const res = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword }),

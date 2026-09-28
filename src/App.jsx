@@ -1,8 +1,6 @@
- 
 /* eslint-disable react-hooks/exhaustive-deps */
-"use client"
-
 import { useState, useEffect } from "react"
+import { API_URL } from "./config"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
 import TwoFactorSetup from "./components/TwoFactorSetup"
@@ -49,41 +47,36 @@ export default function App() {
         const token = localStorage.getItem("auth-token")
 
         if (!token) {
-          console.log("[v0] No token found, user not authenticated")
           return
         }
 
-        const bookingsRes = await fetch("http://localhost:5000/api/bookings", {
+        const bookingsRes = await fetch(`${API_URL}/api/bookings`, {
           headers: getAuthHeaders(),
         })
 
         if (bookingsRes.ok) {
           const bookingsData = await bookingsRes.json()
-          console.log("[v0] Fetched user bookings from backend:", bookingsData)
           const formattedBookings = bookingsData.map((b) => ({
             ...b,
             id: b._id || b.id,
           }))
           setBookings(formattedBookings)
         } else if (bookingsRes.status === 401) {
-          console.log("[v0] Token expired, please login again")
           handleLogout()
         }
 
-        const toursRes = await fetch("http://localhost:5000/api/tours", {
+        const toursRes = await fetch(`${API_URL}/api/tours`, {
           headers: getAuthHeaders(),
         })
 
         if (toursRes.ok) {
           const toursData = await toursRes.json()
-          console.log("[v0] Fetched user tours from backend:", toursData)
           const formattedTours = toursData.map((t) => ({
             ...t,
             id: t._id || t.id,
           }))
           setTours(formattedTours)
         } else if (toursRes.status === 401) {
-          console.log("[v0] Token expired, please login again")
           handleLogout()
         }
       } catch (error) {
@@ -136,7 +129,7 @@ export default function App() {
     try {
       const token = localStorage.getItem("auth-token")
       if (token) {
-        await fetch("http://localhost:5000/api/auth/logout", {
+        await fetch(`${API_URL}/api/auth/logout`, {
           method: "POST",
           headers: getAuthHeaders(),
         })
@@ -158,7 +151,7 @@ export default function App() {
     if (!newName.trim()) return
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/update-name", {
+      const res = await fetch(`${API_URL}/api/auth/update-name`, {
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({ newName }),
@@ -171,7 +164,6 @@ export default function App() {
       localStorage.setItem("user", JSON.stringify(data.user))
       setUser(data.user)
       setIsEditingName(false)
-      console.log("[v0] Name updated successfully")
     } catch (err) {
       console.error("[v0] Error updating name:", err.message)
       alert("Failed to update name: " + err.message)
@@ -179,11 +171,10 @@ export default function App() {
   }
 
   const handleSaveBooking = async (bookingData) => {
-    console.log("[v0] Saving booking data to backend:", bookingData)
     try {
       const url = editingBooking
-        ? `http://localhost:5000/api/bookings/${bookingData._id || bookingData.id}`
-        : "http://localhost:5000/api/bookings"
+        ? `${API_URL}/api/bookings/${bookingData._id || bookingData.id}`
+        : `${API_URL}/api/bookings`
 
       const method = editingBooking ? "PUT" : "POST"
 
@@ -195,7 +186,6 @@ export default function App() {
 
       if (response.ok) {
         const savedBooking = await response.json()
-        console.log("[v0] Booking saved successfully:", savedBooking)
 
         setBookings((prev) => {
           if (editingBooking) {
@@ -224,15 +214,13 @@ export default function App() {
 
   const handleDeleteBooking = async (id) => {
     if (confirm("Are you sure you want to delete this booking?")) {
-      console.log("[v0] Deleting booking from backend:", id)
       try {
-        const response = await fetch(`http://localhost:5000/api/bookings/${id}`, {
+        const response = await fetch(`${API_URL}/api/bookings/${id}`, {
           method: "DELETE",
           headers: getAuthHeaders(),
         })
 
         if (response.ok) {
-          console.log("[v0] Booking deleted successfully")
           setBookings((prev) => prev.filter((b) => (b._id || b.id) !== id))
         } else {
           const error = await response.json()
@@ -247,12 +235,11 @@ export default function App() {
   }
 
   const handleSaveTour = async (tourData) => {
-    console.log("[v0] Saving tour to backend:", tourData)
     try {
       const url =
         tourData._id || tourData.id
-          ? `http://localhost:5000/api/tours/${tourData._id || tourData.id}`
-          : "http://localhost:5000/api/tours"
+          ? `${API_URL}/api/tours/${tourData._id || tourData.id}`
+          : `${API_URL}/api/tours`
 
       const method = tourData._id || tourData.id ? "PUT" : "POST"
 
@@ -264,7 +251,6 @@ export default function App() {
 
       if (response.ok) {
         const savedTour = await response.json()
-        console.log("[v0] Tour saved successfully:", savedTour)
 
         setTours((prev) => {
           const existingIndex = prev.findIndex((t) => (t._id || t.id) === (savedTour._id || savedTour.id))
@@ -292,15 +278,13 @@ export default function App() {
 
   const handleDeleteTour = async (id) => {
     if (confirm("Delete this tour template?")) {
-      console.log("[v0] Deleting tour from backend:", id)
       try {
-        const response = await fetch(`http://localhost:5000/api/tours/${id}`, {
+        const response = await fetch(`${API_URL}/api/tours/${id}`, {
           method: "DELETE",
           headers: getAuthHeaders(),
         })
 
         if (response.ok) {
-          console.log("[v0] Tour deleted successfully")
           setTours((prev) => prev.filter((t) => (t._id || t.id) !== id))
         } else {
           const error = await response.json()

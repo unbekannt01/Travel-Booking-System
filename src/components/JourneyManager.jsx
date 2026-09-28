@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useMemo } from "react"
 import { MapPin, Check, Download, MessageCircle, Mail } from "lucide-react"
 

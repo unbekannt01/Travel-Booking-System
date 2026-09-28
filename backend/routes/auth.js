@@ -8,7 +8,7 @@ import QRCode from "qrcode"
 import nodemailer from "nodemailer"
 import User from "../models/User.js"
 import EmailToken from "../models/EmailToken.js"
-import verifyToken from "../middleware/verifyToken.js" // Assuming verifyToken middleware is defined elsewhere
+import verifyToken from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -17,8 +17,8 @@ const transporter = nodemailer.createTransport({
   port: Number.parseInt(process.env.EMAIL_PORT || "587"),
   secure: process.env.EMAIL_SECURE === "true", // Use TLS for 587
   auth: {
-    user: process.env.EMAIL_USER || "prashant07401@gmail.com", // fallback for local dev
-    pass: process.env.EMAIL_PASS || "vdnk bvvm akec hgtr", // fallback for local dev
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 })
 
@@ -62,7 +62,7 @@ router.post("/register", async (req, res) => {
     const newUser = new User({ userName, email, password: hashedPassword })
     await newUser.save()
 
-    const token = jwt.sign({ id: newUser._id, tokenId }, process.env.JWT_SECRET || "secret", {
+    const token = jwt.sign({ id: newUser._id, tokenId }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     })
 
@@ -104,7 +104,7 @@ router.post("/setup-2fa", async (req, res) => {
       return res.status(401).json({ message: "Unauthorized. Please login." })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user = await User.findById(decoded.id)
 
     if (!user) {
@@ -144,7 +144,7 @@ router.post("/verify-2fa-setup", async (req, res) => {
       return res.status(401).json({ message: "Unauthorized. Please login." })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user = await User.findById(decoded.id)
 
     if (!user || !user.twoFactorSecret) {
@@ -209,7 +209,7 @@ router.post("/login", async (req, res) => {
     if (user.twoFactorEnabled) {
       const tempToken = jwt.sign(
         { id: user._id, temp: true, purpose: "2fa-verification" },
-        process.env.JWT_SECRET || "secret",
+        process.env.JWT_SECRET,
         { expiresIn: "10m" },
       )
 
@@ -221,7 +221,7 @@ router.post("/login", async (req, res) => {
     }
 
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
+    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET, { expiresIn: "7d" })
 
     user.activeTokens.push({
       token,
@@ -263,7 +263,7 @@ router.post("/verify-2fa-login", async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" })
     }
 
-    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET)
 
     if (!decoded.temp || decoded.purpose !== "2fa-verification") {
       return res.status(400).json({ message: "Invalid token" })
@@ -295,7 +295,7 @@ router.post("/verify-2fa-login", async (req, res) => {
     }
 
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
+    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET, { expiresIn: "7d" })
 
     user.activeTokens.push({
       token,
@@ -339,7 +339,7 @@ router.post("/logout", async (req, res) => {
     // ensuring we can still clean up the database even if the token is old.
     let userId
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
       userId = decoded.id
     } catch (err) {
       const decoded = jwt.decode(token)
@@ -370,7 +370,7 @@ router.put("/update-profile", async (req, res) => {
       return res.status(401).json({ message: "Unauthorized. Please login." })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const { userName } = req.body
 
     const user = await User.findByIdAndUpdate(decoded.id, { userName }, { new: true })
@@ -407,7 +407,7 @@ router.put("/update-company", async (req, res) => {
       return res.status(401).json({ message: "Unauthorized. Please login." })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const { companyName, companyTagline, companyHeadquarters, companyPhone, companyLogo, organizers } = req.body
 
     const updateData = {}
@@ -452,7 +452,7 @@ router.post("/disable-2fa", async (req, res) => {
       return res.status(401).json({ message: "Unauthorized. Please login." })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const { code } = req.body
 
     const user = await User.findById(decoded.id)
@@ -596,7 +596,7 @@ router.post("/forgot-password", async (req, res) => {
     // if (!allowed)
     //   return res.status(429).json({ message: "Daily limit of 3 reset attempts reached. Try again tomorrow." })
 
-    const resetToken = jwt.sign({ id: user._id, purpose: "password-reset" }, process.env.JWT_SECRET || "secret", {
+    const resetToken = jwt.sign({ id: user._id, purpose: "password-reset" }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     })
     await EmailToken.deleteMany({ userId: user._id, purpose: "password-reset" })
@@ -672,7 +672,7 @@ router.post("/request-2fa-recovery", async (req, res) => {
     // const allowed = await checkRateLimit(user)
     // if (!allowed) return res.status(429).json({ message: "Daily limit reached. Try again tomorrow." })
 
-    const recoveryToken = jwt.sign({ id: user._id, purpose: "2fa-recovery" }, process.env.JWT_SECRET || "secret", {
+    const recoveryToken = jwt.sign({ id: user._id, purpose: "2fa-recovery" }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     })
 
@@ -736,7 +736,7 @@ router.post("/finalize-2fa-recovery", async (req, res) => {
     // Create a temp token for 2FA setup
     const tempToken = jwt.sign(
       { id: user._id, temp: true, purpose: "2fa-recovery-setup" },
-      process.env.JWT_SECRET || "secret",
+      process.env.JWT_SECRET,
       { expiresIn: "1h" },
     )
 

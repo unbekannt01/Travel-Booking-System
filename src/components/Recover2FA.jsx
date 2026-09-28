@@ -1,8 +1,7 @@
 /* eslint-disable no-unused-vars */
-"use client"
-
 import { useState, useEffect } from "react"
 import { Shield, ShieldAlert, Check, Loader2, XCircle, AlertCircle, ArrowLeft } from "lucide-react"
+import { API_URL } from "../config"
 
 export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   const [loading, setLoading] = useState(false)
@@ -14,7 +13,7 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   useEffect(() => {
     const validateToken = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/auth/validate-2fa-token/${token}`)
+        const res = await fetch(`${API_URL}/api/auth/validate-2fa-token/${token}`)
         const data = await res.json()
 
         if (!res.ok || !data.valid) {
@@ -40,7 +39,7 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
     const recoverAccount = async () => {
       setLoading(true)
       try {
-        const res = await fetch("http://localhost:5000/api/auth/finalize-2fa-recovery", {
+        const res = await fetch(`${API_URL}/api/auth/finalize-2fa-recovery`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),

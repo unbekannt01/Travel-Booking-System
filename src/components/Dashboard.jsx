@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import {
   Bus,
@@ -24,6 +22,7 @@ import {
   Shield,
   Building2,
 } from "lucide-react";
+import { API_URL } from "../config";
 import BookingForm from "./BookingForm";
 import InvoiceView from "./InvoiceView";
 import TourInventory from "./TourInventory";
@@ -82,34 +81,30 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         const token = localStorage.getItem("auth-token");
 
         if (!token) {
-          console.log("[v0] No token found, user not authenticated");
           return;
         }
 
-        const bookingsRes = await fetch("http://localhost:5000/api/bookings", {
+        const bookingsRes = await fetch(`${API_URL}/api/bookings`, {
           headers: getAuthHeaders(),
         });
 
         if (bookingsRes.ok) {
           const bookingsData = await bookingsRes.json();
-          console.log("[v0] Fetched user bookings:", bookingsData.length);
           const formattedBookings = bookingsData.map((b) => ({
             ...b,
             id: b._id || b.id,
           }));
           setBookings(formattedBookings);
         } else if (bookingsRes.status === 401) {
-          console.log("[v0] Token expired");
           onLogout();
         }
 
-        const toursRes = await fetch("http://localhost:5000/api/tours", {
+        const toursRes = await fetch(`${API_URL}/api/tours`, {
           headers: getAuthHeaders(),
         });
 
         if (toursRes.ok) {
           const toursData = await toursRes.json();
-          console.log("[v0] Fetched user tours:", toursData.length);
           const formattedTours = toursData.map((t) => ({
             ...t,
             id: t._id || t.id,
@@ -139,7 +134,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     if (!newUserName.trim()) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/update-profile", {
+      const res = await fetch(`${API_URL}/api/auth/update-profile`, {
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({ userName: newUserName }),
@@ -152,7 +147,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       localStorage.setItem("user", JSON.stringify(updatedUser));
       onUserUpdate(updatedUser);
       setIsEditingName(false);
-      console.log("[v0] Username updated");
     } catch (err) {
       console.error("[v0] Error updating username:", err.message);
       alert("Failed to update username: " + err.message);
@@ -161,7 +155,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
 
   const handleUpdateCompany = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/update-company", {
+      const res = await fetch(`${API_URL}/api/auth/update-company`, {
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify(companySettings),
@@ -175,7 +169,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       onUserUpdate(updatedUser);
       setIsEditingCompany(false);
       alert("Company settings updated successfully!");
-      console.log("[v0] Company settings updated");
     } catch (err) {
       console.error("[v0] Error updating company settings:", err.message);
       alert("Failed to update company settings: " + err.message);
@@ -184,7 +177,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
 
   const handleDisable2FA = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/disable-2fa", {
+      const res = await fetch(`${API_URL}/api/auth/disable-2fa`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ code: disable2FACode }),
@@ -199,7 +192,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       setShow2FADisable(false);
       setDisable2FACode("");
       alert("2FA disabled successfully!");
-      console.log("[v0] 2FA disabled");
     } catch (err) {
       console.error("[v0] Error disabling 2FA:", err.message);
       alert("Failed to disable 2FA: " + err.message);
@@ -227,10 +219,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const handleSaveBooking = async (bookingData) => {
     try {
       const url = editingBooking
-        ? `http://localhost:5000/api/bookings/${
+        ? `${API_URL}/api/bookings/${
             bookingData._id || bookingData.id
           }`
-        : "http://localhost:5000/api/bookings";
+        : `${API_URL}/api/bookings`;
 
       const method = editingBooking ? "PUT" : "POST";
 
@@ -274,7 +266,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     if (confirm("Are you sure you want to delete this booking?")) {
       try {
         const response = await fetch(
-          `http://localhost:5000/api/bookings/${id}`,
+          `${API_URL}/api/bookings/${id}`,
           {
             method: "DELETE",
             headers: getAuthHeaders(),
@@ -298,8 +290,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     try {
       const url =
         tourData._id || tourData.id
-          ? `http://localhost:5000/api/tours/${tourData._id || tourData.id}`
-          : "http://localhost:5000/api/tours";
+          ? `${API_URL}/api/tours/${tourData._id || tourData.id}`
+          : `${API_URL}/api/tours`;
 
       const method = tourData._id || tourData.id ? "PUT" : "POST";
 
@@ -343,7 +335,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const handleDeleteTour = async (id) => {
     if (confirm("Delete this tour template?")) {
       try {
-        const response = await fetch(`http://localhost:5000/api/tours/${id}`, {
+        const response = await fetch(`${API_URL}/api/tours/${id}`, {
           method: "DELETE",
           headers: getAuthHeaders(),
         });
@@ -391,7 +383,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         advanceReceived: booking.advanceReceived + paymentData.paymentAmount,
       };
 
-      const url = `http://localhost:5000/api/bookings/${paymentData.bookingId}`;
+      const url = `${API_URL}/api/bookings/${paymentData.bookingId}`;
       const response = await fetch(url, {
         method: "PUT",
         headers: getAuthHeaders(),

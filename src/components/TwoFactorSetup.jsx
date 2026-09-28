@@ -1,7 +1,6 @@
-"use client"
-
 import { useState } from "react"
 import { Shield, Copy, CheckCircle2, Smartphone } from "lucide-react"
+import { API_URL } from "../config"
 
 export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
   const [qrCode, setQrCode] = useState("")
@@ -17,7 +16,7 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
     setLoading(true)
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/setup-2fa", {
+      const res = await fetch(`${API_URL}/api/auth/setup-2fa`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -47,7 +46,7 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
     setLoading(true)
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/verify-2fa-setup", {
+      const res = await fetch(`${API_URL}/api/auth/verify-2fa-setup`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 import { AlertCircle, Clock, CheckCircle2, MessageCircle, X } from "lucide-react"
 
