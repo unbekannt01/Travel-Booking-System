@@ -516,6 +516,28 @@ router.put("/:bookingId/passengers/:passengerIdentifier/checkin", verifyToken, a
   }
 })
 
+// PUT /api/bookings/:bookingId/passengers/batch-checkin
+// Sets all passengers in a booking to checkedIn=true or false
+router.put("/:bookingId/passengers/batch-checkin", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.bookingId)
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+    if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
+
+    const { checkedIn } = req.body
+    const newState = checkedIn !== false // default to true if not explicitly false
+
+    for (const p of booking.passengers) {
+      p.checkedIn = newState
+    }
+
+    await booking.save()
+    res.json(booking)
+  } catch (error) {
+    res.status(400).json({ message: error.message })
+  }
+})
+
 // PUT /api/bookings/:bookingId/passengers/:passengerIdentifier
 router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (req, res) => {
   try {

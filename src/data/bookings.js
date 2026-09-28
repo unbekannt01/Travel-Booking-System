@@ -71,3 +71,19 @@ export async function cancelBooking(id, options = {}) {
   return normalizeBooking(data)
 }
 
+export async function batchCheckin(bookingId, checkedIn = true) {
+  const data = await request(`/api/bookings/${bookingId}/passengers/batch-checkin`, {
+    method: "PUT",
+    body: JSON.stringify({ checkedIn }),
+  })
+  return normalizeBooking(data)
+}
+
+export async function swapSeat(bookingId, passengerIdentifier, newSeatId) {
+  const data = await request(`/api/bookings/${bookingId}/passengers/${passengerIdentifier}`, {
+    method: "PUT",
+    body: JSON.stringify({ seatId: newSeatId }),
+  })
+  return normalizeBooking(data)
+}
+

@@ -12,10 +12,38 @@ import {
   Printer,
   ChevronRight,
   CreditCard,
+  CheckCheck,
+  XCircle,
+  ArrowLeftRight,
+  Banknote,
+  X,
 } from "lucide-react"
-import { togglePassengerCheckin } from "../data/bookings"
+import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
+import { recordPayment } from "../data/payments"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
+
+// Generate all valid seat IDs for a given bus type
+const generateAllSeats = (busType) => {
+  const is2x2 = busType?.startsWith("2x2")
+  const rowCount = is2x2 ? 5 : 6
+  const decks = ["lower", "upper"]
+  const seats = []
+  for (const deck of decks) {
+    for (let row = 1; row <= rowCount; row++) {
+      seats.push(`${deck}-L${row}`)
+      if (is2x2) {
+        seats.push(`${deck}-L${row}-2`)
+        seats.push(`${deck}-R${row}-1`)
+        seats.push(`${deck}-R${row}-2`)
+      } else {
+        seats.push(`${deck}-R${row}-1`)
+        seats.push(`${deck}-R${row}-2`)
+      }
+    }
+  }
+  return seats
+}
 
 export default function JourneyManager({ bookings, onUpdateBooking }) {
   const { toast } = useToast()
@@ -39,6 +67,19 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
+
+  // Phase 3: Seat swap state
+  const [swappingSeat, setSwappingSeat] = useState(null) // { bookingId, passengerId, passengerName, currentSeatId }
+  const [swapLoading, setSwapLoading] = useState(false)
+
+  // Phase 3: Quick payment state
+  const [quickPayBooking, setQuickPayBooking] = useState(null)
+  const [quickPayAmount, setQuickPayAmount] = useState("")
+  const [quickPayMode, setQuickPayMode] = useState("Cash")
+  const [quickPayLoading, setQuickPayLoading] = useState(false)
+
+  // Phase 3: Batch check-in loading
+  const [batchLoading, setBatchLoading] = useState(null) // bookingId currently batch-processing
 
   const uniqueTours = useMemo(() => [...new Set(bookings.map((b) => b.tourName))].filter(Boolean), [bookings])
 
@@ -188,6 +229,89 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
       )
     } catch (err) {
       toast.error(err.message || "Failed to update check-in status")
+    }
+  }
+
+  // Phase 3: Batch check-in / unboard all
+  const handleBatchCheckin = async (booking, checkedIn) => {
+    const bookingId = booking._id || booking.id
+    setBatchLoading(bookingId)
+    try {
+      const updatedBooking = await batchCheckin(bookingId, checkedIn)
+      if (onUpdateBooking) onUpdateBooking(updatedBooking)
+      toast.success(
+        checkedIn
+          ? `All ${booking.passengers.length} passengers boarded`
+          : `All passengers unboarded for ${booking.invoiceNo}`
+      )
+    } catch (err) {
+      toast.error(err.message || "Failed to batch update check-in")
+    } finally {
+      setBatchLoading(null)
+    }
+  }
+
+  // Phase 3: Seat swap handler
+  const handleSeatSwap = async (newSeatId) => {
+    if (!swappingSeat) return
+    setSwapLoading(true)
+    try {
+      const updatedBooking = await swapSeat(
+        swappingSeat.bookingId,
+        swappingSeat.passengerId,
+        newSeatId
+      )
+      if (onUpdateBooking) onUpdateBooking(updatedBooking)
+      toast.success(`${swappingSeat.passengerName} moved to seat ${newSeatId}`)
+      setSwappingSeat(null)
+    } catch (err) {
+      toast.error(err.message || "Failed to reassign seat")
+    } finally {
+      setSwapLoading(false)
+    }
+  }
+
+  // Phase 3: Available seats for swap (all seats minus occupied ones on this departure)
+  const availableSeatsForSwap = useMemo(() => {
+    if (!swappingSeat || !activeDepartureObj) return []
+    const busType = activeDepartureObj.busType || "2x1 Sleeper Luxury"
+    const allSeats = generateAllSeats(busType)
+    const occupied = new Set()
+    for (const b of activeDepartureObj.bookings) {
+      for (const p of b.passengers || []) {
+        if (p.seatId) occupied.add(p.seatId)
+      }
+    }
+    // Remove the current seat from "occupied" (the passenger's own seat is available to stay)
+    if (swappingSeat.currentSeatId) occupied.delete(swappingSeat.currentSeatId)
+    return allSeats.filter((s) => !occupied.has(s))
+  }, [swappingSeat, activeDepartureObj])
+
+  // Phase 3: Quick payment handler
+  const handleQuickPay = async () => {
+    if (!quickPayBooking) return
+    const num = Number(quickPayAmount)
+    if (!quickPayAmount || isNaN(num) || num <= 0) {
+      toast.error("Enter a valid amount")
+      return
+    }
+    setQuickPayLoading(true)
+    try {
+      const updated = await recordPayment({
+        bookingId: quickPayBooking._id || quickPayBooking.id,
+        paymentAmount: num,
+        paymentMode: quickPayMode,
+        paymentNotes: "Collected at boarding",
+      })
+      if (onUpdateBooking) onUpdateBooking(updated)
+      toast.success(`₹${num.toLocaleString()} collected from ${quickPayBooking.contactName}`)
+      setQuickPayBooking(null)
+      setQuickPayAmount("")
+      setQuickPayMode("Cash")
+    } catch (err) {
+      toast.error(err.message || "Failed to record payment")
+    } finally {
+      setQuickPayLoading(false)
     }
   }
 
@@ -599,6 +723,63 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                     </div>
                   </div>
 
+                  {/* Phase 3: Batch Actions + Quick Balance Bar */}
+                  <div className="px-6 py-3 bg-slate-50/60 border-b border-slate-100 flex flex-wrap items-center gap-3 no-print">
+                    {/* Batch check-in buttons */}
+                    {(() => {
+                      const allCheckedIn = booking.passengers.every((p) => p.checkedIn)
+                      const noneCheckedIn = booking.passengers.every((p) => !p.checkedIn)
+                      const isBatchProcessing = batchLoading === (booking._id || booking.id)
+                      return (
+                        <>
+                          {!allCheckedIn && (
+                            <button
+                              type="button"
+                              disabled={isBatchProcessing}
+                              onClick={() => handleBatchCheckin(booking, true)}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-sm disabled:opacity-50"
+                            >
+                              <CheckCheck size={14} />
+                              {isBatchProcessing ? "Boarding..." : `Board All (${booking.passengers.length})`}
+                            </button>
+                          )}
+                          {!noneCheckedIn && (
+                            <button
+                              type="button"
+                              disabled={isBatchProcessing}
+                              onClick={() => handleBatchCheckin(booking, false)}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-black transition-all disabled:opacity-50"
+                            >
+                              <XCircle size={14} />
+                              Unboard All
+                            </button>
+                          )}
+                        </>
+                      )
+                    })()}
+
+                    {/* Spacer */}
+                    <div className="flex-1" />
+
+                    {/* Quick Balance Collection */}
+                    {booking.advanceReceived < booking.totalAmount && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickPayBooking(booking)
+                          setQuickPayAmount(
+                            Math.max(0, booking.totalAmount - (booking.advanceReceived || 0)).toString()
+                          )
+                          setQuickPayMode(booking.paymentMode || "Cash")
+                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all shadow-sm"
+                      >
+                        <Banknote size={14} />
+                        Collect ₹{Math.max(0, booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}
+                      </button>
+                    )}
+                  </div>
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-full">
                       <thead>
@@ -615,9 +796,14 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                       <tbody className="divide-y divide-slate-100">
                         {booking.passengers.map((passenger, idx) => {
                           const isCheckedIn = passenger.checkedIn
+                          const pId = passenger._id || idx
+                          const isSwapping =
+                            swappingSeat &&
+                            swappingSeat.bookingId === (booking._id || booking.id) &&
+                            swappingSeat.passengerId === pId
                           return (
                             <tr
-                              key={passenger._id || idx}
+                              key={pId}
                               className={`transition-colors ${isCheckedIn ? "bg-green-50" : "hover:bg-slate-50"}`}
                             >
                               <td className="px-6 py-4">
@@ -635,9 +821,56 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                                 <span className="font-bold text-slate-600 text-xs">{passenger.city}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">
-                                  {passenger.seatId || "—"}
-                                </span>
+                                {isSwapping ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <select
+                                      autoFocus
+                                      disabled={swapLoading}
+                                      onChange={(e) => {
+                                        if (e.target.value) handleSeatSwap(e.target.value)
+                                      }}
+                                      className="px-2 py-1 bg-white border border-indigo-300 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 max-w-[140px]"
+                                      defaultValue=""
+                                    >
+                                      <option value="" disabled>
+                                        {swapLoading ? "Moving..." : "Pick seat"}
+                                      </option>
+                                      {availableSeatsForSwap.map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSwappingSeat(null)}
+                                      className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      activeDepartureObj &&
+                                      setSwappingSeat({
+                                        bookingId: booking._id || booking.id,
+                                        passengerId: pId,
+                                        passengerName: passenger.name,
+                                        currentSeatId: passenger.seatId,
+                                      })
+                                    }
+                                    className="group flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black hover:bg-indigo-100 transition-colors"
+                                    title="Click to reassign seat"
+                                  >
+                                    {passenger.seatId || "—"}
+                                    <ArrowLeftRight
+                                      size={11}
+                                      className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    />
+                                  </button>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 <span
@@ -789,6 +1022,83 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3: Quick Payment Modal */}
+      {quickPayBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in no-print">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+                  <Banknote size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">Quick Collection</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    {quickPayBooking.invoiceNo} — {quickPayBooking.contactName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setQuickPayBooking(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-amber-50 rounded-2xl p-4 mb-6 border border-amber-100">
+              <div className="flex justify-between text-xs font-black">
+                <span className="text-amber-700">Balance Due</span>
+                <span className="text-amber-900">
+                  ₹{Math.max(0, quickPayBooking.totalAmount - (quickPayBooking.advanceReceived || 0)).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Amount (₹)</label>
+                <input
+                  type="number"
+                  value={quickPayAmount}
+                  onChange={(e) => setQuickPayAmount(e.target.value)}
+                  min="1"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-900 outline-none focus:ring-2 focus:ring-amber-100 focus:border-amber-500"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Mode</label>
+                <select
+                  value={quickPayMode}
+                  onChange={(e) => setQuickPayMode(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none"
+                >
+                  {["Cash", "UPI", "NEFT/RTGS", "Cheque", "Card"].map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setQuickPayBooking(null)}
+                className="py-3 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleQuickPay}
+                disabled={quickPayLoading}
+                className="py-3 rounded-2xl font-black text-sm bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-200 transition-all disabled:opacity-50"
+              >
+                {quickPayLoading ? "Recording..." : "Collect Payment"}
+              </button>
+            </div>
           </div>
         </div>
       )}
