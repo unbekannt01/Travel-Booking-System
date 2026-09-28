@@ -5,7 +5,7 @@ import verifyToken from "../middleware/auth.js"
 const router = express.Router()
 
 // Helper function to generate tour code from tour name
-const generateTourCode = (tourName) => {
+export const generateTourCode = (tourName) => {
   if (!tourName) return "GEN"
   const words = tourName.trim().split(/\s+/)
   if (words.length === 1) {
@@ -19,7 +19,7 @@ const generateTourCode = (tourName) => {
 }
 
 // Helper function to get month code (JAN, FEB, etc.)
-const getMonthCode = (date) => {
+export const getMonthCode = (date) => {
   const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
   const d = new Date(date)
   const month = isNaN(d.getMonth()) ? new Date().getMonth() : d.getMonth()
@@ -27,7 +27,7 @@ const getMonthCode = (date) => {
 }
 
 // Safely extracts YYYY-MM-DD and returns day bounds for query
-const getDayBounds = (dateInput) => {
+export const getDayBounds = (dateInput) => {
   let dateStr = ""
   if (typeof dateInput === "string") {
     const match = dateInput.match(/^(\d{4}-\d{2}-\d{2})/)
@@ -73,7 +73,7 @@ export const getNextInvoiceNo = async (userId, tourName, journeyDate) => {
 }
 
 // Indian mobile validation
-const validateIndianPhone = (phone) => {
+export const validateIndianPhone = (phone) => {
   if (!phone) return false
   const clean = phone.toString().replace(/[\s\-\(\)\+]/g, "")
   if (clean.length === 12 && clean.startsWith("91")) {
@@ -86,14 +86,14 @@ const validateIndianPhone = (phone) => {
 }
 
 // Aadhaar validation
-const validateAadhaar = (aadhar) => {
+export const validateAadhaar = (aadhar) => {
   if (!aadhar) return true // Aadhaar is optional
   const clean = aadhar.toString().replace(/\s+/g, "")
   return /^\d{12}$/.test(clean)
 }
 
 // Seat conflict validation
-const checkSeatConflicts = async ({ userId, tourName, journeyDate, passengers, excludeBookingId = null }) => {
+export const checkSeatConflicts = async ({ userId, tourName, journeyDate, passengers, excludeBookingId = null }) => {
   const seatIds = (passengers || []).map((p) => p.seatId).filter(Boolean)
   if (seatIds.length === 0) return null
 
