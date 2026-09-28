@@ -270,6 +270,18 @@ router.post("/", verifyToken, async (req, res) => {
 
     const isPaid = numAdvance >= numTotal && numTotal > 0
 
+    const initialPayments =
+      numAdvance > 0
+        ? [
+            {
+              amount: numAdvance,
+              date: req.body.date ? new Date(req.body.date) : new Date(),
+              mode: paymentMode || "Cash",
+              notes: "Initial advance payment",
+            },
+          ]
+        : []
+
     const newBooking = new Booking({
       invoiceNo,
       date: req.body.date ? new Date(req.body.date) : new Date(),
@@ -285,6 +297,7 @@ router.post("/", verifyToken, async (req, res) => {
       advanceReceived: numAdvance,
       isPaid,
       status: "Confirmed",
+      payments: initialPayments,
       passengers,
       userId: req.user.id,
     })
@@ -510,6 +523,71 @@ router.put("/:bookingId/toggle-payment", verifyToken, async (req, res) => {
 
     await booking.save()
     res.json(booking)
+  } catch (error) {
+    res.status(400).json({ message: error.message })
+  }
+})
+
+// PUT /api/bookings/:id/cancel
+router.put("/:id/cancel", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+    if (booking.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to cancel this booking" })
+    }
+
+    const { reason } = req.body
+    booking.status = "Cancelled"
+    booking.cancellationReason = reason || "Cancelled by operator"
+    booking.cancelledAt = new Date()
+
+    await booking.save()
+    res.json(booking)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// POST /api/bookings/:id/payments (Add payment to ledger)
+router.post("/:id/payments", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+    if (booking.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to update this booking" })
+    }
+
+    const { amount, mode, notes } = req.body
+    const numAmount = Number(amount)
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ message: "Payment amount must be greater than zero." })
+    }
+
+    const remainingBalance = booking.totalAmount - (booking.advanceReceived || 0)
+    if (numAmount > remainingBalance) {
+      return res.status(400).json({
+        message: `Payment amount ₹${numAmount} exceeds remaining balance of ₹${remainingBalance}.`,
+      })
+    }
+
+    const newPayment = {
+      amount: numAmount,
+      date: new Date(),
+      mode: mode || "Cash",
+      notes: notes || "",
+      recordedBy: req.user.userName || "",
+    }
+
+    booking.payments.push(newPayment)
+    booking.advanceReceived = (booking.advanceReceived || 0) + numAmount
+    if (booking.advanceReceived >= booking.totalAmount) {
+      booking.isPaid = true
+    }
+
+    await booking.save()
+    res.status(201).json(booking)
   } catch (error) {
     res.status(400).json({ message: error.message })
   }

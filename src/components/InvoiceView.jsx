@@ -46,6 +46,7 @@ export default function InvoiceView({ booking, onBack, user }) {
     ).join("")
 
     const balance = booking.totalAmount - booking.advanceReceived
+    const isCancelled = booking.status === "Cancelled" || booking.status === "cancelled"
     const journeyDate = new Date(booking.journeyDate).toLocaleDateString("en-IN", {
       day: "2-digit", month: "short", year: "numeric"
     })
@@ -178,7 +179,7 @@ export default function InvoiceView({ booking, onBack, user }) {
         </div>
         <div class="value-right">
           <div class="label">Status</div>
-          <div class="value" style="color:#4f46e5;">✓ Confirmed</div>
+          <div class="value" style="color:${isCancelled ? '#ef4444' : '#4f46e5'};">${isCancelled ? '✕ Cancelled' : '✓ Confirmed'}</div>
         </div>
       </div>
     </div>
@@ -246,6 +247,13 @@ export default function InvoiceView({ booking, onBack, user }) {
         <li>• Final balance must be settled 24 hours prior to departure.</li>
         <li>• Company is not liable for itinerary changes due to weather.</li>
       </ul>
+      ${user?.bankDetails?.upiId || user?.bankDetails?.accountNumber ? `
+      <div style="margin-top:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:12px 14px;">
+        <h4 style="font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.15em; color:#4338ca; margin-bottom:4px;">💳 Bank / UPI Payment Details</h4>
+        ${user.bankDetails.upiId ? `<p style="font-size:11px; font-weight:900; color:#4f46e5; margin:2px 0;">UPI ID: ${user.bankDetails.upiId}</p>` : ""}
+        ${user.bankDetails.accountName ? `<p style="font-size:10px; font-weight:700; color:#0f172a; margin:2px 0;">Name: ${user.bankDetails.accountName}</p>` : ""}
+        ${user.bankDetails.accountNumber ? `<p style="font-size:10px; font-weight:700; color:#475569; margin:2px 0;">A/C: ${user.bankDetails.accountNumber} | IFSC: ${user.bankDetails.ifscCode || ""} | Bank: ${user.bankDetails.bankName || ""}</p>` : ""}
+      </div>` : ""}
     </div>
     <div class="finance">
       <div class="fin-row">
@@ -431,9 +439,15 @@ export default function InvoiceView({ booking, onBack, user }) {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Status</p>
-                    <span className="inline-flex items-center gap-1 text-xs font-black uppercase" style={{ color: "#4f46e5" }}>
-                      <CheckCircle2 size={12} /> Confirmed
-                    </span>
+                    {booking.status === "Cancelled" || booking.status === "cancelled" ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-black uppercase text-rose-600">
+                        ✕ Cancelled
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs font-black uppercase" style={{ color: "#4f46e5" }}>
+                        <CheckCircle2 size={12} /> Confirmed
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -504,6 +518,34 @@ export default function InvoiceView({ booking, onBack, user }) {
                   <li>• Final balance must be settled 24 hours prior to departure.</li>
                   <li>• Company is not liable for itinerary changes due to weather.</li>
                 </ul>
+
+                {(user?.bankDetails?.upiId || user?.bankDetails?.accountNumber) && (
+                  <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 space-y-1 text-xs">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 mb-1">
+                      Bank & UPI Details for Balance
+                    </p>
+                    {user.bankDetails.upiId && (
+                      <p className="font-black text-indigo-950">
+                        UPI ID: <span className="text-indigo-600">{user.bankDetails.upiId}</span>
+                      </p>
+                    )}
+                    {user.bankDetails.accountName && (
+                      <p className="font-bold text-slate-600">
+                        Name: {user.bankDetails.accountName}
+                      </p>
+                    )}
+                    {user.bankDetails.accountNumber && (
+                      <p className="font-bold text-slate-600">
+                        A/C: {user.bankDetails.accountNumber} {user.bankDetails.ifscCode && `| IFSC: ${user.bankDetails.ifscCode}`}
+                      </p>
+                    )}
+                    {user.bankDetails.bankName && (
+                      <p className="font-bold text-slate-500">
+                        Bank: {user.bankDetails.bankName}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">

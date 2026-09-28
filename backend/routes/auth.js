@@ -244,6 +244,7 @@ router.post("/login", async (req, res) => {
         companyHeadquarters: user.companyHeadquarters,
         companyPhone: user.companyPhone,
         companyLogo: user.companyLogo,
+        bankDetails: user.bankDetails,
         organizers: user.organizers,
         twoFactorEnabled: user.twoFactorEnabled,
       },
@@ -408,7 +409,7 @@ router.put("/update-company", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const { companyName, companyTagline, companyHeadquarters, companyPhone, companyLogo, organizers } = req.body
+    const { companyName, companyTagline, companyHeadquarters, companyPhone, companyLogo, organizers, bankDetails } = req.body
 
     const updateData = {}
     if (companyName !== undefined) updateData.companyName = companyName
@@ -417,6 +418,7 @@ router.put("/update-company", async (req, res) => {
     if (companyPhone !== undefined) updateData.companyPhone = companyPhone
     if (companyLogo !== undefined) updateData.companyLogo = companyLogo
     if (organizers !== undefined) updateData.organizers = organizers
+    if (bankDetails !== undefined) updateData.bankDetails = bankDetails
 
     const user = await User.findByIdAndUpdate(decoded.id, updateData, { new: true })
 
@@ -435,6 +437,7 @@ router.put("/update-company", async (req, res) => {
         companyHeadquarters: user.companyHeadquarters,
         companyPhone: user.companyPhone,
         companyLogo: user.companyLogo,
+        bankDetails: user.bankDetails,
         organizers: user.organizers,
         twoFactorEnabled: user.twoFactorEnabled,
       },

@@ -7,6 +7,7 @@ import {
   createBooking,
   updateBooking,
   deleteBooking,
+  cancelBooking,
 } from "../data/bookings"
 import {
   listTours,
@@ -60,6 +61,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     companyHeadquarters: user?.companyHeadquarters || "City, State, 123456",
     companyPhone: user?.companyPhone || "+91 98765 43210",
     companyLogo: user?.companyLogo || "",
+    bankDetails: user?.bankDetails || {
+      accountName: "",
+      accountNumber: "",
+      ifscCode: "",
+      bankName: "",
+      upiId: "",
+    },
     organizers: user?.organizers || [],
   })
   const [isEditingCompany, setIsEditingCompany] = useState(false)
@@ -209,6 +217,33 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       } catch (error) {
         console.error("Error deleting booking:", error)
         toast.error(error.message || "Failed to delete booking")
+      }
+    }
+  }
+
+  const handleCancelBooking = async (id) => {
+    const confirmed = await confirm({
+      title: "Cancel Booking?",
+      message: "Are you sure you want to cancel this booking? Reserved seats will be freed up for other travelers.",
+      confirmText: "Cancel Booking",
+      cancelText: "Keep Booking",
+      isDestructive: true,
+    })
+
+    if (confirmed) {
+      try {
+        const updated = await cancelBooking(id, "Cancelled by operator")
+        setBookings((prev) =>
+          prev.map((b) =>
+            (b._id || b.id) === (updated._id || updated.id)
+              ? { ...updated, id: updated._id || updated.id }
+              : b,
+          ),
+        )
+        toast.success("Booking cancelled successfully")
+      } catch (error) {
+        console.error("Error cancelling booking:", error)
+        toast.error(error.message || "Failed to cancel booking")
       }
     }
   }
@@ -394,6 +429,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               setEditingBooking={setEditingBooking}
               setActiveTab={setActiveTab}
               handleDeleteBooking={handleDeleteBooking}
+              handleCancelBooking={handleCancelBooking}
               handleMarkPaymentPaid={handleMarkPaymentPaid}
             />
           )}
@@ -476,6 +512,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         setEditingBooking={setEditingBooking}
         setActiveTab={setActiveTab}
         handleDeleteBooking={handleDeleteBooking}
+        handleCancelBooking={handleCancelBooking}
       />
     </div>
   )

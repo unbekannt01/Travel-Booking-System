@@ -7,7 +7,20 @@ import { maskAadhaar } from "../utils/formatters"
 
 export default function JourneyManager({ bookings, onUpdateBooking }) {
   const { toast } = useToast()
-  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
+  const todayStr = useMemo(() => toDateInputValue(new Date()), [])
+  const tomorrowStr = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return toDateInputValue(d)
+  }, [])
+  const in7DaysStr = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    return toDateInputValue(d)
+  }, [])
+
+  const [dateFilterMode, setDateFilterMode] = useState("single") // "single" | "next7days" | "upcoming"
+  const [selectedDate, setSelectedDate] = useState(todayStr)
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
@@ -17,13 +30,21 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
   const journeyBookings = useMemo(() => {
     return bookings
       .filter((b) => {
+        if (b.status === "Cancelled" || b.status === "cancelled") return false
         const bookingDate = toDateInputValue(b.journeyDate)
-        const dateMatch = bookingDate === selectedDate
+        let dateMatch = false
+        if (dateFilterMode === "next7days") {
+          dateMatch = bookingDate >= todayStr && bookingDate <= in7DaysStr
+        } else if (dateFilterMode === "upcoming") {
+          dateMatch = bookingDate >= todayStr
+        } else {
+          dateMatch = bookingDate === selectedDate
+        }
         const tourMatch = selectedTour === "all" || b.tourName === selectedTour
         return dateMatch && tourMatch
       })
       .sort((a, b) => new Date(a.journeyDate) - new Date(b.journeyDate))
-  }, [bookings, selectedDate, selectedTour])
+  }, [bookings, selectedDate, selectedTour, dateFilterMode, todayStr, in7DaysStr])
 
   const totalPassengers = journeyBookings.reduce((sum, b) => sum + b.passengers.length, 0)
   const totalCheckedIn = journeyBookings.reduce((sum, b) => {
@@ -94,13 +115,71 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
         <p className="text-slate-500 font-bold text-sm">Manage departures and coordinate tour groups</p>
       </div>
 
+      {/* Departures Quick Filter Pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1">Departures:</span>
+        <button
+          type="button"
+          onClick={() => {
+            setDateFilterMode("single")
+            setSelectedDate(todayStr)
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+            dateFilterMode === "single" && selectedDate === todayStr
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setDateFilterMode("single")
+            setSelectedDate(tomorrowStr)
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+            dateFilterMode === "single" && selectedDate === tomorrowStr
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Tomorrow
+        </button>
+        <button
+          type="button"
+          onClick={() => setDateFilterMode("next7days")}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+            dateFilterMode === "next7days"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Next 7 Days
+        </button>
+        <button
+          type="button"
+          onClick={() => setDateFilterMode("upcoming")}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+            dateFilterMode === "upcoming"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          All Upcoming
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-black uppercase tracking-widest text-slate-400">Select Date</label>
+          <label className="text-xs font-black uppercase tracking-widest text-slate-400">Custom Date</label>
           <input
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e) => {
+              setSelectedDate(e.target.value)
+              setDateFilterMode("single")
+            }}
             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none"
           />
         </div>
@@ -159,7 +238,11 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
           <MapPin size={48} className="text-slate-300 mx-auto mb-4" />
           <h3 className="text-xl font-black text-slate-900 mb-2">No Journeys Scheduled</h3>
           <p className="text-slate-500 font-bold">
-            No tours departing on {formatDisplayDate(selectedDate)}
+            {dateFilterMode === "next7days"
+              ? "No tours departing in the next 7 days."
+              : dateFilterMode === "upcoming"
+                ? "No upcoming tour departures found."
+                : `No tours departing on ${formatDisplayDate(selectedDate)}.`}
           </p>
         </div>
       ) : (

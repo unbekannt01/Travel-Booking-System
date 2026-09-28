@@ -270,15 +270,37 @@ const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => {
   )
 }
 
+const SeatLegend = () => (
+  <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 py-2.5 px-6 bg-slate-50 border border-slate-200/80 rounded-2xl w-full max-w-xl mx-auto mb-4">
+    <div className="flex items-center gap-2">
+      <div className="w-5 h-5 rounded-md border-2 border-slate-200 bg-white" />
+      <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Available</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="w-5 h-5 rounded-md border-2 border-indigo-600 bg-indigo-50 flex items-center justify-center text-[9px] font-black text-indigo-600">✓</div>
+      <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700">Selected</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="w-5 h-5 rounded-md border-2 border-red-300 bg-red-50 flex items-center justify-center">
+        <LockKeyhole size={10} className="text-red-500" />
+      </div>
+      <span className="text-[11px] font-black uppercase tracking-wider text-red-600">Booked</span>
+    </div>
+  </div>
+)
+
 const SeatLayout = ({ passengers, bookedSeats, onSeatSelect, seatLayout = "2x1" }) => {
   const layoutType = seatLayout.startsWith("2x2") ? "2x2" : "2x1"
   const is2x2 = layoutType === "2x2"
   const DeckComponent = is2x2 ? DeckGrid2x2 : DeckGrid
 
   return (
-    <div className="flex flex-col md:flex-row items-start justify-center gap-8 md:gap-16 p-4 overflow-x-auto custom-scrollbar min-h-150">
-      <DeckComponent deck="lower" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
-      <DeckComponent deck="upper" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+    <div className="flex flex-col items-center w-full">
+      <SeatLegend />
+      <div className="flex flex-col md:flex-row items-start justify-center gap-8 md:gap-16 p-4 overflow-x-auto custom-scrollbar min-h-150 w-full">
+        <DeckComponent deck="lower" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+        <DeckComponent deck="upper" passengers={passengers} onSeatSelect={onSeatSelect} bookedSeats={bookedSeats} />
+      </div>
     </div>
   )
 }

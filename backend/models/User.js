@@ -19,6 +19,13 @@ const userSchema = new mongoose.Schema(
     companyHeadquarters: { type: String, default: "City, State, Pincode" },
     companyPhone: { type: String, default: "+91 98765 43210" },
     companyLogo: { type: String, default: "" },
+    bankDetails: {
+      accountName: { type: String, default: "" },
+      accountNumber: { type: String, default: "" },
+      ifscCode: { type: String, default: "" },
+      bankName: { type: String, default: "" },
+      upiId: { type: String, default: "" },
+    },
     organizers: [
       {
         name: { type: String, required: true },

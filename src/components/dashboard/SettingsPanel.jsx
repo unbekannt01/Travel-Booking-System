@@ -1,4 +1,4 @@
-import { Shield, Building2, Check, Edit3, X } from "lucide-react"
+import { Shield, Building2, Check, Edit3, X, Landmark } from "lucide-react"
 import { useToast } from "../common/ToastContext"
 
 export default function SettingsPanel({
@@ -355,6 +355,123 @@ export default function SettingsPanel({
             </div>
           </div>
 
+          {/* Bank & UPI Payment Details */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <Landmark size={18} className="text-indigo-600" />
+              <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Bank & UPI Payment Details (Printed on Invoices)
+              </label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  UPI ID (VPA)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. operator@okhdfcbank"
+                  value={companySettings.bankDetails?.upiId || ""}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      bankDetails: {
+                        ...companySettings.bankDetails,
+                        upiId: e.target.value,
+                      },
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Account Holder Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Business / Proprietor Name"
+                  value={companySettings.bankDetails?.accountName || ""}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      bankDetails: {
+                        ...companySettings.bankDetails,
+                        accountName: e.target.value,
+                      },
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. HDFC Bank, SBI"
+                  value={companySettings.bankDetails?.bankName || ""}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      bankDetails: {
+                        ...companySettings.bankDetails,
+                        bankName: e.target.value,
+                      },
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  Account Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Bank Account Number"
+                  value={companySettings.bankDetails?.accountNumber || ""}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      bankDetails: {
+                        ...companySettings.bankDetails,
+                        accountNumber: e.target.value,
+                      },
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
+                />
+              </div>
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  IFSC Code
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. HDFC0001234"
+                  value={companySettings.bankDetails?.ifscCode || ""}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      bankDetails: {
+                        ...companySettings.bankDetails,
+                        ifscCode: e.target.value.toUpperCase(),
+                      },
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50 uppercase"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-50">
             {isEditingCompany ? (
               <>
@@ -372,6 +489,13 @@ export default function SettingsPanel({
                       companyPhone:
                         user?.companyPhone || "+91 98765 43210",
                       companyLogo: user?.companyLogo || "",
+                      bankDetails: user?.bankDetails || {
+                        accountName: "",
+                        accountNumber: "",
+                        ifscCode: "",
+                        bankName: "",
+                        upiId: "",
+                      },
                       organizers: user?.organizers || [],
                     })
                   }}

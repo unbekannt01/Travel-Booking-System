@@ -61,3 +61,12 @@ export async function togglePayment(bookingId) {
   })
   return normalizeBooking(data)
 }
+
+export async function cancelBooking(id, reason = "") {
+  const data = await request(`/api/bookings/${id}/cancel`, {
+    method: "PUT",
+    body: JSON.stringify({ reason }),
+  })
+  return normalizeBooking(data)
+}
+

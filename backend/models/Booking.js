@@ -11,6 +11,14 @@ const passengerSchema = new mongoose.Schema({
   checkedIn: { type: Boolean, default: false },
 })
 
+const paymentRecordSchema = new mongoose.Schema({
+  amount: { type: Number, required: true, min: 1 },
+  date: { type: Date, default: Date.now },
+  mode: { type: String, default: "Cash" },
+  notes: { type: String, default: "" },
+  recordedBy: { type: String, default: "" },
+})
+
 const bookingSchema = new mongoose.Schema(
   {
     invoiceNo: { type: String, required: true },
@@ -31,6 +39,9 @@ const bookingSchema = new mongoose.Schema(
       default: "Confirmed",
       enum: ["Confirmed", "Cancelled"],
     },
+    cancellationReason: { type: String, default: "" },
+    cancelledAt: { type: Date, default: null },
+    payments: [paymentRecordSchema],
     passengers: [passengerSchema],
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },

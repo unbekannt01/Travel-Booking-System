@@ -1,16 +1,20 @@
 import { useState } from "react"
-import { AlertCircle, Clock, CheckCircle2, MessageCircle, X } from "lucide-react"
+import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt } from "lucide-react"
 import { useToast } from "./common/ToastContext"
+import { formatDisplayDate } from "../utils/date"
 
 export default function PaymentTracker({ bookings, onMarkPaid }) {
   const { toast } = useToast()
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState("")
+  const [paymentMode, setPaymentMode] = useState("Cash")
   const [paymentNotes, setPaymentNotes] = useState("")
+  const [viewLedgerBooking, setViewLedgerBooking] = useState(null)
 
   const pendingPayments = bookings
     .filter((b) => {
-      const balance = b.totalAmount - b.advanceReceived
+      if (b.status === "Cancelled" || b.status === "cancelled") return false
+      const balance = b.totalAmount - (b.advanceReceived || 0)
       return balance > 0
     })
     .map((b) => {
@@ -24,7 +28,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
 
       return {
         ...b,
-        balance: b.totalAmount - b.advanceReceived,
+        balance: b.totalAmount - (b.advanceReceived || 0),
         daysUntilJourney,
         urgency,
       }
@@ -52,7 +56,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
   }
 
   const handleSendReminder = (booking) => {
-    const message = `Hi ${booking.contactName}, this is a reminder that your balance of ₹${booking.totalAmount - booking.advanceReceived} is due for ${booking.tourName} (Invoice: ${booking.invoiceNo}). Please make the payment at your earliest convenience. Thank you!`
+    const message = `Hi ${booking.contactName}, this is a reminder that your balance of ₹${booking.totalAmount - (booking.advanceReceived || 0)} is due for ${booking.tourName} (Invoice: ${booking.invoiceNo}). Please make the payment at your earliest convenience. Thank you!`
     const phoneNumber = booking.contactPhone.replace(/\D/g, "")
     const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
@@ -60,7 +64,8 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
 
   const handleMarkPaid = (booking) => {
     setSelectedBooking(booking)
-    setPaymentAmount((booking.totalAmount - booking.advanceReceived).toString())
+    setPaymentAmount((booking.totalAmount - (booking.advanceReceived || 0)).toString())
+    setPaymentMode(booking.paymentMode || "Cash")
     setPaymentNotes("")
   }
 
@@ -79,19 +84,21 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
     onMarkPaid({
       bookingId: selectedBooking.id || selectedBooking._id,
       paymentAmount: num,
+      paymentMode,
       paymentNotes,
     })
 
     setSelectedBooking(null)
     setPaymentAmount("")
+    setPaymentMode("Cash")
     setPaymentNotes("")
   }
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Payment Tracking</h2>
-        <p className="text-slate-500 font-bold text-sm">Monitor and manage pending payments from customers</p>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Payment Tracking & Ledger</h2>
+        <p className="text-slate-500 font-bold text-sm">Monitor pending customer payments and track receipts</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -134,7 +141,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
         <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-12 text-center">
           <CheckCircle2 size={48} className="text-green-600 mx-auto mb-4" />
           <h3 className="text-xl font-black text-slate-900 mb-2">All Payments Received!</h3>
-          <p className="text-slate-500 font-bold">No pending payments at this moment.</p>
+          <p className="text-slate-500 font-bold">No pending balances at this moment.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -174,7 +181,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-4 pb-4 border-b border-slate-200 border-opacity-50">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4 pb-4 border-b border-slate-200 border-opacity-50">
                     <div>
                       <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Journey</p>
                       <p className="font-black text-slate-900">
@@ -187,7 +194,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                     </div>
                     <div>
                       <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Advance</p>
-                      <p className="font-bold text-slate-900">₹{booking.advanceReceived.toLocaleString()}</p>
+                      <p className="font-bold text-slate-900">₹{(booking.advanceReceived || 0).toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total</p>
@@ -195,10 +202,10 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       onClick={() => handleSendReminder(booking)}
-                      className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                      className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
                         booking.urgency === "red"
                           ? "bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200"
                           : booking.urgency === "yellow"
@@ -211,10 +218,17 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                     </button>
                     <button
                       onClick={() => handleMarkPaid(booking)}
-                      className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200"
+                      className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200"
                     >
                       <CheckCircle2 size={16} />
-                      Mark Paid
+                      Record Payment
+                    </button>
+                    <button
+                      onClick={() => setViewLedgerBooking(booking)}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                    >
+                      <History size={16} />
+                      Payment History
                     </button>
                   </div>
                 </div>
@@ -224,20 +238,21 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
         </div>
       )}
 
+      {/* Record Payment Modal */}
       {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-slate-100">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-black text-slate-900">Record Payment</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-slate-900">Record Payment</h3>
               <button
                 onClick={() => setSelectedBooking(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-6 mb-8">
+            <div className="space-y-4 mb-8">
               <div className="bg-slate-50 rounded-2xl p-4">
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Invoice</p>
                 <p className="font-black text-slate-900">{selectedBooking.invoiceNo}</p>
@@ -267,12 +282,29 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
               </div>
 
               <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+                  Payment Mode
+                </label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-green-100 focus:border-green-600 transition-all outline-none cursor-pointer"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Card">Card</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-widest text-slate-400">Notes (Optional)</label>
                 <textarea
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  placeholder="e.g., Partial payment, online transfer, etc."
-                  rows={3}
+                  placeholder="e.g., UPI ref no, receipt voucher #, etc."
+                  rows={2}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-green-100 focus:border-green-600 transition-all outline-none resize-none"
                 />
               </div>
@@ -290,6 +322,109 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                 className="py-3 rounded-2xl font-black text-sm bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200 transition-all"
               >
                 Confirm Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment History / Ledger Modal */}
+      {viewLedgerBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-6 border-b border-slate-100 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                  <Receipt size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">Payment Ledger</h3>
+                  <p className="text-xs font-bold text-slate-400">
+                    Invoice #{viewLedgerBooking.invoiceNo} — {viewLedgerBooking.contactName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewLedgerBooking(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-slate-50 p-4 rounded-2xl">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Package</p>
+                <p className="text-lg font-black text-slate-900">₹{viewLedgerBooking.totalAmount.toLocaleString()}</p>
+              </div>
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                <p className="text-[10px] font-black uppercase text-emerald-600 mb-1">Total Received</p>
+                <p className="text-lg font-black text-emerald-700">₹{(viewLedgerBooking.advanceReceived || 0).toLocaleString()}</p>
+              </div>
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                <p className="text-[10px] font-black uppercase text-amber-600 mb-1">Balance Remaining</p>
+                <p className="text-lg font-black text-amber-700">
+                  ₹{Math.max(0, viewLedgerBooking.totalAmount - (viewLedgerBooking.advanceReceived || 0)).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            {/* Ledger Table */}
+            <div className="border border-slate-100 rounded-2xl overflow-hidden mb-6">
+              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Receipts & Transactions</p>
+              </div>
+              {viewLedgerBooking.payments && viewLedgerBooking.payments.length > 0 ? (
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase text-slate-400">
+                      <th className="px-6 py-3">Date</th>
+                      <th className="px-6 py-3">Mode</th>
+                      <th className="px-6 py-3">Amount</th>
+                      <th className="px-6 py-3">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {viewLedgerBooking.payments.map((p, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="px-6 py-3.5 font-bold text-slate-700">
+                          {formatDisplayDate(p.date)}
+                        </td>
+                        <td className="px-6 py-3.5 font-black text-indigo-600 text-xs uppercase">
+                          {p.mode || "Cash"}
+                        </td>
+                        <td className="px-6 py-3.5 font-black text-emerald-600">
+                          +₹{Number(p.amount).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-3.5 text-xs text-slate-500 font-medium">
+                          {p.notes || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center text-slate-400 font-bold text-sm">
+                  {(viewLedgerBooking.advanceReceived || 0) > 0 ? (
+                    <div>
+                      <p className="font-black text-slate-700">Initial Advance Recorded: ₹{(viewLedgerBooking.advanceReceived || 0).toLocaleString()}</p>
+                      <p className="text-xs text-slate-400 mt-1">Payment mode: {viewLedgerBooking.paymentMode || "Cash"}</p>
+                    </div>
+                  ) : (
+                    "No payment records found for this booking."
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewLedgerBooking(null)}
+                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all"
+              >
+                Close
               </button>
             </div>
           </div>

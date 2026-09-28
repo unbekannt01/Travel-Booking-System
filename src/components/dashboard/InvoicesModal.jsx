@@ -1,4 +1,4 @@
-import { FileText, Filter, X, Eye, Edit3, Trash2 } from "lucide-react"
+import { FileText, Filter, X, Eye, Edit3, Trash2, Ban, CheckCircle2 } from "lucide-react"
 
 export default function InvoicesModal({
   isOpen,
@@ -11,6 +11,7 @@ export default function InvoicesModal({
   setEditingBooking,
   setActiveTab,
   handleDeleteBooking,
+  handleCancelBooking,
 }) {
   if (!isOpen) return null
 
@@ -69,6 +70,7 @@ export default function InvoicesModal({
               <thead className="sticky top-0 bg-white z-10">
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-200">
                   <th className="px-6 py-4">Invoice #</th>
+                  <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Date</th>
                   <th className="px-6 py-4">Traveler</th>
                   <th className="px-6 py-4">Tour</th>
@@ -88,6 +90,17 @@ export default function InvoicesModal({
                       <span className="font-black text-slate-900">
                         #{b.invoiceNo}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {b.status === "Cancelled" || b.status === "cancelled" ? (
+                        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-red-200">
+                          <Ban size={10} /> Cancelled
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-emerald-200">
+                          <CheckCircle2 size={10} /> Confirmed
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-bold text-slate-600">
@@ -133,6 +146,7 @@ export default function InvoicesModal({
                           }}
                           className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                           aria-label="View invoice"
+                          title="View invoice"
                         >
                           <Eye size={16} />
                         </button>
@@ -144,9 +158,20 @@ export default function InvoicesModal({
                           }}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                           aria-label="Edit booking"
+                          title="Edit booking"
                         >
                           <Edit3 size={16} />
                         </button>
+                        {b.status !== "Cancelled" && b.status !== "cancelled" && (
+                          <button
+                            onClick={() => handleCancelBooking && handleCancelBooking(b.id)}
+                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                            aria-label="Cancel booking"
+                            title="Cancel booking"
+                          >
+                            <Ban size={16} />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             handleDeleteBooking(b.id)
@@ -156,6 +181,7 @@ export default function InvoicesModal({
                           }}
                           className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           aria-label="Delete booking"
+                          title="Delete booking"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -165,7 +191,7 @@ export default function InvoicesModal({
                 ))}
                 {filteredInvoices.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-6 py-20 text-center">
+                    <td colSpan={9} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="bg-slate-100 p-4 rounded-2xl">
                           <FileText size={32} className="text-slate-300" />
