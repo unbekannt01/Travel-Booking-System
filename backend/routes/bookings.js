@@ -41,30 +41,30 @@ router.post("/generate-invoice", verifyToken, async (req, res) => {
     const tourCode = generateTourCode(tourName)
     const monthCode = getMonthCode(journeyDate || new Date())
 
-    // Find the highest serial number for this tour and month
-    const journeyDateObj = new Date(journeyDate || new Date())
-    const startOfMonth = new Date(journeyDateObj.getFullYear(), journeyDateObj.getMonth(), 1)
-    const endOfMonth = new Date(journeyDateObj.getFullYear(), journeyDateObj.getMonth() + 1, 0)
+    const prefix = `YHB-${tourCode}-${monthCode}-`
 
+    // Find ALL bookings for this user that start with this prefix
     const existingBookings = await Booking.find({
       userId: req.user.id,
-      tourName: tourName,
-      date: {
-        $gte: startOfMonth,
-        $lte: endOfMonth,
-      },
-    }).sort({ createdAt: -1 })
+      invoiceNo: { $regex: `^${prefix}` },
+    }).sort({ invoiceNo: -1 })
 
     let nextSerial = 1
     if (existingBookings.length > 0) {
-      const lastInvoice = existingBookings[0].invoiceNo
-      const serialMatch = lastInvoice.match(/(\d{3})$/)
-      if (serialMatch) {
-        nextSerial = Number.parseInt(serialMatch[1]) + 1
+      // Extract the highest serial number from existing invoices
+      const serials = existingBookings
+        .map((b) => {
+          const match = b.invoiceNo.match(/(\d{3})$/)
+          return match ? parseInt(match[1]) : 0
+        })
+        .filter((n) => !isNaN(n))
+
+      if (serials.length > 0) {
+        nextSerial = Math.max(...serials) + 1
       }
     }
 
-    const invoiceNo = `YHB-${tourCode}-${monthCode}-${String(nextSerial).padStart(3, "0")}`
+    const invoiceNo = `${prefix}${String(nextSerial).padStart(3, "0")}`
 
     res.json({ invoiceNo })
   } catch (error) {
@@ -100,9 +100,28 @@ router.post("/", verifyToken, async (req, res) => {
   try {
     const newBooking = new Booking({ ...req.body, userId: req.user.id })
     await newBooking.save()
-    console.log("[v0] Booking saved to MongoDB:", newBooking)
     res.status(201).json(newBooking)
   } catch (error) {
+    // Handle duplicate invoice number - auto-increment and retry once
+    if (error.code === 11000 && error.keyPattern?.invoiceNo) {
+      try {
+        const existing = req.body.invoiceNo
+        const match = existing.match(/^(YHB-.+-)(\d{3})$/)
+        if (match) {
+          const newSerial = parseInt(match[2]) + 1
+          const newInvoiceNo = `${match[1]}${String(newSerial).padStart(3, "0")}`
+          const retryBooking = new Booking({
+            ...req.body,
+            invoiceNo: newInvoiceNo,
+            userId: req.user.id,
+          })
+          const saved = await retryBooking.save()
+          return res.status(201).json(saved)
+        }
+      } catch {
+        return res.status(400).json({ message: "Duplicate invoice number. Please regenerate." })
+      }
+    }
     console.error("[v0] Error saving booking:", error.message)
     res.status(400).json({ message: error.message })
   }

@@ -8,6 +8,7 @@ export default function JourneyManager({ bookings }) {
   const [selectedTour, setSelectedTour] = useState("all")
   const [checkedInPassengers, setCheckedInPassengers] = useState({})
   const [showExportOptions, setShowExportOptions] = useState(false)
+  const [includeAadhar, setIncludeAadhar] = useState(true)
 
   const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
 
@@ -51,8 +52,29 @@ export default function JourneyManager({ bookings }) {
     window.location.href = mailUrl
   }
 
-  const handlePrintSeatLayout = () => {
-    window.print()
+  const handlePrintSeatLayout = (withAadhar) => {
+    setIncludeAadhar(withAadhar)
+    setShowExportOptions(false)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.print())
+    })
+  }
+
+  const getSortedSeatRows = (passengers) => {
+    const sorted = [...passengers].sort((a, b) =>
+      (a.seatId || "").localeCompare(b.seatId || "", undefined, { numeric: true })
+    )
+
+    const rows = []
+    sorted.forEach((passenger) => {
+      if (rows.length === 0 || rows[rows.length - 1].length === 4) {
+        rows.push([])
+      }
+      rows[rows.length - 1].push(passenger)
+    })
+
+    return rows
   }
 
   return (
@@ -99,13 +121,16 @@ export default function JourneyManager({ bookings }) {
             {showExportOptions && (
               <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-10 no-print">
                 <button
-                  onClick={() => {
-                    handlePrintSeatLayout()
-                    setShowExportOptions(false)
-                  }}
+                  onClick={() => handlePrintSeatLayout(true)}
                   className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-sm"
                 >
-                  Print Seat Map PDF
+                  Print Seat Map PDF (With Aadhar)
+                </button>
+                <button
+                  onClick={() => handlePrintSeatLayout(false)}
+                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-sm"
+                >
+                  Print Seat Map PDF (Without Aadhar)
                 </button>
                 <button
                   onClick={() => setShowExportOptions(false)}
@@ -290,29 +315,107 @@ export default function JourneyManager({ bookings }) {
                   )}
                 </div>
 
-                <div className="print-only hidden p-8 bg-white">
-                  <div className="border-4 border-slate-900 p-6 rounded-3xl">
-                    <h2 className="text-3xl font-black mb-4">SEAT LAYOUT: {booking.tourName}</h2>
-                    <p className="text-xl font-bold mb-8">
-                      Date: {new Date(booking.journeyDate).toLocaleDateString()} | Invoice: {booking.invoiceNo}
-                    </p>
-
-                    <div className="grid grid-cols-4 gap-4">
-                      {booking.passengers.map((p, idx) => (
-                        <div key={idx} className="border-2 border-slate-200 p-4 rounded-xl text-center">
-                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">
-                            SEAT {p.seatId || "—"}
-                          </p>
-                          <p className="font-black text-slate-900">{p.name}</p>
-                          <p className="text-xs font-bold text-slate-500">{booking.contactPhone}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               </div>
             )
           })}
+
+          <div className="print-only hidden">
+            {journeyBookings.map((booking) => {
+              const seatRows = getSortedSeatRows(booking.passengers)
+              return (
+                <div key={booking.id || booking._id} className="page-break-after py-10">
+                  <div className="max-w-6xl mx-auto bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xl">
+                    <div className="bg-indigo-600 text-white px-8 py-8">
+                      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.3em] opacity-80">Yatra Hub Seat Manifest</div>
+                          <h1 className="mt-4 text-4xl font-black leading-tight">{booking.tourName}</h1>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs uppercase tracking-[0.25em] opacity-80">Invoice</div>
+                          <div className="mt-2 text-3xl font-black">{booking.invoiceNo}</div>
+                        </div>
+                      </div>
+                      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                        <div className="rounded-3xl bg-white/10 p-4">
+                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Journey Date</div>
+                          <div className="mt-2 text-lg font-black">{new Date(booking.journeyDate).toLocaleDateString()}</div>
+                        </div>
+                        <div className="rounded-3xl bg-white/10 p-4">
+                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Passengers</div>
+                          <div className="mt-2 text-lg font-black">{booking.passengers.length} PAX</div>
+                        </div>
+                        <div className="rounded-3xl bg-white/10 p-4">
+                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Aadhar Included</div>
+                          <div className="mt-2 text-lg font-black">{includeAadhar ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-8 py-10">
+                      <div className="mb-8">
+                        <h2 className="text-2xl font-black text-slate-900 mb-4">Seat Allocation Map</h2>
+                        <div className="grid gap-4">
+                          {seatRows.map((row, rowIdx) => (
+                            <div key={`row-${rowIdx}`} className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                              {row.map((passenger) => (
+                                <div key={passenger.seatId || passenger.name} className="border border-slate-200 rounded-3xl p-4 bg-slate-50">
+                                  <div className="text-[10px] uppercase tracking-[0.25em] text-slate-500 mb-2">Seat {passenger.seatId || "—"}</div>
+                                  <div className="text-lg font-black text-slate-900">{passenger.name}</div>
+                                  <div className="mt-3 text-sm text-slate-600">{passenger.city}</div>
+                                  <div className="mt-2 text-[11px] uppercase tracking-[0.2em] text-slate-400">{passenger.age} years • {passenger.gender}</div>
+                                  {includeAadhar && (
+                                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">
+                                      Aadhar: {passenger.aadhar || "N/A"}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                              {Array.from({ length: 4 - row.length }).map((_, emptyIdx) => (
+                                <div key={`empty-${emptyIdx}`} className="border border-dashed border-slate-200 rounded-3xl p-4 bg-white/60" />
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[2rem] border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-100 px-6 py-4 uppercase tracking-[0.25em] text-slate-500 text-xs font-black">Passenger Manifest</div>
+                        <table className="w-full text-left border-collapse">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">#</th>
+                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Name</th>
+                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Seat</th>
+                              {includeAadhar && <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Aadhar</th>}
+                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">City</th>
+                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Age/Gender</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {booking.passengers.map((p, idx) => (
+                              <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                                <td className="px-4 py-3 text-sm font-bold text-slate-500">{idx + 1}</td>
+                                <td className="px-4 py-3 text-sm font-black text-slate-900">{p.name}</td>
+                                <td className="px-4 py-3 text-sm font-bold text-indigo-700">{p.seatId || "—"}</td>
+                                {includeAadhar && <td className="px-4 py-3 text-sm text-slate-600">{p.aadhar || "N/A"}</td>}
+                                <td className="px-4 py-3 text-sm text-slate-600">{p.city}</td>
+                                <td className="px-4 py-3 text-sm font-bold text-slate-700">{p.age} / {p.gender}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mt-8 text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Generated by Yatra Hub — tour operator seat manifest
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
