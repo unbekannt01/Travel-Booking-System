@@ -1,5 +1,18 @@
 import { useState, useMemo } from "react"
-import { MapPin, Check, Download, MessageCircle, Mail } from "lucide-react"
+import {
+  MapPin,
+  Check,
+  Download,
+  MessageCircle,
+  Mail,
+  Bus,
+  Users,
+  ArrowLeft,
+  Clock,
+  Printer,
+  ChevronRight,
+  CreditCard,
+} from "lucide-react"
 import { togglePassengerCheckin } from "../data/bookings"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
@@ -18,37 +31,149 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
     return toDateInputValue(d)
   }, [])
 
-  const [dateFilterMode, setDateFilterMode] = useState("single") // "single" | "next7days" | "upcoming"
-  const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [viewMode, setViewMode] = useState("departures") // "departures" | "manifest"
+  const [selectedDepartureKey, setSelectedDepartureKey] = useState(null)
+
+  const [dateFilterMode, setDateFilterMode] = useState("all") // "all" | "today" | "tomorrow" | "next7days" | "upcoming" | "past" | "custom"
+  const [customDate, setCustomDate] = useState(todayStr)
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
 
-  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
+  const uniqueTours = useMemo(() => [...new Set(bookings.map((b) => b.tourName))].filter(Boolean), [bookings])
 
+  // Group bookings into coach Departures
+  const departures = useMemo(() => {
+    const active = bookings.filter((b) => b.status !== "Cancelled" && b.status !== "cancelled")
+    const map = new Map()
+
+    for (const b of active) {
+      const dateKey = toDateInputValue(b.journeyDate)
+      const bus = b.busType || "2x1 Sleeper Luxury"
+      const key = `${b.tourName}___${dateKey}___${bus}`
+
+      if (!map.has(key)) {
+        const capacity = bus.startsWith("2x2") ? 40 : 30
+        map.set(key, {
+          key,
+          tourName: b.tourName,
+          journeyDate: b.journeyDate,
+          dateStr: dateKey,
+          busType: bus,
+          capacity,
+          bookings: [],
+          bookedSeats: new Set(),
+          totalPax: 0,
+          checkedInPax: 0,
+          totalAmount: 0,
+          advanceReceived: 0,
+        })
+      }
+
+      const dep = map.get(key)
+      dep.bookings.push(b)
+      dep.totalAmount += b.totalAmount || 0
+      dep.advanceReceived += b.advanceReceived || 0
+
+      for (const p of b.passengers || []) {
+        dep.totalPax += 1
+        if (p.checkedIn) dep.checkedInPax += 1
+        if (p.seatId) dep.bookedSeats.add(p.seatId)
+      }
+    }
+
+    return Array.from(map.values())
+      .map((dep) => {
+        const bookedCount = dep.bookedSeats.size || dep.totalPax
+        const occupancyPct = Math.min(100, Math.round((bookedCount / dep.capacity) * 100))
+        const balanceDue = Math.max(0, dep.totalAmount - dep.advanceReceived)
+
+        let statusTag = "Upcoming"
+        let statusStyle = "bg-indigo-100 text-indigo-700"
+        if (dep.dateStr === todayStr) {
+          statusTag = "TODAY"
+          statusStyle = "bg-emerald-500 text-white animate-pulse"
+        } else if (dep.dateStr === tomorrowStr) {
+          statusTag = "TOMORROW"
+          statusStyle = "bg-amber-500 text-white"
+        } else if (dep.dateStr < todayStr) {
+          statusTag = "PAST"
+          statusStyle = "bg-slate-200 text-slate-600"
+        }
+
+        return {
+          ...dep,
+          bookedCount,
+          occupancyPct,
+          balanceDue,
+          statusTag,
+          statusStyle,
+        }
+      })
+      .sort((a, b) => new Date(a.journeyDate) - new Date(b.journeyDate))
+  }, [bookings, todayStr, tomorrowStr])
+
+  // Filter departures according to current filters
+  const filteredDepartures = useMemo(() => {
+    return departures.filter((dep) => {
+      if (selectedTour !== "all" && dep.tourName !== selectedTour) return false
+
+      if (dateFilterMode === "today") return dep.dateStr === todayStr
+      if (dateFilterMode === "tomorrow") return dep.dateStr === tomorrowStr
+      if (dateFilterMode === "next7days") return dep.dateStr >= todayStr && dep.dateStr <= in7DaysStr
+      if (dateFilterMode === "upcoming") return dep.dateStr >= todayStr
+      if (dateFilterMode === "past") return dep.dateStr < todayStr
+      if (dateFilterMode === "custom") return dep.dateStr === customDate
+      return true
+    })
+  }, [departures, selectedTour, dateFilterMode, todayStr, tomorrowStr, in7DaysStr, customDate])
+
+  // Bookings to display in Manifest view
   const journeyBookings = useMemo(() => {
     return bookings
       .filter((b) => {
         if (b.status === "Cancelled" || b.status === "cancelled") return false
-        const bookingDate = toDateInputValue(b.journeyDate)
-        let dateMatch = false
-        if (dateFilterMode === "next7days") {
-          dateMatch = bookingDate >= todayStr && bookingDate <= in7DaysStr
-        } else if (dateFilterMode === "upcoming") {
-          dateMatch = bookingDate >= todayStr
-        } else {
-          dateMatch = bookingDate === selectedDate
+
+        if (selectedDepartureKey) {
+          const dateKey = toDateInputValue(b.journeyDate)
+          const bus = b.busType || "2x1 Sleeper Luxury"
+          return `${b.tourName}___${dateKey}___${bus}` === selectedDepartureKey
         }
+
+        const bookingDate = toDateInputValue(b.journeyDate)
+        let dateMatch = true
+        if (dateFilterMode === "today") dateMatch = bookingDate === todayStr
+        else if (dateFilterMode === "tomorrow") dateMatch = bookingDate === tomorrowStr
+        else if (dateFilterMode === "next7days") dateMatch = bookingDate >= todayStr && bookingDate <= in7DaysStr
+        else if (dateFilterMode === "upcoming") dateMatch = bookingDate >= todayStr
+        else if (dateFilterMode === "past") dateMatch = bookingDate < todayStr
+        else if (dateFilterMode === "custom") dateMatch = bookingDate === customDate
+
         const tourMatch = selectedTour === "all" || b.tourName === selectedTour
         return dateMatch && tourMatch
       })
       .sort((a, b) => new Date(a.journeyDate) - new Date(b.journeyDate))
-  }, [bookings, selectedDate, selectedTour, dateFilterMode, todayStr, in7DaysStr])
+  }, [
+    bookings,
+    selectedDepartureKey,
+    dateFilterMode,
+    selectedTour,
+    todayStr,
+    tomorrowStr,
+    in7DaysStr,
+    customDate,
+  ])
 
-  const totalPassengers = journeyBookings.reduce((sum, b) => sum + b.passengers.length, 0)
-  const totalCheckedIn = journeyBookings.reduce((sum, b) => {
-    return sum + b.passengers.filter((p) => p.checkedIn).length
-  }, 0)
+  const totalPassengers = journeyBookings.reduce((sum, b) => sum + (b.passengers?.length || 0), 0)
+  const totalCheckedIn = journeyBookings.reduce(
+    (sum, b) => sum + (b.passengers?.filter((p) => p.checkedIn)?.length || 0),
+    0
+  )
+
+  const activeDepartureObj = useMemo(() => {
+    if (!selectedDepartureKey) return null
+    return departures.find((d) => d.key === selectedDepartureKey)
+  }, [selectedDepartureKey, departures])
 
   const handleToggleCheckIn = async (booking, passenger, passengerIndex) => {
     const bookingId = booking._id || booking.id
@@ -85,7 +210,6 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
   const handlePrintSeatLayout = (withAadhar) => {
     setIncludeAadhar(withAadhar)
     setShowExportOptions(false)
-
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.print())
     })
@@ -109,154 +233,293 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Journey Coordination Manager</h2>
-        <p className="text-slate-500 font-bold text-sm">Manage departures and coordinate tour groups</p>
-      </div>
+      {/* Top Header & View Mode Switcher */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Departures & Journey Coordination</h2>
+          <p className="text-slate-500 font-bold text-sm">
+            Organize trips by coach departures, monitor bus occupancy, and manage boarding manifests.
+          </p>
+        </div>
 
-      {/* Departures Quick Filter Pills */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1">Departures:</span>
-        <button
-          type="button"
-          onClick={() => {
-            setDateFilterMode("single")
-            setSelectedDate(todayStr)
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            dateFilterMode === "single" && selectedDate === todayStr
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          Today
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setDateFilterMode("single")
-            setSelectedDate(tomorrowStr)
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            dateFilterMode === "single" && selectedDate === tomorrowStr
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          Tomorrow
-        </button>
-        <button
-          type="button"
-          onClick={() => setDateFilterMode("next7days")}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            dateFilterMode === "next7days"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          Next 7 Days
-        </button>
-        <button
-          type="button"
-          onClick={() => setDateFilterMode("upcoming")}
-          className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
-            dateFilterMode === "upcoming"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          All Upcoming
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="space-y-2">
-          <label className="text-xs font-black uppercase tracking-widest text-slate-400">Custom Date</label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => {
-              setSelectedDate(e.target.value)
-              setDateFilterMode("single")
+        {/* View Switcher Tabs */}
+        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 no-print">
+          <button
+            type="button"
+            onClick={() => {
+              setViewMode("departures")
+              setSelectedDepartureKey(null)
             }}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none"
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs font-black uppercase tracking-widest text-slate-400">Filter Tour</label>
-          <select
-            value={selectedTour}
-            onChange={(e) => setSelectedTour(e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none appearance-none cursor-pointer"
+            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all ${
+              viewMode === "departures"
+                ? "bg-white text-indigo-600 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
           >
-            <option value="all">All Tours</option>
-            {uniqueTours.map((tour) => (
-              <option key={tour} value={tour}>
-                {tour}
-              </option>
-            ))}
-          </select>
+            <Bus size={15} />
+            Coaches & Departures ({departures.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("manifest")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all ${
+              viewMode === "manifest"
+                ? "bg-white text-indigo-600 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Users size={15} />
+            Boarding Manifest
+          </button>
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-black uppercase tracking-widest text-slate-400">Export</label>
-          <div className="relative">
+      </div>
+
+      {/* Filter Bar (Visible in Departures and Unscoped Manifest) */}
+      <div className="space-y-4 no-print">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1">Time Horizon:</span>
+          {[
+            { id: "all", label: "All Departures" },
+            { id: "today", label: "Today" },
+            { id: "tomorrow", label: "Tomorrow" },
+            { id: "next7days", label: "Next 7 Days" },
+            { id: "upcoming", label: "All Upcoming" },
+            { id: "past", label: "Past" },
+          ].map((mode) => (
             <button
-              onClick={() => setShowExportOptions(!showExportOptions)}
-              className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 no-print"
+              key={mode.id}
+              type="button"
+              onClick={() => {
+                setDateFilterMode(mode.id)
+                setSelectedDepartureKey(null)
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                dateFilterMode === mode.id
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
             >
-              <Download size={16} /> Export
+              {mode.label}
             </button>
-            {showExportOptions && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-10 no-print">
-                <button
-                  onClick={() => handlePrintSeatLayout(true)}
-                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-sm"
-                >
-                  Print Seat Map PDF (With Aadhar)
-                </button>
-                <button
-                  onClick={() => handlePrintSeatLayout(false)}
-                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-sm"
-                >
-                  Print Seat Map PDF (Without Aadhar)
-                </button>
-                <button
-                  onClick={() => setShowExportOptions(false)}
-                  className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-sm"
-                >
-                  Excel (Coming)
-                </button>
-              </div>
-            )}
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Filter Tour</label>
+            <select
+              value={selectedTour}
+              onChange={(e) => setSelectedTour(e.target.value)}
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+            >
+              <option value="all">All Tours</option>
+              {uniqueTours.map((tour) => (
+                <option key={tour} value={tour}>
+                  {tour}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Or Specific Date</label>
+            <input
+              type="date"
+              value={customDate}
+              onChange={(e) => {
+                setCustomDate(e.target.value)
+                setDateFilterMode("custom")
+                setSelectedDepartureKey(null)
+              }}
+              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Print / Export</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowExportOptions(!showExportOptions)}
+                className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
+              >
+                <Printer size={14} /> Print Coach Manifest
+              </button>
+              {showExportOptions && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-20">
+                  <button
+                    type="button"
+                    onClick={() => handlePrintSeatLayout(true)}
+                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-xs text-slate-700"
+                  >
+                    Print Manifest (With Aadhaar)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintSeatLayout(false)}
+                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-xs text-slate-700"
+                  >
+                    Print Manifest (Without Aadhaar)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {journeyBookings.length === 0 ? (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-12 text-center">
-          <MapPin size={48} className="text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-black text-slate-900 mb-2">No Journeys Scheduled</h3>
-          <p className="text-slate-500 font-bold">
-            {dateFilterMode === "next7days"
-              ? "No tours departing in the next 7 days."
-              : dateFilterMode === "upcoming"
-                ? "No upcoming tour departures found."
-                : `No tours departing on ${formatDisplayDate(selectedDate)}.`}
-          </p>
-        </div>
-      ) : (
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* MODE 1: DEPARTURES GROUPED CARD LANDING VIEW             */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {viewMode === "departures" && (
         <div className="space-y-6">
+          {filteredDepartures.length === 0 ? (
+            <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-xs">
+              <Bus size={48} className="text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-black text-slate-800 mb-1">No Departures Found</h3>
+              <p className="text-slate-400 font-bold text-xs">
+                No active bus departures match the selected filters.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredDepartures.map((dep) => {
+                const occupancyColor =
+                  dep.occupancyPct >= 80
+                    ? "bg-emerald-500"
+                    : dep.occupancyPct >= 50
+                      ? "bg-amber-500"
+                      : "bg-indigo-500"
+
+                return (
+                  <div
+                    key={dep.key}
+                    className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Top status & date */}
+                      <div className="flex justify-between items-start mb-3">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${dep.statusStyle}`}>
+                          {dep.statusTag}
+                        </span>
+                        <div className="text-right">
+                          <span className="text-xs font-black text-slate-800 flex items-center gap-1 justify-end">
+                            <Clock size={12} className="text-slate-400" />
+                            {formatDisplayDate(dep.journeyDate)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tour title & Coach badge */}
+                      <h3 className="text-xl font-black text-slate-900 leading-tight mb-2">
+                        {dep.tourName}
+                      </h3>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 mb-5">
+                        <Bus size={13} className="text-indigo-600" />
+                        <span>{dep.busType} ({dep.capacity} Berths)</span>
+                      </div>
+
+                      {/* Coach Occupancy Meter */}
+                      <div className="space-y-1.5 mb-4 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100">
+                        <div className="flex justify-between text-xs font-black">
+                          <span className="text-slate-500 uppercase tracking-wider text-[10px]">Bus Capacity</span>
+                          <span className="text-slate-900">
+                            {dep.bookedCount} / {dep.capacity} Seats ({dep.occupancyPct}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${occupancyColor} transition-all duration-300`}
+                            style={{ width: `${dep.occupancyPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Boarding Progress & Financials */}
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-5">
+                        <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Boarded Pax</p>
+                          <p className="text-sm font-black text-emerald-900 mt-0.5">
+                            {dep.checkedInPax} / {dep.totalPax}
+                          </p>
+                        </div>
+                        <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-100">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-amber-700">Pending Due</p>
+                          <p className="text-sm font-black text-amber-900 mt-0.5">
+                            ₹{dep.balanceDue.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="pt-4 border-t border-slate-100 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDepartureKey(dep.key)
+                          setViewMode("manifest")
+                        }}
+                        className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-100 flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <span>Open Boarding</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* MODE 2: PASSENGER BOARDING MANIFEST                      */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {viewMode === "manifest" && (
+        <div className="space-y-6">
+          {/* Active Departure Banner (if scoped) */}
+          {activeDepartureObj && (
+            <div className="bg-linear-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDepartureKey(null)}
+                  className="flex items-center gap-1 text-xs font-black uppercase tracking-wider text-indigo-300 hover:text-white mb-2 transition-colors"
+                >
+                  <ArrowLeft size={14} /> Back to All Departures
+                </button>
+                <h3 className="text-2xl font-black">{activeDepartureObj.tourName}</h3>
+                <p className="text-xs text-indigo-200 font-bold mt-1">
+                  📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-indigo-200">Boarded</p>
+                  <p className="text-xl font-black">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
+                </div>
+                <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center">
+                  <p className="text-[10px] font-black uppercase text-indigo-200">Occupancy</p>
+                  <p className="text-xl font-black">{activeDepartureObj.occupancyPct}%</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manifest Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Total Journeys</p>
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
+              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Bookings Count</p>
               <h3 className="text-3xl font-black text-slate-900">{journeyBookings.length}</h3>
             </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
               <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Total Passengers</p>
               <h3 className="text-3xl font-black text-slate-900">{totalPassengers}</h3>
             </div>
-            <div className="bg-green-50 rounded-2xl shadow-sm border border-green-200 p-6">
-              <p className="text-green-600 font-bold text-xs uppercase tracking-widest mb-2">Checked In</p>
+            <div className="bg-green-50 rounded-2xl shadow-xs border border-green-200 p-6">
+              <p className="text-green-600 font-bold text-xs uppercase tracking-widest mb-2">Checked In / Boarded</p>
               <h3 className="text-3xl font-black text-green-600">
                 {totalCheckedIn}/{totalPassengers}
               </h3>
@@ -266,157 +529,170 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
             </div>
           </div>
 
-          {journeyBookings.map((booking) => {
-            const checkedInCount = booking.passengers.filter((p) => p.checkedIn).length
+          {/* Bookings & Passenger List */}
+          {journeyBookings.length === 0 ? (
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-100 p-12 text-center">
+              <MapPin size={48} className="text-slate-300 mx-auto mb-4" />
+              <h3 className="text-xl font-black text-slate-900 mb-2">No Passengers Found</h3>
+              <p className="text-slate-500 font-bold">
+                No active bookings match this departure selection.
+              </p>
+            </div>
+          ) : (
+            journeyBookings.map((booking) => {
+              const checkedInCount = booking.passengers.filter((p) => p.checkedIn).length
 
-            return (
-              <div
-                key={booking.id || booking._id}
-                className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
-              >
-                <div className="bg-linear-to-r from-indigo-50 to-blue-50 p-6 border-b border-slate-100">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 mb-1">{booking.tourName}</h3>
-                      <p className="text-sm text-slate-500 font-bold">Invoice: {booking.invoiceNo}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                        Check-in Progress
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-600 transition-all"
-                            style={{
-                              width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
-                            }}
-                          />
+              return (
+                <div
+                  key={booking.id || booking._id}
+                  className="bg-white rounded-3xl shadow-xs border border-slate-100 overflow-hidden"
+                >
+                  <div className="bg-linear-to-r from-indigo-50 to-blue-50 p-6 border-b border-slate-100">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900 mb-1">{booking.tourName}</h3>
+                        <p className="text-sm text-slate-500 font-bold">Invoice: #{booking.invoiceNo}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                          Check-in Progress
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-green-600 transition-all"
+                              style={{
+                                width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm font-black text-slate-900">
+                            {checkedInCount}/{booking.passengers.length}
+                          </span>
                         </div>
-                        <span className="text-sm font-black text-slate-900">
-                          {checkedInCount}/{booking.passengers.length}
-                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Date</p>
+                        <p className="font-black text-slate-900">{formatDisplayDate(booking.journeyDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Customer</p>
+                        <p className="font-black text-slate-900">{booking.contactName}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Passengers</p>
+                        <p className="font-black text-slate-900">{booking.passengers.length} PAX</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Payment</p>
+                        <p
+                          className={`font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"}`}
+                        >
+                          {booking.advanceReceived >= booking.totalAmount
+                            ? "Paid"
+                            : `Due ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}`}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Date</p>
-                      <p className="font-black text-slate-900">{formatDisplayDate(booking.journeyDate)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Customer</p>
-                      <p className="font-black text-slate-900">{booking.contactName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Passengers</p>
-                      <p className="font-black text-slate-900">{booking.passengers.length} PAX</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Payment</p>
-                      <p
-                        className={`font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-red-600"}`}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-full">
+                      <thead>
+                        <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-200">
+                          <th className="px-6 py-4">No.</th>
+                          <th className="px-6 py-4">Name</th>
+                          <th className="px-6 py-4">Age / Gender</th>
+                          <th className="px-6 py-4">City</th>
+                          <th className="px-6 py-4">Seat</th>
+                          <th className="px-6 py-4">Payment</th>
+                          <th className="px-6 py-4">Check-in</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {booking.passengers.map((passenger, idx) => {
+                          const isCheckedIn = passenger.checkedIn
+                          return (
+                            <tr
+                              key={passenger._id || idx}
+                              className={`transition-colors ${isCheckedIn ? "bg-green-50" : "hover:bg-slate-50"}`}
+                            >
+                              <td className="px-6 py-4">
+                                <span className="font-black text-slate-900">{idx + 1}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-black text-slate-900">{passenger.name}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-bold text-slate-600 text-xs">
+                                  {passenger.age} / {passenger.gender}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="font-bold text-slate-600 text-xs">{passenger.city}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black">
+                                  {passenger.seatId || "—"}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span
+                                  className={`text-xs font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"}`}
+                                >
+                                  {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                    isCheckedIn
+                                      ? "bg-green-600 text-white shadow-md shadow-green-100"
+                                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                  }`}
+                                >
+                                  <Check size={14} />
+                                  {isCheckedIn ? "Boarded" : "Check In"}
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-3 justify-end no-print">
+                    <button
+                      type="button"
+                      onClick={() => handleSendWhatsApp(booking)}
+                      className="flex items-center justify-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-green-100"
+                    >
+                      <MessageCircle size={15} />
+                      WhatsApp Trip Info
+                    </button>
+                    {booking.contactEmail && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendEmail(booking)}
+                        className="flex items-center justify-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-100"
                       >
-                        {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
-                      </p>
-                    </div>
+                        <Mail size={15} />
+                        Email Info
+                      </button>
+                    )}
                   </div>
                 </div>
+              )
+            })
+          )}
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left min-w-full">
-                    <thead>
-                      <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-200">
-                        <th className="px-6 py-4">No.</th>
-                        <th className="px-6 py-4">Name</th>
-                        <th className="px-6 py-4">Age / Gender</th>
-                        <th className="px-6 py-4">City</th>
-                        <th className="px-6 py-4">Seat</th>
-                        <th className="px-6 py-4">Payment</th>
-                        <th className="px-6 py-4">Check-in</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {booking.passengers.map((passenger, idx) => {
-                        const isCheckedIn = passenger.checkedIn
-                        return (
-                          <tr
-                            key={passenger._id || idx}
-                            className={`transition-colors ${isCheckedIn ? "bg-green-50" : "hover:bg-slate-50"}`}
-                          >
-                            <td className="px-6 py-4">
-                              <span className="font-black text-slate-900">{idx + 1}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="font-bold text-slate-900">{passenger.name}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-sm text-slate-600">
-                                {passenger.age} / {passenger.gender}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-sm font-bold text-slate-700">{passenger.city}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black">
-                                {passenger.seatId || "—"}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span
-                                className={`text-sm font-bold ${
-                                  booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"
-                                }`}
-                              >
-                                {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCheckIn(booking, passenger, idx)}
-                                title={isCheckedIn ? "Click to uncheck" : "Click to check in"}
-                                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
-                                  isCheckedIn
-                                    ? "bg-green-600 text-white shadow-lg shadow-green-200"
-                                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                                }`}
-                              >
-                                <Check size={16} strokeWidth={3} />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="p-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() => handleSendWhatsApp(booking)}
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-green-200"
-                  >
-                    <MessageCircle size={16} />
-                    Send WhatsApp
-                  </button>
-                  {booking.contactEmail && (
-                    <button
-                      onClick={() => handleSendEmail(booking)}
-                      className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-200"
-                    >
-                      <Mail size={16} />
-                      Send Email
-                    </button>
-                  )}
-                </div>
-
-              </div>
-            )
-          })}
-
+          {/* Printable Manifest */}
           <div className="print-only hidden">
             {journeyBookings.map((booking) => {
               const seatRows = getSortedSeatRows(booking.passengers)
@@ -426,12 +702,12 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                     <div className="bg-indigo-600 text-white px-8 py-8">
                       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                         <div>
-                          <div className="text-xs uppercase tracking-[0.3em] opacity-80">Yatra Hub Seat Manifest</div>
+                          <div className="text-xs uppercase tracking-[0.3em] opacity-80">YatraHub Bus Seat Manifest</div>
                           <h1 className="mt-4 text-4xl font-black leading-tight">{booking.tourName}</h1>
                         </div>
                         <div className="text-right">
                           <div className="text-xs uppercase tracking-[0.25em] opacity-80">Invoice</div>
-                          <div className="mt-2 text-3xl font-black">{booking.invoiceNo}</div>
+                          <div className="mt-2 text-3xl font-black">#{booking.invoiceNo}</div>
                         </div>
                       </div>
                       <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -444,8 +720,8 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                           <div className="mt-2 text-lg font-black">{booking.passengers.length} PAX</div>
                         </div>
                         <div className="rounded-3xl bg-white/10 p-4">
-                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Aadhar Included</div>
-                          <div className="mt-2 text-lg font-black">{includeAadhar ? "Yes" : "No"}</div>
+                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Coach Config</div>
+                          <div className="mt-2 text-lg font-black">{booking.busType || "2x1 Sleeper"}</div>
                         </div>
                       </div>
                     </div>
@@ -464,7 +740,7 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                                   <div className="mt-2 text-[11px] uppercase tracking-[0.2em] text-slate-400">{passenger.age} years • {passenger.gender}</div>
                                   {includeAadhar && (
                                     <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">
-                                      Aadhar: {passenger.aadhar || "N/A"}
+                                      Aadhaar: {passenger.aadhar || "N/A"}
                                     </div>
                                   )}
                                 </div>
@@ -485,7 +761,7 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                               <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">#</th>
                               <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Name</th>
                               <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Seat</th>
-                              {includeAadhar && <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Aadhar</th>}
+                              {includeAadhar && <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Aadhaar</th>}
                               <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">City</th>
                               <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Age/Gender</th>
                             </tr>
@@ -506,7 +782,7 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                       </div>
 
                       <div className="mt-8 text-center text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Generated by Yatra Hub — tour operator seat manifest
+                        Generated by YatraHub — tour operator seat manifest
                       </div>
                     </div>
                   </div>

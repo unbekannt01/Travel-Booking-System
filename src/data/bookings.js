@@ -62,10 +62,11 @@ export async function togglePayment(bookingId) {
   return normalizeBooking(data)
 }
 
-export async function cancelBooking(id, reason = "") {
+export async function cancelBooking(id, options = {}) {
+  const payload = typeof options === "string" ? { reason: options } : options
   const data = await request(`/api/bookings/${id}/cancel`, {
     method: "PUT",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify(payload),
   })
   return normalizeBooking(data)
 }

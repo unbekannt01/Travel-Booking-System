@@ -17,6 +17,7 @@ import {
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue } from "../utils/date"
 import { isValidIndianPhone, isValidAadhaar } from "../utils/validators"
+import { calculatePricing } from "../utils/pricing"
 
 const CustomSelect = ({ label, value, options, onChange, placeholder, className = "" }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -321,7 +322,12 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
     busType: editData?.busType || "",
     paymentMode: editData?.paymentMode || "Cash",
     totalAmount: editData?.totalAmount || 0,
+    baseAmount: editData?.baseAmount || editData?.totalAmount || 0,
     advanceReceived: editData?.advanceReceived || 0,
+    discount: editData?.discount || 0,
+    discountType: editData?.discountType || "fixed",
+    gstRate: editData?.gstRate !== undefined ? editData.gstRate : 0,
+    isTaxInclusive: Boolean(editData?.isTaxInclusive),
     passengers: editData?.passengers || [
       {
         name: "",
@@ -339,6 +345,23 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
 
   const [showSeatMap, setShowSeatMap] = useState(false)
   const [activePassengerIndex, setActivePassengerIndex] = useState(0)
+
+  const pricingBreakdown = useMemo(() => {
+    return calculatePricing({
+      baseAmount: formData.baseAmount || formData.totalAmount || 0,
+      discountType: formData.discountType || "fixed",
+      discountValue: formData.discount || 0,
+      gstRate: formData.gstRate || 0,
+      isTaxInclusive: formData.isTaxInclusive || false,
+    })
+  }, [
+    formData.baseAmount,
+    formData.totalAmount,
+    formData.discountType,
+    formData.discount,
+    formData.gstRate,
+    formData.isTaxInclusive,
+  ])
 
   const bookedSeats = useMemo(() => {
     if (!formData.tourName || !formData.journeyDate) return []
@@ -405,6 +428,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         busType: tour.busType,
         journeyDate: tour.journeyDate || prev.journeyDate,
         totalAmount: newTotal,
+        baseAmount: newTotal,
         invoiceNo: editData?.invoiceNo || "",
         isFixedPrice: tour.isFixedPrice,
         seatLayout: seatLayoutType,
@@ -422,7 +446,12 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
     updated[activePassengerIndex].seatId = updated[activePassengerIndex].seatId === seatId ? "" : seatId
 
     const newTotal = calculateTotal(updated, formData.tourName)
-    setFormData({ ...formData, passengers: updated, totalAmount: newTotal })
+    setFormData({
+      ...formData,
+      passengers: updated,
+      totalAmount: newTotal,
+      baseAmount: newTotal,
+    })
   }
 
   const addPassenger = () => {
@@ -479,7 +508,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
       return
     }
 
-    const numTotal = Number(formData.totalAmount)
+    const numTotal = pricingBreakdown.finalTotal
     const numAdvance = Number(formData.advanceReceived || 0)
 
     if (isNaN(numTotal) || numTotal < 0) {
@@ -533,7 +562,18 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
       return
     }
 
-    onSave(formData)
+    const finalData = {
+      ...formData,
+      totalAmount: pricingBreakdown.finalTotal,
+      baseAmount: pricingBreakdown.baseAmount,
+      discount: pricingBreakdown.discountAmount,
+      discountType: formData.discountType,
+      gstRate: pricingBreakdown.gstRate,
+      taxAmount: pricingBreakdown.taxAmount,
+      isTaxInclusive: pricingBreakdown.isTaxInclusive,
+    }
+
+    onSave(finalData)
   }
 
   return (
@@ -887,26 +927,140 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
               </div>
               <h3 className="font-black text-lg text-slate-900">Billing Summary</h3>
             </div>
-            <div className="space-y-6">
-              <div className="space-y-2">
+            <div className="space-y-5">
+              {/* Base Package Cost */}
+              <div className="space-y-1.5">
                 <label className="text-xs font-black uppercase tracking-widest text-slate-400">
-                  Total Package Cost (₹)
+                  Base Package Cost (₹)
                 </label>
                 <input
                   type="number"
                   required
                   placeholder="0"
                   className="w-full px-5 py-3.5 bg-slate-50 border-transparent rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
-                  value={formData.totalAmount || ""}
+                  value={formData.baseAmount || ""}
+                  onChange={(e) => {
+                    const val = Number(e.target.value) || 0
+                    setFormData({
+                      ...formData,
+                      baseAmount: val,
+                      totalAmount: val,
+                    })
+                  }}
+                />
+              </div>
+
+              {/* Discount Section */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Discount
+                  </label>
+                  <div className="flex bg-white rounded-lg p-0.5 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, discountType: "fixed" })}
+                      className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-all ${
+                        formData.discountType === "fixed" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      ₹ Flat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, discountType: "percentage" })}
+                      className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-all ${
+                        formData.discountType === "percentage" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      % Pct
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={formData.discountType === "percentage" ? "100" : undefined}
+                  placeholder={formData.discountType === "percentage" ? "e.g. 10%" : "e.g. 500"}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
+                  value={formData.discount || ""}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      totalAmount: Number(e.target.value) || 0,
+                      discount: Math.max(0, Number(e.target.value) || 0),
                     })
                   }
                 />
               </div>
-              <div className="space-y-2">
+
+              {/* GST / Tax Configuration */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    GST / Tax Rate
+                  </label>
+                  <select
+                    value={formData.gstRate}
+                    onChange={(e) => setFormData({ ...formData, gstRate: Number(e.target.value) || 0 })}
+                    className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none"
+                  >
+                    <option value={0}>0% (Tax Exempt)</option>
+                    <option value={5}>5% (Bus Tour Standard)</option>
+                    <option value={12}>12%</option>
+                    <option value={18}>18%</option>
+                  </select>
+                </div>
+                {formData.gstRate > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={formData.isTaxInclusive}
+                      onChange={(e) => setFormData({ ...formData, isTaxInclusive: e.target.checked })}
+                      className="w-4 h-4 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">
+                      Price already includes GST (Inclusive)
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              {/* Live Accounting Breakdown */}
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-1.5 text-xs font-bold text-slate-600">
+                <div className="flex justify-between">
+                  <span>Gross Base:</span>
+                  <span className="text-slate-900 font-black">₹{pricingBreakdown.baseAmount.toLocaleString()}</span>
+                </div>
+                {pricingBreakdown.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Discount ({formData.discountType === "percentage" ? `${formData.discount}%` : "Flat"}):</span>
+                    <span className="font-black">-₹{pricingBreakdown.discountAmount.toLocaleString()}</span>
+                  </div>
+                )}
+                {pricingBreakdown.gstRate > 0 && (
+                  <>
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>Taxable Value:</span>
+                      <span>₹{pricingBreakdown.netBeforeTax.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-indigo-600 text-[11px]">
+                      <span>CGST ({pricingBreakdown.gstRate / 2}%):</span>
+                      <span>+₹{pricingBreakdown.cgstAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-indigo-600 text-[11px]">
+                      <span>SGST ({pricingBreakdown.gstRate / 2}%):</span>
+                      <span>+₹{pricingBreakdown.sgstAmount.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between border-t border-indigo-200/60 pt-2 text-sm text-indigo-950 font-black">
+                  <span>Final Total:</span>
+                  <span>₹{pricingBreakdown.finalTotal.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Advance Received */}
+              <div className="space-y-1.5">
                 <label className="text-xs font-black uppercase tracking-widest text-slate-400">
                   Advance Received (₹)
                 </label>
@@ -923,12 +1077,14 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                   }
                 />
               </div>
+
+              {/* Balance Due Card */}
               <div className="p-6 bg-indigo-600 rounded-3xl text-white shadow-xl shadow-indigo-100">
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 block mb-1">
                   Balance Due
                 </span>
                 <div className="text-3xl font-black">
-                  ₹{(formData.totalAmount - formData.advanceReceived).toLocaleString()}
+                  ₹{Math.max(0, pricingBreakdown.finalTotal - (formData.advanceReceived || 0)).toLocaleString()}
                 </div>
               </div>
             </div>

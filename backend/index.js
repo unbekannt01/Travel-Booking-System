@@ -7,6 +7,7 @@ import { fileURLToPath } from "url"
 import authRoutes from "./routes/auth.js"
 import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
+import paymentRoutes from "./routes/payments.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,6 +34,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true}))
 app.use("/api/auth", authRoutes)
 app.use("/api/bookings", bookingRoutes)
 app.use("/api/tours", tourRoutes)
+app.use("/api/payments", paymentRoutes)
 
 import Booking from "./models/Booking.js"
 

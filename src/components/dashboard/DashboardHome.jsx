@@ -26,6 +26,7 @@ export default function DashboardHome({
   handleDeleteBooking,
   handleCancelBooking,
   handleMarkPaymentPaid,
+  handleVoidPayment,
 }) {
   const todayStr = toDateInputValue(new Date())
 
@@ -278,6 +279,7 @@ export default function DashboardHome({
       <PaymentTracker
         bookings={bookings}
         onMarkPaid={handleMarkPaymentPaid}
+        onVoidPayment={handleVoidPayment}
       />
     </div>
   )

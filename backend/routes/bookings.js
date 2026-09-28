@@ -1,6 +1,8 @@
 import express from "express"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
+import Payment from "../models/Payment.js"
+import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
 
 const router = express.Router()
@@ -200,6 +202,11 @@ router.post("/", verifyToken, async (req, res) => {
       totalAmount,
       advanceReceived,
       passengers,
+      discount = 0,
+      discountType = "fixed",
+      gstRate = 0,
+      taxAmount = 0,
+      isTaxInclusive = false,
       invoiceNo: clientInvoiceNo,
     } = req.body
 
@@ -259,9 +266,10 @@ router.post("/", verifyToken, async (req, res) => {
       })
     }
 
-    // Fetch user settings for invoice prefix if available
-    const userDoc = await User.findById(req.user.id).select("invoicePrefix")
+    // Fetch user settings for invoice and receipt prefixes if available
+    const userDoc = await User.findById(req.user.id).select("invoicePrefix receiptPrefix")
     const customPrefix = userDoc?.invoicePrefix || "YHB"
+    const customReceiptPrefix = userDoc?.receiptPrefix || "REC"
 
     // Single source of truth for invoiceNo: ensure user-uniqueness
     let invoiceNo = clientInvoiceNo
@@ -303,6 +311,11 @@ router.post("/", verifyToken, async (req, res) => {
       advanceReceived: numAdvance,
       isPaid,
       status: "Confirmed",
+      discount: Math.max(0, Number(discount) || 0),
+      discountType: discountType === "percentage" ? "percentage" : "fixed",
+      gstRate: Math.max(0, Number(gstRate) || 0),
+      taxAmount: Math.max(0, Number(taxAmount) || 0),
+      isTaxInclusive: Boolean(isTaxInclusive),
       payments: initialPayments,
       passengers,
       userId: req.user.id,
@@ -329,6 +342,27 @@ router.post("/", verifyToken, async (req, res) => {
 
     if (!savedBooking) {
       return res.status(409).json({ message: "Could not generate a unique invoice number. Please try again." })
+    }
+
+    // If advance is received, record in separate Payment ledger collection
+    if (numAdvance > 0) {
+      try {
+        const receiptNo = await getNextReceiptNo(req.user.id, customReceiptPrefix)
+        const paymentDoc = new Payment({
+          userId: req.user.id,
+          bookingId: savedBooking._id,
+          receiptNo,
+          amount: numAdvance,
+          type: "advance",
+          paymentMode: paymentMode || "Cash",
+          paymentDate: savedBooking.date,
+          notes: "Initial advance payment",
+          recordedBy: req.user.userName || req.user.email || "Operator",
+        })
+        await paymentDoc.save()
+      } catch (payErr) {
+        console.error("Warning: Could not create initial Payment ledger record:", payErr.message)
+      }
     }
 
     res.status(201).json(savedBooking)
@@ -422,6 +456,13 @@ router.put("/:id", verifyToken, async (req, res) => {
       "advanceReceived",
       "isPaid",
       "status",
+      "discount",
+      "discountType",
+      "gstRate",
+      "taxAmount",
+      "isTaxInclusive",
+      "cancellationCharge",
+      "refundAmount",
       "passengers",
     ]
 
@@ -562,10 +603,62 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to cancel this booking" })
     }
 
-    const { reason } = req.body
+    const { reason, cancellationCharge, refundPaymentMode = "Cash" } = req.body
+    const totalPaid = Math.round((booking.advanceReceived || 0) * 100) / 100
+    let fee = 0
+    if (cancellationCharge !== undefined && cancellationCharge !== null && cancellationCharge !== "") {
+      fee = Math.round(Number(cancellationCharge) * 100) / 100
+      if (isNaN(fee) || fee < 0) {
+        return res.status(400).json({ message: "Cancellation charge cannot be negative." })
+      }
+      if (fee > totalPaid) {
+        return res.status(400).json({
+          message: `Cancellation charge ₹${fee} cannot exceed total amount collected ₹${totalPaid}.`,
+        })
+      }
+    }
+
+    const refundAmount = Math.max(0, Math.round((totalPaid - fee) * 100) / 100)
+
     booking.status = "Cancelled"
     booking.cancellationReason = reason || "Cancelled by operator"
     booking.cancelledAt = new Date()
+    booking.cancellationCharge = fee
+    booking.refundAmount = refundAmount
+    booking.refundPaymentMode = refundPaymentMode
+
+    // If there is an amount to refund, record a refund payment in Payment collection
+    if (refundAmount > 0) {
+      try {
+        const user = await User.findById(req.user.id)
+        const receiptPrefix = user?.receiptPrefix || "REC"
+        const receiptNo = await getNextReceiptNo(req.user.id, receiptPrefix)
+        const refundDoc = new Payment({
+          userId: req.user.id,
+          bookingId: booking._id,
+          receiptNo,
+          amount: refundAmount,
+          type: "refund",
+          paymentMode: refundPaymentMode,
+          paymentDate: new Date(),
+          notes: `Refund upon cancellation. Cancellation fee retained: ₹${fee}`,
+          recordedBy: req.user.userName || req.user.email || "Operator",
+        })
+        await refundDoc.save()
+
+        // Operator retained 'fee', so final advanceReceived is the retained fee
+        booking.advanceReceived = fee
+        booking.payments.push({
+          amount: -refundAmount,
+          date: new Date(),
+          mode: refundPaymentMode,
+          notes: `Refund upon cancellation (Fee: ₹${fee})`,
+          recordedBy: req.user.userName || req.user.email || "Operator",
+        })
+      } catch (err) {
+        console.error("Error creating refund payment record:", err)
+      }
+    }
 
     await booking.save()
     res.json(booking)
@@ -583,36 +676,42 @@ router.post("/:id/payments", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to update this booking" })
     }
 
-    const { amount, mode, notes } = req.body
-    const numAmount = Number(amount)
+    const { amount, mode = "Cash", notes = "", type, referenceNo = "" } = req.body
+    const numAmount = Math.round(Number(amount) * 100) / 100
 
     if (isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ message: "Payment amount must be greater than zero." })
     }
 
-    const remainingBalance = booking.totalAmount - (booking.advanceReceived || 0)
+    const remainingBalance = Math.round((booking.totalAmount - (booking.advanceReceived || 0)) * 100) / 100
     if (numAmount > remainingBalance) {
       return res.status(400).json({
         message: `Payment amount ₹${numAmount} exceeds remaining balance of ₹${remainingBalance}.`,
       })
     }
 
-    const newPayment = {
+    const user = await User.findById(req.user.id)
+    const receiptPrefix = user?.receiptPrefix || "REC"
+    const receiptNo = await getNextReceiptNo(req.user.id, receiptPrefix)
+
+    const paymentType = type || (numAmount >= remainingBalance ? "balance" : "partial")
+
+    const newPayment = new Payment({
+      userId: req.user.id,
+      bookingId: booking._id,
+      receiptNo,
       amount: numAmount,
-      date: new Date(),
-      mode: mode || "Cash",
+      type: paymentType,
+      paymentMode: mode,
+      paymentDate: new Date(),
+      referenceNo,
       notes: notes || "",
-      recordedBy: req.user.userName || "",
-    }
+      recordedBy: req.user.userName || req.user.email || "Operator",
+    })
+    await newPayment.save()
 
-    booking.payments.push(newPayment)
-    booking.advanceReceived = (booking.advanceReceived || 0) + numAmount
-    if (booking.advanceReceived >= booking.totalAmount) {
-      booking.isPaid = true
-    }
-
-    await booking.save()
-    res.status(201).json(booking)
+    const { booking: updatedBooking } = await syncBookingPayments(booking._id, req.user.id)
+    res.status(201).json(updatedBooking || booking)
   } catch (error) {
     res.status(400).json({ message: error.message })
   }

@@ -264,13 +264,36 @@ export default function InvoiceView({ booking, onBack, user }) {
     </div>
     <div class="finance">
       <div class="fin-row">
-        <span class="fin-label">Total Package</span>
-        <span class="fin-val">₹${booking.totalAmount.toLocaleString()}</span>
+        <span class="fin-label">Gross Package</span>
+        <span class="fin-val">₹${(booking.baseAmount || booking.totalAmount).toLocaleString()}</span>
+      </div>
+      ${booking.discount > 0 ? `
+      <div class="fin-row">
+        <span class="fin-label">Discount</span>
+        <span class="fin-val" style="color:#059669;">(–) ₹${booking.discount.toLocaleString()}</span>
+      </div>` : ""}
+      ${booking.gstRate > 0 ? `
+      <div class="fin-row">
+        <span class="fin-label">GST (${booking.gstRate}%)</span>
+        <span class="fin-val" style="color:#4f46e5;">${booking.isTaxInclusive ? "(Incl.)" : "(+)"} ₹${(booking.taxAmount || 0).toLocaleString()}</span>
+      </div>` : ""}
+      <div class="fin-row" style="border-top:1px dashed #cbd5e1; padding-top:4px;">
+        <span class="fin-label" style="font-weight:900;">Final Amount</span>
+        <span class="fin-val" style="font-weight:900;">₹${booking.totalAmount.toLocaleString()}</span>
       </div>
       <div class="fin-row">
         <span class="fin-label">Advance Paid</span>
-        <span class="fin-val" style="color:#059669;">(–) ₹${booking.advanceReceived.toLocaleString()}</span>
+        <span class="fin-val" style="color:#059669;">(–) ₹${(booking.advanceReceived || 0).toLocaleString()}</span>
       </div>
+      ${booking.status === "Cancelled" && (booking.cancellationCharge > 0 || booking.refundAmount > 0) ? `
+      <div class="fin-row" style="color:#dc2626;">
+        <span class="fin-label" style="color:#dc2626;">Cancellation Fee</span>
+        <span class="fin-val" style="color:#dc2626;">₹${(booking.cancellationCharge || 0).toLocaleString()}</span>
+      </div>
+      <div class="fin-row" style="color:#d97706;">
+        <span class="fin-label" style="color:#d97706;">Refund Issued</span>
+        <span class="fin-val" style="color:#d97706;">₹${(booking.refundAmount || 0).toLocaleString()}</span>
+      </div>` : ""}
       <div class="balance-card">
         <div>
           <div class="balance-label">Balance Payable</div>
@@ -565,13 +588,41 @@ export default function InvoiceView({ booking, onBack, user }) {
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Total Package</span>
+                  <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Gross Package</span>
+                  <span className="font-black text-slate-900">₹{(booking.baseAmount || booking.totalAmount).toLocaleString()}</span>
+                </div>
+                {booking.discount > 0 && (
+                  <div className="flex justify-between text-sm text-emerald-600">
+                    <span className="font-bold uppercase tracking-widest text-[10px]">Discount</span>
+                    <span className="font-black">(–) ₹{booking.discount.toLocaleString()}</span>
+                  </div>
+                )}
+                {booking.gstRate > 0 && (
+                  <div className="flex justify-between text-sm text-indigo-600">
+                    <span className="font-bold uppercase tracking-widest text-[10px]">GST ({booking.gstRate}%)</span>
+                    <span className="font-black">{booking.isTaxInclusive ? "(Incl.)" : "(+)"} ₹{(booking.taxAmount || 0).toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm pt-2 border-t border-slate-100">
+                  <span className="font-bold text-slate-700 uppercase tracking-widest text-[10px]">Final Amount</span>
                   <span className="font-black text-slate-900">₹{booking.totalAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Advance Paid</span>
-                  <span className="font-black" style={{ color: "#059669" }}>(–) ₹{booking.advanceReceived.toLocaleString()}</span>
+                  <span className="font-black" style={{ color: "#059669" }}>(–) ₹{(booking.advanceReceived || 0).toLocaleString()}</span>
                 </div>
+                {booking.status === "Cancelled" && (booking.cancellationCharge > 0 || booking.refundAmount > 0) && (
+                  <>
+                    <div className="flex justify-between text-sm text-red-600">
+                      <span className="font-bold uppercase tracking-widest text-[10px]">Cancellation Fee</span>
+                      <span className="font-black">₹{(booking.cancellationCharge || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-amber-600">
+                      <span className="font-bold uppercase tracking-widest text-[10px]">Refund Issued</span>
+                      <span className="font-black">₹{(booking.refundAmount || 0).toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between items-center p-5 rounded-2xl text-white"
                      style={{ backgroundColor: "#4f46e5" }}>
                   <div>

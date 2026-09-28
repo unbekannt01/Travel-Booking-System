@@ -1,15 +1,42 @@
 import { useState } from "react"
-import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt } from "lucide-react"
+import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt, Ban } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { formatDisplayDate } from "../utils/date"
+import { listPayments } from "../data/payments"
 
-export default function PaymentTracker({ bookings, onMarkPaid }) {
+export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) {
   const { toast } = useToast()
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentMode, setPaymentMode] = useState("Cash")
   const [paymentNotes, setPaymentNotes] = useState("")
   const [viewLedgerBooking, setViewLedgerBooking] = useState(null)
+  const [ledgerPayments, setLedgerPayments] = useState([])
+  const [loadingLedger, setLoadingLedger] = useState(false)
+  const [voidingPaymentId, setVoidingPaymentId] = useState(null)
+  const [voidReason, setVoidReason] = useState("")
+
+  const closeLedgerModal = () => {
+    setViewLedgerBooking(null)
+    setLedgerPayments([])
+    setVoidingPaymentId(null)
+  }
+
+  const handleOpenLedger = (booking) => {
+    setViewLedgerBooking(booking)
+    setLoadingLedger(true)
+    const bId = booking._id || booking.id
+    listPayments(bId)
+      .then((data) => {
+        setLedgerPayments(data || [])
+      })
+      .catch(() => {
+        setLedgerPayments(booking.payments || [])
+      })
+      .finally(() => {
+        setLoadingLedger(false)
+      })
+  }
 
   const pendingPayments = bookings
     .filter((b) => {
@@ -92,6 +119,27 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
     setPaymentAmount("")
     setPaymentMode("Cash")
     setPaymentNotes("")
+  }
+
+  const handleConfirmVoid = async (paymentId) => {
+    if (!onVoidPayment) return
+    try {
+      const res = await onVoidPayment(paymentId, voidReason || "Voided by operator")
+      setLedgerPayments((prev) =>
+        prev.map((p) =>
+          (p._id || p.id) === paymentId
+            ? { ...p, isVoid: true, voidReason: voidReason || "Voided by operator" }
+            : p
+        )
+      )
+      setVoidingPaymentId(null)
+      setVoidReason("")
+      if (res?.booking) {
+        setViewLedgerBooking(res.booking)
+      }
+    } catch {
+      // Toast already shown
+    }
   }
 
   return (
@@ -224,7 +272,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                       Record Payment
                     </button>
                     <button
-                      onClick={() => setViewLedgerBooking(booking)}
+                      onClick={() => handleOpenLedger(booking)}
                       className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
                     >
                       <History size={16} />
@@ -345,7 +393,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
                 </div>
               </div>
               <button
-                onClick={() => setViewLedgerBooking(null)}
+                onClick={closeLedgerModal}
                 className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
               >
                 <X size={20} />
@@ -370,38 +418,109 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
               </div>
             </div>
 
+            {/* Voiding Reason Prompt Sub-modal */}
+            {voidingPaymentId && (
+              <div className="mb-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                  <Ban size={15} className="text-amber-600" />
+                  <span>Void Transaction — Reason for Audit Log:</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={voidReason}
+                    onChange={(e) => setVoidReason(e.target.value)}
+                    placeholder="e.g. Entered wrong payment amount"
+                    className="flex-1 px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmVoid(voidingPaymentId)}
+                    className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-all"
+                  >
+                    Confirm Void
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVoidingPaymentId(null)}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Ledger Table */}
             <div className="border border-slate-100 rounded-2xl overflow-hidden mb-6">
-              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Receipts & Transactions</p>
+              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Official Receipts & Audit Ledger
+                </p>
+                {loadingLedger && <span className="text-[10px] font-bold text-indigo-600">Loading ledger...</span>}
               </div>
-              {viewLedgerBooking.payments && viewLedgerBooking.payments.length > 0 ? (
+              {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).length > 0 ? (
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 text-[10px] font-black uppercase text-slate-400">
-                      <th className="px-6 py-3">Date</th>
-                      <th className="px-6 py-3">Mode</th>
-                      <th className="px-6 py-3">Amount</th>
-                      <th className="px-6 py-3">Notes</th>
+                      <th className="px-6 py-3">Receipt #</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Mode & Type</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3">Notes</th>
+                      <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {viewLedgerBooking.payments.map((p, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50">
-                        <td className="px-6 py-3.5 font-bold text-slate-700">
-                          {formatDisplayDate(p.date)}
-                        </td>
-                        <td className="px-6 py-3.5 font-black text-indigo-600 text-xs uppercase">
-                          {p.mode || "Cash"}
-                        </td>
-                        <td className="px-6 py-3.5 font-black text-emerald-600">
-                          +₹{Number(p.amount).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-3.5 text-xs text-slate-500 font-medium">
-                          {p.notes || "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).map((p, idx) => {
+                      const isRefund = p.type === "refund" || Number(p.amount) < 0
+                      const isVoid = Boolean(p.isVoid)
+                      return (
+                        <tr key={p._id || idx} className={`hover:bg-slate-50/50 ${isVoid ? "opacity-50 bg-slate-50/70" : ""}`}>
+                          <td className="px-6 py-3.5 font-mono text-xs font-black text-slate-700">
+                            {p.receiptNo || `#REC-${idx + 1}`}
+                          </td>
+                          <td className="px-4 py-3.5 font-bold text-slate-600 text-xs">
+                            {formatDisplayDate(p.paymentDate || p.date)}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-indigo-600 text-xs uppercase">{p.paymentMode || p.mode || "Cash"}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                isRefund ? "bg-red-100 text-red-700" : "bg-indigo-50 text-indigo-700"
+                              }`}>
+                                {p.type || (isRefund ? "refund" : "payment")}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={`px-4 py-3.5 text-right font-black ${
+                            isVoid ? "line-through text-slate-400" : isRefund ? "text-red-600" : "text-emerald-600"
+                          }`}>
+                            {isRefund ? "-" : "+"}₹{Math.abs(Number(p.amount)).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-slate-500 font-medium max-w-xs truncate">
+                            {isVoid ? (
+                              <span className="text-red-600 font-bold">[VOIDED: {p.voidReason || "Operator"}]</span>
+                            ) : (
+                              p.notes || "—"
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            {!isVoid && onVoidPayment && p._id ? (
+                              <button
+                                type="button"
+                                onClick={() => setVoidingPaymentId(p._id)}
+                                className="px-2.5 py-1 text-[10px] font-black text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                Void
+                              </button>
+                            ) : isVoid ? (
+                              <span className="text-[10px] font-black text-slate-400 uppercase">Voided</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               ) : (
@@ -421,7 +540,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => setViewLedgerBooking(null)}
+                onClick={closeLedgerModal}
                 className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all"
               >
                 Close

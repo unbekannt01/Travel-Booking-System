@@ -15,7 +15,7 @@ import {
   updateTour,
   deleteTour,
 } from "../data/tours"
-import { recordPayment } from "../data/payments"
+import { recordPayment, voidPayment } from "../data/payments"
 import { updateProfile, disable2FA } from "../data/auth"
 import { updateCompanySettings } from "../data/settings"
 import { getAuthToken } from "../data/client"
@@ -26,6 +26,7 @@ import DashboardHome from "./dashboard/DashboardHome"
 import SettingsPanel from "./dashboard/SettingsPanel"
 import Disable2FAModal from "./dashboard/Disable2FAModal"
 import InvoicesModal from "./dashboard/InvoicesModal"
+import CancelBookingModal from "./dashboard/CancelBookingModal"
 
 import BookingForm from "./BookingForm"
 import InvoiceView from "./InvoiceView"
@@ -51,6 +52,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [isEditingName, setIsEditingName] = useState(false)
   const [newUserName, setNewUserName] = useState(user?.userName || "")
   const [_loading, setLoading] = useState(false)
+  const [cancellingBooking, setCancellingBooking] = useState(null)
 
   const [show2FASetup, setShow2FASetup] = useState(false)
   const [show2FADisable, setShow2FADisable] = useState(false)
@@ -259,30 +261,31 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     }
   }
 
-  const handleCancelBooking = async (id) => {
-    const confirmed = await confirm({
-      title: "Cancel Booking?",
-      message: "Are you sure you want to cancel this booking? Reserved seats will be freed up for other travelers.",
-      confirmText: "Cancel Booking",
-      cancelText: "Keep Booking",
-      isDestructive: true,
-    })
+  const handleCancelBooking = (id) => {
+    const booking = bookings.find((b) => (b._id || b.id) === id)
+    if (booking) {
+      setCancellingBooking(booking)
+    }
+  }
 
-    if (confirmed) {
-      try {
-        const updated = await cancelBooking(id, "Cancelled by operator")
-        setBookings((prev) =>
-          prev.map((b) =>
-            (b._id || b.id) === (updated._id || updated.id)
-              ? { ...updated, id: updated._id || updated.id }
-              : b,
-          ),
-        )
-        toast.success("Booking cancelled successfully")
-      } catch (error) {
-        console.error("Error cancelling booking:", error)
-        toast.error(error.message || "Failed to cancel booking")
-      }
+  const handleConfirmCancel = async ({ bookingId, cancellationCharge, refundPaymentMode, reason }) => {
+    try {
+      const updated = await cancelBooking(bookingId, {
+        cancellationCharge,
+        refundPaymentMode,
+        reason,
+      })
+      setBookings((prev) =>
+        prev.map((b) =>
+          (b._id || b.id) === (updated._id || updated.id)
+            ? { ...updated, id: updated._id || updated.id }
+            : b,
+        ),
+      )
+      toast.success("Booking cancelled and refund recorded.")
+    } catch (error) {
+      console.error("Error cancelling booking:", error)
+      toast.error(error.message || "Failed to cancel booking")
     }
   }
 
@@ -386,6 +389,27 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     }
   }
 
+  const handleVoidPayment = async (paymentId, reason) => {
+    try {
+      const result = await voidPayment(paymentId, reason)
+      if (result.booking) {
+        setBookings((prev) =>
+          prev.map((b) =>
+            (b._id || b.id) === (result.booking._id || result.booking.id)
+              ? { ...result.booking, id: result.booking._id || result.booking.id }
+              : b,
+          ),
+        )
+      }
+      toast.success("Payment voided successfully.")
+      return result
+    } catch (error) {
+      console.error("Error voiding payment:", error)
+      toast.error(error.message || "Failed to void payment")
+      throw error
+    }
+  }
+
   if (selectedBooking) {
     return (
       <InvoiceView
@@ -469,6 +493,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               handleDeleteBooking={handleDeleteBooking}
               handleCancelBooking={handleCancelBooking}
               handleMarkPaymentPaid={handleMarkPaymentPaid}
+              handleVoidPayment={handleVoidPayment}
             />
           )}
 
@@ -552,6 +577,14 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         handleDeleteBooking={handleDeleteBooking}
         handleCancelBooking={handleCancelBooking}
       />
+
+      {cancellingBooking && (
+        <CancelBookingModal
+          booking={cancellingBooking}
+          onClose={() => setCancellingBooking(null)}
+          onConfirm={handleConfirmCancel}
+        />
+      )}
     </div>
   )
 }
