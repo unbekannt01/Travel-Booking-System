@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from "react"
 import { Lock, Check, ArrowLeft, Loader2, XCircle, AlertCircle } from "lucide-react"
-import { API_URL } from "../config"
+import { validateResetToken, resetPassword } from "../data/auth"
 
 export default function ResetPassword({ token, onComplete }) {
   const [newPassword, setNewPassword] = useState("")
@@ -14,14 +14,13 @@ export default function ResetPassword({ token, onComplete }) {
   const [tokenError, setTokenError] = useState("")
 
   useEffect(() => {
-    const validateToken = async () => {
+    const validate = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/validate-reset-token/${token}`)
-        const data = await res.json()
+        const data = await validateResetToken(token)
 
-        if (!res.ok || !data.valid) {
+        if (!data || !data.valid) {
           setTokenValid(false)
-          setTokenError(data.message || "Invalid or expired reset token")
+          setTokenError((data && data.message) || "Invalid or expired reset token")
         } else {
           setTokenValid(true)
         }
@@ -33,7 +32,7 @@ export default function ResetPassword({ token, onComplete }) {
       }
     }
 
-    validateToken()
+    validate()
   }, [token])
 
   const handleSubmit = async (e) => {
@@ -47,15 +46,7 @@ export default function ResetPassword({ token, onComplete }) {
     setError("")
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, newPassword }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message)
-
+      await resetPassword(token, newPassword)
       setSuccess(true)
       setTimeout(() => onComplete(), 2000)
     } catch (err) {

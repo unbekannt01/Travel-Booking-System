@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from "react"
 import { Shield, ShieldAlert, Check, Loader2, XCircle, AlertCircle, ArrowLeft } from "lucide-react"
-import { API_URL } from "../config"
+import { validate2FAToken, finalize2FARecovery } from "../data/auth"
 
 export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   const [loading, setLoading] = useState(false)
@@ -11,14 +11,13 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   const [tokenError, setTokenError] = useState("")
 
   useEffect(() => {
-    const validateToken = async () => {
+    const validate = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/validate-2fa-token/${token}`)
-        const data = await res.json()
+        const data = await validate2FAToken(token)
 
-        if (!res.ok || !data.valid) {
+        if (!data || !data.valid) {
           setTokenValid(false)
-          setTokenError(data.message || "Invalid or expired recovery token")
+          setTokenError((data && data.message) || "Invalid or expired recovery token")
         } else {
           setTokenValid(true)
         }
@@ -30,7 +29,7 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
       }
     }
 
-    validateToken()
+    validate()
   }, [token])
 
   useEffect(() => {
@@ -39,14 +38,7 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
     const recoverAccount = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_URL}/api/auth/finalize-2fa-recovery`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        })
-
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.message)
+        const data = await finalize2FARecovery(token)
 
         if (data.requiresSetup && data.tempToken) {
           localStorage.setItem("auth-token", data.tempToken)

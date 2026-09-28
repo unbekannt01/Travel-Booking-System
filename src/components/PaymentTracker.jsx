@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { AlertCircle, Clock, CheckCircle2, MessageCircle, X } from "lucide-react"
+import { useToast } from "./common/ToastContext"
 
 export default function PaymentTracker({ bookings, onMarkPaid }) {
+  const { toast } = useToast()
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentNotes, setPaymentNotes] = useState("")
@@ -64,7 +66,7 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
 
   const submitPayment = () => {
     if (!paymentAmount || Number(paymentAmount) <= 0) {
-      alert("Please enter a valid payment amount")
+      toast.error("Please enter a valid payment amount")
       return
     }
 

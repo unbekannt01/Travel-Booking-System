@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react"
 import { LogIn, UserPlus, Mail, Lock, User, Bus, Shield, Check, X } from "lucide-react"
-import { API_URL } from "../config"
+import { login, register, forgotPassword, request2FARecovery } from "../data/auth"
+import { useToast } from "./common/ToastContext"
 
 export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
+  const { toast } = useToast()
   const [isLogin, setIsLogin] = useState(true)
   const [view, setView] = useState("login") // login, register, forgot-password, recovery-request
   const [formData, setFormData] = useState({ userName: "", email: "", loginIdentifier: "", password: "" })
@@ -22,36 +24,18 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     setError("")
     setLoading(true)
 
-    const baseUrl = API_URL
-    const endpoint = isLogin ? "/api/auth/login" : "/api/auth/register"
-
-    // For login, send loginIdentifier (email or username) instead of separate fields
-    const requestData = isLogin
-      ? { loginIdentifier: formData.loginIdentifier, password: formData.password }
-      : { userName: formData.userName, email: formData.email, password: formData.password }
-
     try {
-      const res = await fetch(`${baseUrl}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(requestData),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.message || "Authentication failed")
+      let data
+      if (isLogin) {
+        data = await login(formData.loginIdentifier, formData.password)
+      } else {
+        data = await register(formData.userName, formData.email, formData.password)
       }
 
       if (data.requires2FA) {
         onRequire2FA(data.tempToken)
         return
       }
-
-      localStorage.setItem("auth-token", data.token)
-      localStorage.setItem("tokenId", data.tokenId)
-      localStorage.setItem("user", JSON.stringify(data.user))
 
       // Clear form data after successful authentication
       setFormData({ userName: "", email: "", loginIdentifier: "", password: "" })
@@ -74,14 +58,8 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message)
-      alert("Reset link sent to your email")
+      await forgotPassword(formData.email)
+      toast.success("Reset link sent to your email")
       setView("login")
     } catch (err) {
       setError(err.message)
@@ -94,14 +72,8 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/api/auth/request-2fa-recovery`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message)
-      alert("Recovery link sent to your email (valid for 1 hour)")
+      await request2FARecovery(formData.email)
+      toast.success("Recovery link sent to your email (valid for 1 hour)")
       setView("login")
     } catch (err) {
       setError(err.message)

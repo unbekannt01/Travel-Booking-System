@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Shield, ArrowRight } from "lucide-react"
-import { API_URL } from "../config"
+import { verify2FALogin } from "../data/auth"
 
 export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
   const [verificationCode, setVerificationCode] = useState("")
@@ -13,25 +13,7 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/verify-2fa-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tempToken,
-          code: verificationCode,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.message || "Invalid verification code")
-      }
-
-      localStorage.setItem("auth-token", data.token)
-      localStorage.setItem("tokenId", data.tokenId)
-      localStorage.setItem("user", JSON.stringify(data.user))
-
+      const data = await verify2FALogin(tempToken, verificationCode)
       onVerifySuccess(data.user)
     } catch (err) {
       console.error("[v0] 2FA Verification Error:", err.message)

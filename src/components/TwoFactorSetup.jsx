@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Shield, Copy, CheckCircle2, Smartphone } from "lucide-react"
-import { API_URL } from "../config"
+import { setup2FA, verify2FASetup } from "../data/auth"
 
 export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
   const [qrCode, setQrCode] = useState("")
@@ -16,20 +16,7 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/setup-2fa`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to generate QR code")
-      }
-
+      const data = await setup2FA(token)
       setQrCode(data.qrCode)
       setSecret(data.secret)
       setStep("verify")
@@ -46,21 +33,7 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/verify-2fa-setup`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ code: verificationCode }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.message || "Invalid verification code")
-      }
-
+      await verify2FASetup(verificationCode, token)
       onSetupComplete()
     } catch (err) {
       setError(err.message)
