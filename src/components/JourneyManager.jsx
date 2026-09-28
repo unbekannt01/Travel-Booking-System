@@ -1,10 +1,14 @@
 import { useState, useMemo } from "react"
 import { MapPin, Check, Download, MessageCircle, Mail } from "lucide-react"
+import { togglePassengerCheckin } from "../data/bookings"
+import { useToast } from "./common/ToastContext"
+import { toDateInputValue, formatDisplayDate } from "../utils/date"
+import { maskAadhaar } from "../utils/formatters"
 
-export default function JourneyManager({ bookings }) {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
+export default function JourneyManager({ bookings, onUpdateBooking }) {
+  const { toast } = useToast()
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
   const [selectedTour, setSelectedTour] = useState("all")
-  const [checkedInPassengers, setCheckedInPassengers] = useState({})
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
 
@@ -13,7 +17,7 @@ export default function JourneyManager({ bookings }) {
   const journeyBookings = useMemo(() => {
     return bookings
       .filter((b) => {
-        const bookingDate = new Date(b.journeyDate).toISOString().split("T")[0]
+        const bookingDate = toDateInputValue(b.journeyDate)
         const dateMatch = bookingDate === selectedDate
         const tourMatch = selectedTour === "all" || b.tourName === selectedTour
         return dateMatch && tourMatch
@@ -23,20 +27,28 @@ export default function JourneyManager({ bookings }) {
 
   const totalPassengers = journeyBookings.reduce((sum, b) => sum + b.passengers.length, 0)
   const totalCheckedIn = journeyBookings.reduce((sum, b) => {
-    return sum + b.passengers.filter((p) => checkedInPassengers[`${b.id || b._id}-${p.name}`]).length
+    return sum + b.passengers.filter((p) => p.checkedIn).length
   }, 0)
 
-  const toggleCheckIn = (bookingId, passengerName) => {
-    const key = `${bookingId}-${passengerName}`
-    setCheckedInPassengers((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }))
+  const handleToggleCheckIn = async (booking, passenger, passengerIndex) => {
+    const bookingId = booking._id || booking.id
+    const passengerIdentifier = passenger._id || passengerIndex
+    try {
+      const updatedBooking = await togglePassengerCheckin(bookingId, passengerIdentifier)
+      if (onUpdateBooking) {
+        onUpdateBooking(updatedBooking)
+      }
+      toast.success(
+        `${passenger.name} marked as ${!passenger.checkedIn ? "Checked In" : "Pending"}`
+      )
+    } catch (err) {
+      toast.error(err.message || "Failed to update check-in status")
+    }
   }
 
   const handleSendWhatsApp = (booking) => {
     const passengers = booking.passengers.map((p) => `${p.name} (${p.city})`).join(", ")
-    const message = `Hi ${booking.contactName},\n\nYour journey details:\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${new Date(booking.journeyDate).toLocaleDateString()}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt. Thank you!`
+    const message = `Hi ${booking.contactName},\n\nYour journey details:\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt. Thank you!`
     const phoneNumber = booking.contactPhone.replace(/\D/g, "")
     const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
@@ -45,7 +57,7 @@ export default function JourneyManager({ bookings }) {
   const handleSendEmail = (booking) => {
     const passengers = booking.passengers.map((p) => `${p.name} (${p.city})`).join(", ")
     const subject = `Journey Details - ${booking.invoiceNo}`
-    const body = `Hi ${booking.contactName},\n\nYour journey details:\n\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${new Date(booking.journeyDate).toLocaleDateString()}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt.\n\nThank you!`
+    const body = `Hi ${booking.contactName},\n\nYour journey details:\n\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt.\n\nThank you!`
     const mailUrl = `mailto:${booking.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = mailUrl
   }
@@ -147,7 +159,7 @@ export default function JourneyManager({ bookings }) {
           <MapPin size={48} className="text-slate-300 mx-auto mb-4" />
           <h3 className="text-xl font-black text-slate-900 mb-2">No Journeys Scheduled</h3>
           <p className="text-slate-500 font-bold">
-            No tours departing on {new Date(selectedDate).toLocaleDateString()}
+            No tours departing on {formatDisplayDate(selectedDate)}
           </p>
         </div>
       ) : (
@@ -173,9 +185,7 @@ export default function JourneyManager({ bookings }) {
           </div>
 
           {journeyBookings.map((booking) => {
-            const bookedInPassengers = booking.passengers.filter(
-              (p) => checkedInPassengers[`${booking.id || booking._id}-${p.name}`],
-            )
+            const checkedInCount = booking.passengers.filter((p) => p.checkedIn).length
 
             return (
               <div
@@ -197,12 +207,12 @@ export default function JourneyManager({ bookings }) {
                           <div
                             className="h-full bg-green-600 transition-all"
                             style={{
-                              width: `${booking.passengers.length > 0 ? (bookedInPassengers.length / booking.passengers.length) * 100 : 0}%`,
+                              width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
                             }}
                           />
                         </div>
                         <span className="text-sm font-black text-slate-900">
-                          {bookedInPassengers.length}/{booking.passengers.length}
+                          {checkedInCount}/{booking.passengers.length}
                         </span>
                       </div>
                     </div>
@@ -211,7 +221,7 @@ export default function JourneyManager({ bookings }) {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Date</p>
-                      <p className="font-black text-slate-900">{new Date(booking.journeyDate).toLocaleDateString()}</p>
+                      <p className="font-black text-slate-900">{formatDisplayDate(booking.journeyDate)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Customer</p>
@@ -224,9 +234,9 @@ export default function JourneyManager({ bookings }) {
                     <div>
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Payment</p>
                       <p
-                        className={`font-black ${booking.totalAmount === booking.advanceReceived ? "text-green-600" : "text-red-600"}`}
+                        className={`font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-red-600"}`}
                       >
-                        {booking.totalAmount === booking.advanceReceived ? "Paid" : "Pending"}
+                        {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
                       </p>
                     </div>
                   </div>
@@ -247,10 +257,10 @@ export default function JourneyManager({ bookings }) {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {booking.passengers.map((passenger, idx) => {
-                        const isCheckedIn = checkedInPassengers[`${booking.id || booking._id}-${passenger.name}`]
+                        const isCheckedIn = passenger.checkedIn
                         return (
                           <tr
-                            key={idx}
+                            key={passenger._id || idx}
                             className={`transition-colors ${isCheckedIn ? "bg-green-50" : "hover:bg-slate-50"}`}
                           >
                             <td className="px-6 py-4">
@@ -273,11 +283,19 @@ export default function JourneyManager({ bookings }) {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="text-sm font-bold text-green-600">Paid</span>
+                              <span
+                                className={`text-sm font-bold ${
+                                  booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"
+                                }`}
+                              >
+                                {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
+                              </span>
                             </td>
                             <td className="px-6 py-4">
                               <button
-                                onClick={() => toggleCheckIn(booking.id || booking._id, passenger.name)}
+                                type="button"
+                                onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                                title={isCheckedIn ? "Click to uncheck" : "Click to check in"}
                                 className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
                                   isCheckedIn
                                     ? "bg-green-600 text-white shadow-lg shadow-green-200"
@@ -337,7 +355,7 @@ export default function JourneyManager({ bookings }) {
                       <div className="mt-8 grid gap-4 sm:grid-cols-3">
                         <div className="rounded-3xl bg-white/10 p-4">
                           <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Journey Date</div>
-                          <div className="mt-2 text-lg font-black">{new Date(booking.journeyDate).toLocaleDateString()}</div>
+                          <div className="mt-2 text-lg font-black">{formatDisplayDate(booking.journeyDate)}</div>
                         </div>
                         <div className="rounded-3xl bg-white/10 p-4">
                           <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Passengers</div>

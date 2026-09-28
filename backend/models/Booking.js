@@ -1,9 +1,20 @@
 import mongoose from "mongoose"
 
+const passengerSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  age: { type: Number, required: true, min: 1 },
+  gender: { type: String, required: true },
+  city: { type: String, required: true },
+  seatId: { type: String },
+  contact: { type: String },
+  aadhar: { type: String },
+  checkedIn: { type: Boolean, default: false },
+})
+
 const bookingSchema = new mongoose.Schema(
   {
-    invoiceNo: { type: String, required: true, unique: true },
-    date: { type: Date, required: true },
+    invoiceNo: { type: String, required: true },
+    date: { type: Date, required: true, default: Date.now },
     tourName: { type: String, required: true },
     journeyDate: { type: Date, required: true },
     duration: { type: String },
@@ -12,24 +23,21 @@ const bookingSchema = new mongoose.Schema(
     contactPhone: { type: String, required: true },
     contactEmail: { type: String },
     paymentMode: { type: String, default: "Cash" },
-    totalAmount: { type: Number, required: true },
-    advanceReceived: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true, min: 0 },
+    advanceReceived: { type: Number, default: 0, min: 0 },
     isPaid: { type: Boolean, default: false },
-    passengers: [
-      {
-        name: { type: String, required: true },
-        age: { type: Number, required: true },
-        gender: { type: String, required: true },
-        city: { type: String, required: true },
-        seatId: { type: String },
-        contact: { type: String },
-        aadhar: { type: String },
-        checkedIn: { type: Boolean, default: false },
-      },
-    ],
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    status: {
+      type: String,
+      default: "Confirmed",
+      enum: ["Confirmed", "Cancelled"],
+    },
+    passengers: [passengerSchema],
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true },
 )
+
+// Ensure invoiceNo is unique per user (not globally)
+bookingSchema.index({ userId: 1, invoiceNo: 1 }, { unique: true })
 
 export default mongoose.model("Booking", bookingSchema)

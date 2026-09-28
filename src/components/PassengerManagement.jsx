@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 import { useState } from "react";
 import {
   ShieldCheck,
@@ -9,11 +7,14 @@ import {
   Fingerprint,
   FileDown,
   Eye,
+  EyeOff,
   Filter,
   X,
   Printer,
   Edit3,
 } from "lucide-react";
+import { maskAadhaar } from "../utils/formatters";
+import { formatDisplayDate } from "../utils/date";
 
 export default function PassengerManagement({
   bookings,
@@ -24,6 +25,14 @@ export default function PassengerManagement({
   const [selectedTour, setSelectedTour] = useState("all");
   const [showPreview, setShowPreview] = useState(false);
   const [includeAadhar, setIncludeAadhar] = useState(true);
+  const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({});
+
+  const toggleAadhaarVisibility = (key) => {
+    setUnmaskedAadhaar((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
     Boolean
@@ -36,9 +45,7 @@ export default function PassengerManagement({
 
   const getJourneyDate = () => {
     const booking = filteredBookings[0];
-    return booking?.journeyDate
-      ? new Date(booking.journeyDate).toLocaleDateString()
-      : "N/A";
+    return booking?.journeyDate ? formatDisplayDate(booking.journeyDate) : "N/A";
   };
 
   const handleExport = (withAadhar) => {
@@ -147,9 +154,12 @@ export default function PassengerManagement({
             <tbody className="divide-y divide-slate-50">
               {filteredBookings.flatMap((booking) => {
                 const firstPassengerIndex = 0;
-                return booking.passengers.map((p, idx) => (
+                return booking.passengers.map((p, idx) => {
+                  const passengerKey = `${booking._id || booking.id}-${p._id || idx}`
+                  const isAadhaarVisible = !!unmaskedAadhaar[passengerKey]
+                  return (
                   <tr
-                    key={`${booking.id}-${idx}`}
+                    key={passengerKey}
                     className="hover:bg-slate-50/50 transition-colors group"
                   >
                     <td className="px-8 py-5">
@@ -157,7 +167,7 @@ export default function PassengerManagement({
                         {booking.tourName}
                       </span>
                       <span className="text-[9px] text-slate-400 font-bold mt-1 block">
-                        {new Date(booking.journeyDate).toLocaleDateString()}
+                        {formatDisplayDate(booking.journeyDate)}
                       </span>
                     </td>
                     <td className="px-8 py-5 font-black text-slate-900">
@@ -177,7 +187,23 @@ export default function PassengerManagement({
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                         <Fingerprint size={14} className="text-indigo-400" />{" "}
-                        {p.aadhar || "MISSING"}
+                        <span>
+                          {p.aadhar
+                            ? isAadhaarVisible
+                              ? p.aadhar
+                              : maskAadhaar(p.aadhar)
+                            : "MISSING"}
+                        </span>
+                        {p.aadhar && (
+                          <button
+                            type="button"
+                            onClick={() => toggleAadhaarVisibility(passengerKey)}
+                            className="text-slate-400 hover:text-indigo-600 p-1 rounded-md transition-colors"
+                            title={isAadhaarVisible ? "Hide Aadhaar" : "Show Aadhaar"}
+                          >
+                            {isAadhaarVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-8 py-5">
@@ -201,8 +227,9 @@ export default function PassengerManagement({
                       </div>
                     </td>
                   </tr>
-                ));
-              })}
+                )
+              })
+            })}
               {filteredBookings.length === 0 && (
                 <tr>
                   <td

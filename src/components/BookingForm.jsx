@@ -14,6 +14,9 @@ import {
   X,
   LockKeyhole,
 } from "lucide-react"
+import { useToast } from "./common/ToastContext"
+import { toDateInputValue } from "../utils/date"
+import { isValidIndianPhone, isValidAadhaar } from "../utils/validators"
 
 const CustomSelect = ({ label, value, options, onChange, placeholder, className = "" }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -281,19 +284,17 @@ const SeatLayout = ({ passengers, bookedSeats, onSeatSelect, seatLayout = "2x1" 
 }
 
 export default function BookingForm({ onSave, tours, editData, onCancel, bookings = [] }) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState(() => ({
-    id: editData?.id || Date.now().toString(),
+    id: editData?.id || editData?._id || Date.now().toString(),
+    _id: editData?._id || editData?.id,
     invoiceNo: editData?.invoiceNo || "",
-    date: editData?.date || new Date().toISOString().split("T")[0],
+    date: toDateInputValue(editData?.date || new Date()),
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
     contactEmail: editData?.contactEmail || "",
     tourName: editData?.tourName || "",
-    journeyDate: editData?.journeyDate
-      ? typeof editData.journeyDate === "string"
-        ? editData.journeyDate.split("T")[0]
-        : new Date(editData.journeyDate).toISOString().split("T")[0]
-      : "",
+    journeyDate: toDateInputValue(editData?.journeyDate),
     duration: editData?.duration || "",
     busType: editData?.busType || "",
     paymentMode: editData?.paymentMode || "Cash",
@@ -433,20 +434,96 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
 
   const handleSubmit = (e) => {
     e.preventDefault()
+
+    if (!formData.contactName?.trim()) {
+      toast.error("Please enter the primary traveler's name")
+      return
+    }
+
+    if (!isValidIndianPhone(formData.contactPhone)) {
+      toast.error("Please provide a valid 10-digit Indian mobile number")
+      return
+    }
+
+    if (!formData.tourName) {
+      toast.error("Please select a tour package")
+      return
+    }
+
+    if (!formData.journeyDate) {
+      toast.error("Please select a journey date")
+      return
+    }
+
+    const numTotal = Number(formData.totalAmount)
+    const numAdvance = Number(formData.advanceReceived || 0)
+
+    if (isNaN(numTotal) || numTotal < 0) {
+      toast.error("Total amount must be 0 or greater")
+      return
+    }
+
+    if (isNaN(numAdvance) || numAdvance < 0) {
+      toast.error("Advance payment cannot be negative")
+      return
+    }
+
+    if (numAdvance > numTotal) {
+      toast.error("Advance payment cannot exceed total amount")
+      return
+    }
+
+    for (let i = 0; i < formData.passengers.length; i++) {
+      const p = formData.passengers[i]
+      if (!p.name?.trim() || !p.city?.trim()) {
+        toast.error(`Passenger ${i + 1}: Name and city are required`)
+        return
+      }
+      const age = Number(p.age)
+      if (isNaN(age) || age < 1 || age > 120) {
+        toast.error(`Passenger ${p.name || i + 1}: Please enter a valid age`)
+        return
+      }
+      if (p.aadhar && !isValidAadhaar(p.aadhar)) {
+        toast.error(`Passenger ${p.name || i + 1}: Aadhaar must be a 12-digit number`)
+        return
+      }
+    }
+
+    // Check for internal duplicate seats
+    const seatIds = formData.passengers.map((p) => p.seatId).filter(Boolean)
+    const seenSeats = new Set()
+    for (const s of seatIds) {
+      if (seenSeats.has(s)) {
+        toast.error(`Seat ${s} is selected by multiple passengers in this booking`)
+        return
+      }
+      seenSeats.add(s)
+    }
+
+    // Check against already booked seats on client
+    const bookedSeatIds = new Set(bookedSeats.map((bs) => bs.seatId))
+    const conflicts = seatIds.filter((s) => bookedSeatIds.has(s))
+    if (conflicts.length > 0) {
+      toast.error(`Seat(s) ${conflicts.join(", ")} already booked for this tour on this date`)
+      return
+    }
+
     onSave(formData)
   }
 
   const bookedSeats = useMemo(() => {
     if (!formData.tourName || !formData.journeyDate) return []
 
-    const targetDate = new Date(formData.journeyDate).toISOString().split("T")[0]
+    const targetDate = toDateInputValue(formData.journeyDate)
 
     const relevantBookings = bookings.filter((b) => {
       const isSameTour = b.tourName === formData.tourName
-      const bookingDate = new Date(b.journeyDate || b.date).toISOString().split("T")[0]
+      const bookingDate = toDateInputValue(b.journeyDate || b.date)
       const isSameDate = bookingDate === targetDate
-      const isNotCurrentBooking = b.id !== formData.id && b._id !== formData.id
-      return isSameTour && isSameDate && isNotCurrentBooking
+      const isNotCurrentBooking = b.id !== formData.id && b._id !== formData.id && b.id !== formData._id && b._id !== formData._id
+      const isNotCancelled = b.status !== "Cancelled" && b.status !== "cancelled"
+      return isSameTour && isSameDate && isNotCurrentBooking && isNotCancelled
     })
 
     const seats = []
@@ -456,7 +533,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
           seats.push({
             seatId: passenger.seatId,
             passengerName: passenger.name,
-            bookingId: booking.id,
+            bookingId: booking._id || booking.id,
             invoiceNo: booking.invoiceNo,
           })
         }
@@ -464,7 +541,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
     })
 
     return seats
-  }, [formData.tourName, formData.journeyDate, bookings, formData.id])
+  }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
 
   return (
     <form onSubmit={handleSubmit} className="space-y-10 pb-20 animate-entrance">

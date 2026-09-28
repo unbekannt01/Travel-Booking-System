@@ -213,6 +213,16 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     }
   }
 
+  const handleUpdateBookingState = (updatedBooking) => {
+    setBookings((prev) =>
+      prev.map((b) =>
+        (b._id || b.id) === (updatedBooking._id || updatedBooking.id)
+          ? { ...updatedBooking, id: updatedBooking._id || updatedBooking.id }
+          : b,
+      ),
+    )
+  }
+
   const handleSaveTour = async (tourData) => {
     try {
       let savedTour
@@ -421,7 +431,9 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             />
           )}
 
-          {activeTab === "journey" && <JourneyManager bookings={bookings} />}
+          {activeTab === "journey" && (
+            <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} />
+          )}
 
           {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}
 

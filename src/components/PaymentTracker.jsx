@@ -65,14 +65,20 @@ export default function PaymentTracker({ bookings, onMarkPaid }) {
   }
 
   const submitPayment = () => {
-    if (!paymentAmount || Number(paymentAmount) <= 0) {
-      toast.error("Please enter a valid payment amount")
+    const num = Number(paymentAmount)
+    if (!paymentAmount || isNaN(num) || num <= 0) {
+      toast.error("Please enter a valid payment amount greater than zero")
+      return
+    }
+
+    if (selectedBooking && num > selectedBooking.balance) {
+      toast.error(`Payment cannot exceed remaining balance of ₹${selectedBooking.balance.toLocaleString()}`)
       return
     }
 
     onMarkPaid({
       bookingId: selectedBooking.id || selectedBooking._id,
-      paymentAmount: Number(paymentAmount),
+      paymentAmount: num,
       paymentNotes,
     })
 
