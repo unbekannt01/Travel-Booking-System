@@ -1,5 +1,6 @@
 import express from "express"
 import Booking from "../models/Booking.js"
+import User from "../models/User.js"
 import verifyToken from "../middleware/auth.js"
 
 const router = express.Router()
@@ -48,11 +49,12 @@ export const getDayBounds = (dateInput) => {
   return { start, end, dateStr }
 }
 
-// Generates next unique invoice number for user
-export const getNextInvoiceNo = async (userId, tourName, journeyDate) => {
+// Generates next unique invoice number for user with customizable prefix
+export const getNextInvoiceNo = async (userId, tourName, journeyDate, customPrefix = "YHB") => {
   const tourCode = generateTourCode(tourName)
   const monthCode = getMonthCode(journeyDate || new Date())
-  const prefix = `YHB-${tourCode}-${monthCode}-`
+  const pfx = (customPrefix || "YHB").toUpperCase().trim()
+  const prefix = `${pfx}-${tourCode}-${monthCode}-`
 
   const existingBookings = await Booking.find({
     userId,
@@ -75,7 +77,7 @@ export const getNextInvoiceNo = async (userId, tourName, journeyDate) => {
 // Indian mobile validation
 export const validateIndianPhone = (phone) => {
   if (!phone) return false
-  const clean = phone.toString().replace(/[\s\-\(\)\+]/g, "")
+  const clean = phone.toString().replace(/[\s\-()+]/g, "")
   if (clean.length === 12 && clean.startsWith("91")) {
     return /^[6-9]\d{9}$/.test(clean.slice(2))
   }
@@ -150,7 +152,9 @@ router.post("/generate-invoice", verifyToken, async (req, res) => {
     if (!tourName) {
       return res.status(400).json({ message: "Tour name is required" })
     }
-    const invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate)
+    const userDoc = await User.findById(req.user.id).select("invoicePrefix")
+    const customPrefix = userDoc?.invoicePrefix || "YHB"
+    const invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate, customPrefix)
     res.json({ invoiceNo })
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -255,15 +259,17 @@ router.post("/", verifyToken, async (req, res) => {
       })
     }
 
+    // Fetch user settings for invoice prefix if available
+    const userDoc = await User.findById(req.user.id).select("invoicePrefix")
+    const customPrefix = userDoc?.invoicePrefix || "YHB"
+
     // Single source of truth for invoiceNo: ensure user-uniqueness
     let invoiceNo = clientInvoiceNo
     if (invoiceNo) {
       const existing = await Booking.findOne({ userId: req.user.id, invoiceNo })
       if (existing) {
-        invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate)
+        invoiceNo = null
       }
-    } else {
-      invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate)
     }
 
     const { start: normalizedJourneyDate } = getDayBounds(journeyDate)
@@ -283,7 +289,7 @@ router.post("/", verifyToken, async (req, res) => {
         : []
 
     const newBooking = new Booking({
-      invoiceNo,
+      invoiceNo: "PENDING",
       date: req.body.date ? new Date(req.body.date) : new Date(),
       tourName,
       journeyDate: normalizedJourneyDate,
@@ -302,12 +308,31 @@ router.post("/", verifyToken, async (req, res) => {
       userId: req.user.id,
     })
 
-    await newBooking.save()
-    res.status(201).json(newBooking)
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({ message: "Duplicate booking invoice number. Please try again." })
+    let savedBooking = null
+    let attempts = 0
+    while (!savedBooking && attempts < 5) {
+      attempts++
+      try {
+        if (!invoiceNo || attempts > 1) {
+          invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate, customPrefix)
+        }
+        newBooking.invoiceNo = invoiceNo
+        savedBooking = await newBooking.save()
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNo) {
+          invoiceNo = null // regenerate on next attempt
+        } else {
+          throw err
+        }
+      }
     }
+
+    if (!savedBooking) {
+      return res.status(409).json({ message: "Could not generate a unique invoice number. Please try again." })
+    }
+
+    res.status(201).json(savedBooking)
+  } catch (error) {
     res.status(400).json({ message: error.message })
   }
 })

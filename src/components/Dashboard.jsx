@@ -56,11 +56,20 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [show2FADisable, setShow2FADisable] = useState(false)
   const [disable2FACode, setDisable2FACode] = useState("")
   const [companySettings, setCompanySettings] = useState({
-    companyName: user?.companyName || "XYZ Tourism",
+    companyName: user?.companyName || "Yatra Tours",
     companyTagline: user?.companyTagline || "Tourism & Travels",
-    companyHeadquarters: user?.companyHeadquarters || "City, State, 123456",
-    companyPhone: user?.companyPhone || "+91 98765 43210",
+    companyHeadquarters: user?.companyHeadquarters || "",
+    companyPhone: user?.companyPhone || "",
     companyLogo: user?.companyLogo || "",
+    gstNumber: user?.gstNumber || "",
+    invoicePrefix: user?.invoicePrefix || "YHB",
+    receiptPrefix: user?.receiptPrefix || "REC",
+    termsAndConditions: user?.termsAndConditions || [
+      "Valid Aadhar card is strictly required for all travelers.",
+      "Advance payment is non-refundable upon confirmation.",
+      "Final balance must be settled 24 hours prior to departure.",
+      "Company is not liable for itinerary changes due to weather.",
+    ],
     bankDetails: user?.bankDetails || {
       accountName: "",
       accountNumber: "",
@@ -71,6 +80,35 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     organizers: user?.organizers || [],
   })
   const [isEditingCompany, setIsEditingCompany] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      setCompanySettings({
+        companyName: user.companyName || "Yatra Tours",
+        companyTagline: user.companyTagline || "Tourism & Travels",
+        companyHeadquarters: user.companyHeadquarters || "",
+        companyPhone: user.companyPhone || "",
+        companyLogo: user.companyLogo || "",
+        gstNumber: user.gstNumber || "",
+        invoicePrefix: user.invoicePrefix || "YHB",
+        receiptPrefix: user.receiptPrefix || "REC",
+        termsAndConditions: user.termsAndConditions || [
+          "Valid Aadhar card is strictly required for all travelers.",
+          "Advance payment is non-refundable upon confirmation.",
+          "Final balance must be settled 24 hours prior to departure.",
+          "Company is not liable for itinerary changes due to weather.",
+        ],
+        bankDetails: user.bankDetails || {
+          accountName: "",
+          accountNumber: "",
+          ifscCode: "",
+          bankName: "",
+          upiId: "",
+        },
+        organizers: user.organizers || [],
+      })
+    }
+  }, [user])
 
   const formatIndianPhone = (value) => {
     return value
@@ -377,7 +415,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             <Compass size={18} strokeWidth={2.5} />
           </div>
           <h1 className="font-black text-sm tracking-tight text-slate-900">
-            {user?.userName || "SB TOURISM"}
+            {user?.companyName || user?.userName || "YatraHub"}
           </h1>
         </div>
         <button

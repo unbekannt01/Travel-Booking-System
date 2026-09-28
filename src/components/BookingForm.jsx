@@ -340,6 +340,37 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
   const [showSeatMap, setShowSeatMap] = useState(false)
   const [activePassengerIndex, setActivePassengerIndex] = useState(0)
 
+  const bookedSeats = useMemo(() => {
+    if (!formData.tourName || !formData.journeyDate) return []
+
+    const targetDate = toDateInputValue(formData.journeyDate)
+
+    const relevantBookings = bookings.filter((b) => {
+      const isSameTour = b.tourName === formData.tourName
+      const bookingDate = toDateInputValue(b.journeyDate || b.date)
+      const isSameDate = bookingDate === targetDate
+      const isNotCurrentBooking = b.id !== formData.id && b._id !== formData.id && b.id !== formData._id && b._id !== formData._id
+      const isNotCancelled = b.status !== "Cancelled" && b.status !== "cancelled"
+      return isSameTour && isSameDate && isNotCurrentBooking && isNotCancelled
+    })
+
+    const seats = []
+    relevantBookings.forEach((booking) => {
+      booking.passengers.forEach((passenger) => {
+        if (passenger.seatId) {
+          seats.push({
+            seatId: passenger.seatId,
+            passengerName: passenger.name,
+            bookingId: booking._id || booking.id,
+            invoiceNo: booking.invoiceNo,
+          })
+        }
+      })
+    })
+
+    return seats
+  }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
+
   const calculateTotal = (passengers, tourName) => {
     const tour = tours.find((t) => t.name === tourName)
     if (!tour) return 0
@@ -357,33 +388,6 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
     }, 0)
   }
 
-  const generateInvoiceNo = (tourName, journeyDate) => {
-    if (!tourName || !journeyDate) return `YHB-${Math.floor(Math.random() * 9000) + 1000}`
-
-    // Extract destination code (first 3 chars of name or custom mapping)
-    const destCode = tourName.substring(0, 3).toUpperCase()
-
-    // Extract month code (JAN, FEB, etc.)
-    const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-    const dateObj = new Date(journeyDate)
-    const monthCode = months[dateObj.getMonth()]
-
-    // Count existing bookings for this tour/month to get the sequence
-    const count =
-      bookings.filter((b) => {
-        const bDate = new Date(b.journeyDate || b.date)
-        return (
-          b.tourName === tourName &&
-          bDate.getMonth() === dateObj.getMonth() &&
-          bDate.getFullYear() === dateObj.getFullYear()
-        )
-      }).length + 1
-
-    const seq = count.toString().padStart(3, "0")
-
-    return `YHB-${destCode}-${monthCode}-${seq}`
-  }
-
   const handleTourSelect = (tourName) => {
     if (tourName === "custom") {
       setFormData({ ...formData, tourName: "" })
@@ -392,8 +396,6 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
     const tour = tours.find((t) => t.name === tourName)
     if (tour) {
       const newTotal = calculateTotal(formData.passengers, tour.name)
-      const newInvoiceNo = generateInvoiceNo(tour.name, tour.journeyDate || formData.journeyDate)
-
       const seatLayoutType = tour.busType?.startsWith("2x2") ? "2x2" : "2x1"
 
       setFormData((prev) => ({
@@ -403,7 +405,7 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
         busType: tour.busType,
         journeyDate: tour.journeyDate || prev.journeyDate,
         totalAmount: newTotal,
-        invoiceNo: editData?.invoiceNo || newInvoiceNo,
+        invoiceNo: editData?.invoiceNo || "",
         isFixedPrice: tour.isFixedPrice,
         seatLayout: seatLayoutType,
       }))
@@ -533,37 +535,6 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
 
     onSave(formData)
   }
-
-  const bookedSeats = useMemo(() => {
-    if (!formData.tourName || !formData.journeyDate) return []
-
-    const targetDate = toDateInputValue(formData.journeyDate)
-
-    const relevantBookings = bookings.filter((b) => {
-      const isSameTour = b.tourName === formData.tourName
-      const bookingDate = toDateInputValue(b.journeyDate || b.date)
-      const isSameDate = bookingDate === targetDate
-      const isNotCurrentBooking = b.id !== formData.id && b._id !== formData.id && b.id !== formData._id && b._id !== formData._id
-      const isNotCancelled = b.status !== "Cancelled" && b.status !== "cancelled"
-      return isSameTour && isSameDate && isNotCurrentBooking && isNotCancelled
-    })
-
-    const seats = []
-    relevantBookings.forEach((booking) => {
-      booking.passengers.forEach((passenger) => {
-        if (passenger.seatId) {
-          seats.push({
-            seatId: passenger.seatId,
-            passengerName: passenger.name,
-            bookingId: booking._id || booking.id,
-            invoiceNo: booking.invoiceNo,
-          })
-        }
-      })
-    })
-
-    return seats
-  }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
 
   return (
     <form onSubmit={handleSubmit} className="space-y-10 pb-20 animate-entrance">

@@ -16,7 +16,7 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
       const data = await verify2FALogin(tempToken, verificationCode)
       onVerifySuccess(data.user)
     } catch (err) {
-      console.error("[v0] 2FA Verification Error:", err.message)
+      console.error("2FA Verification Error:", err.message)
       setError(err.message)
     } finally {
       setLoading(false)

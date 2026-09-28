@@ -1,5 +1,4 @@
 /* eslint-disable no-unused-vars */
-/* eslint-disable no-undef */
 import express from "express"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
@@ -22,11 +21,11 @@ const transporter = nodemailer.createTransport({
   },
 })
 
-transporter.verify((error, success) => {
+transporter.verify((error) => {
   if (error) {
-    console.log("[v0] Transporter verification failed:", error.message)
+    console.error("Transporter verification failed:", error.message)
   } else {
-    console.log("[v0] Server is ready to take our messages")
+    console.log("Transporter server is ready to take messages")
   }
 })
 
@@ -46,6 +45,24 @@ const checkRateLimit = async (user) => {
   return true
 }
 */
+
+const formatUserResponse = (user) => ({
+  id: user._id,
+  userName: user.userName,
+  email: user.email,
+  companyName: user.companyName,
+  companyTagline: user.companyTagline,
+  companyHeadquarters: user.companyHeadquarters,
+  companyPhone: user.companyPhone,
+  companyLogo: user.companyLogo,
+  gstNumber: user.gstNumber || "",
+  invoicePrefix: user.invoicePrefix || "YHB",
+  receiptPrefix: user.receiptPrefix || "REC",
+  termsAndConditions: user.termsAndConditions || [],
+  bankDetails: user.bankDetails,
+  organizers: user.organizers,
+  twoFactorEnabled: user.twoFactorEnabled,
+})
 
 router.post("/register", async (req, res) => {
   try {
@@ -77,22 +94,11 @@ router.post("/register", async (req, res) => {
     res.status(201).json({
       token,
       tokenId,
-      user: {
-        id: newUser._id,
-        userName,
-        email,
-        companyName: newUser.companyName,
-        companyTagline: newUser.companyTagline,
-        companyHeadquarters: newUser.companyHeadquarters,
-        companyPhone: newUser.companyPhone,
-        companyLogo: newUser.companyLogo,
-        organizers: newUser.organizers,
-        twoFactorEnabled: newUser.twoFactorEnabled,
-      },
+      user: formatUserResponse(newUser),
       message: "Registration successful",
     })
   } catch (error) {
-    console.error("[v0] Registration error:", error.message)
+    console.error("Registration error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -130,7 +136,7 @@ router.post("/setup-2fa", async (req, res) => {
       qrCode: qrCodeUrl,
     })
   } catch (error) {
-    console.error("[v0] Setup 2FA error:", error.message)
+    console.error("Setup 2FA error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -172,7 +178,7 @@ router.post("/verify-2fa-setup", async (req, res) => {
       twoFactorEnabled: true,
     })
   } catch (error) {
-    console.error("[v0] Verify 2FA setup error:", error.message)
+    console.error("Verify 2FA setup error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -235,23 +241,11 @@ router.post("/login", async (req, res) => {
     res.json({
       token,
       tokenId,
-      user: {
-        id: user._id,
-        userName: user.userName,
-        email: user.email,
-        companyName: user.companyName,
-        companyTagline: user.companyTagline,
-        companyHeadquarters: user.companyHeadquarters,
-        companyPhone: user.companyPhone,
-        companyLogo: user.companyLogo,
-        bankDetails: user.bankDetails,
-        organizers: user.organizers,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      user: formatUserResponse(user),
       message: "Login successful",
     })
   } catch (error) {
-    console.error("[v0] Login error:", error.message)
+    console.error("Login error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -310,22 +304,11 @@ router.post("/verify-2fa-login", async (req, res) => {
     res.json({
       token,
       tokenId,
-      user: {
-        id: user._id,
-        userName: user.userName,
-        email: user.email,
-        companyName: user.companyName,
-        companyTagline: user.companyTagline,
-        companyHeadquarters: user.companyHeadquarters,
-        companyPhone: user.companyPhone,
-        companyLogo: user.companyLogo,
-        organizers: user.organizers,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      user: formatUserResponse(user),
       message: "Login successful",
     })
   } catch (error) {
-    console.error("[v0] Verify 2FA login error:", error.message)
+    console.error("Verify 2FA login error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -359,7 +342,7 @@ router.post("/logout", async (req, res) => {
 
     res.json({ message: "Logout successful" })
   } catch (error) {
-    console.error("[v0] Logout error:", error.message)
+    console.error("Logout error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -382,21 +365,10 @@ router.put("/update-profile", async (req, res) => {
 
     res.json({
       message: "Profile updated successfully",
-      user: {
-        id: user._id,
-        userName: user.userName,
-        email: user.email,
-        companyName: user.companyName,
-        companyTagline: user.companyTagline,
-        companyHeadquarters: user.companyHeadquarters,
-        companyPhone: user.companyPhone,
-        companyLogo: user.companyLogo,
-        organizers: user.organizers,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      user: formatUserResponse(user),
     })
   } catch (error) {
-    console.error("[v0] Update profile error:", error.message)
+    console.error("Update profile error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -409,7 +381,19 @@ router.put("/update-company", async (req, res) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const { companyName, companyTagline, companyHeadquarters, companyPhone, companyLogo, organizers, bankDetails } = req.body
+    const {
+      companyName,
+      companyTagline,
+      companyHeadquarters,
+      companyPhone,
+      companyLogo,
+      gstNumber,
+      invoicePrefix,
+      receiptPrefix,
+      termsAndConditions,
+      organizers,
+      bankDetails,
+    } = req.body
 
     const updateData = {}
     if (companyName !== undefined) updateData.companyName = companyName
@@ -417,6 +401,12 @@ router.put("/update-company", async (req, res) => {
     if (companyHeadquarters !== undefined) updateData.companyHeadquarters = companyHeadquarters
     if (companyPhone !== undefined) updateData.companyPhone = companyPhone
     if (companyLogo !== undefined) updateData.companyLogo = companyLogo
+    if (gstNumber !== undefined) updateData.gstNumber = gstNumber
+    if (invoicePrefix !== undefined) updateData.invoicePrefix = (invoicePrefix || "YHB").toUpperCase().trim()
+    if (receiptPrefix !== undefined) updateData.receiptPrefix = (receiptPrefix || "REC").toUpperCase().trim()
+    if (termsAndConditions !== undefined && Array.isArray(termsAndConditions)) {
+      updateData.termsAndConditions = termsAndConditions
+    }
     if (organizers !== undefined) updateData.organizers = organizers
     if (bankDetails !== undefined) updateData.bankDetails = bankDetails
 
@@ -428,22 +418,10 @@ router.put("/update-company", async (req, res) => {
 
     res.json({
       message: "Company settings updated successfully",
-      user: {
-        id: user._id,
-        userName: user.userName,
-        email: user.email,
-        companyName: user.companyName,
-        companyTagline: user.companyTagline,
-        companyHeadquarters: user.companyHeadquarters,
-        companyPhone: user.companyPhone,
-        companyLogo: user.companyLogo,
-        bankDetails: user.bankDetails,
-        organizers: user.organizers,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      user: formatUserResponse(user),
     })
   } catch (error) {
-    console.error("[v0] Update company error:", error.message)
+    console.error("Update company error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -489,7 +467,7 @@ router.post("/disable-2fa", async (req, res) => {
       twoFactorEnabled: false,
     })
   } catch (error) {
-    console.error("[v0] Disable 2FA error:", error.message)
+    console.error("Disable 2FA error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -515,7 +493,7 @@ router.get("/active-sessions", verifyToken, async (req, res) => {
       })),
     })
   } catch (error) {
-    console.error("[v0] Error fetching active sessions:", error.message)
+    console.error("Error fetching active sessions:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -540,7 +518,7 @@ router.post("/logout-device/:tokenId", verifyToken, async (req, res) => {
 
     res.json({ message: "Session logged out successfully" })
   } catch (error) {
-    console.error("[v0] Error logging out device:", error.message)
+    console.error("Error logging out device:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -562,7 +540,7 @@ router.get("/validate-reset-token/:token", async (req, res) => {
 
     res.json({ valid: true, message: "Token is valid", email: user.email })
   } catch (error) {
-    console.error("[v0] Validate Reset Token Error:", error.message)
+    console.error("Validate Reset Token Error:", error.message)
     res.status(500).json({ valid: false, message: "Failed to validate token" })
   }
 })
@@ -584,7 +562,7 @@ router.get("/validate-2fa-token/:token", async (req, res) => {
 
     res.json({ valid: true, message: "Token is valid", email: user.email })
   } catch (error) {
-    console.error("[v0] Validate 2FA Token Error:", error.message)
+    console.error("Validate 2FA Token Error:", error.message)
     res.status(500).json({ valid: false, message: "Failed to validate token" })
   }
 })
@@ -637,7 +615,7 @@ router.post("/forgot-password", async (req, res) => {
 
     res.json({ message: "Reset link has been sent to your email" })
   } catch (error) {
-    console.error("[v0] Forgot Password Error:", error.message)
+    console.error("Forgot Password Error:", error.message)
     res
       .status(500)
       .json({ message: "Failed to send email. Ensure EMAIL_USER and EMAIL_PASS are set in environment variables." })
@@ -661,7 +639,7 @@ router.post("/reset-password", async (req, res) => {
 
     res.json({ message: "Password updated successfully" })
   } catch (error) {
-    console.error("[v0] Reset Password Error:", error.message)
+    console.error("Reset Password Error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })
@@ -713,7 +691,7 @@ router.post("/request-2fa-recovery", async (req, res) => {
 
     res.json({ message: "Recovery link has been sent to your email" })
   } catch (error) {
-    console.error("[v0] 2FA Recovery Error:", error.message)
+    console.error("2FA Recovery Error:", error.message)
     res.status(500).json({ message: "Failed to send recovery email." })
   }
 })
@@ -754,7 +732,7 @@ router.post("/finalize-2fa-recovery", async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("[v0] Finalize 2FA Recovery Error:", error.message)
+    console.error("Finalize 2FA Recovery Error:", error.message)
     res.status(500).json({ message: error.message })
   }
 })

@@ -1,4 +1,4 @@
-import { Shield, Building2, Check, Edit3, X, Landmark } from "lucide-react"
+import { Shield, Building2, Check, Edit3, X, Landmark, FileText } from "lucide-react"
 import { useToast } from "../common/ToastContext"
 
 export default function SettingsPanel({
@@ -156,6 +156,62 @@ export default function SettingsPanel({
                 disabled={!isEditingCompany}
                 className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50"
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                GST Number (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 24AAAAA0000A1Z5"
+                value={companySettings.gstNumber || ""}
+                onChange={(e) =>
+                  setCompanySettings({
+                    ...companySettings,
+                    gstNumber: e.target.value.toUpperCase().trim(),
+                  })
+                }
+                disabled={!isEditingCompany}
+                className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50 uppercase"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                  Invoice Prefix
+                </label>
+                <input
+                  type="text"
+                  placeholder="YHB"
+                  value={companySettings.invoicePrefix || "YHB"}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      invoicePrefix: e.target.value.toUpperCase().trim(),
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50 uppercase"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-wider">
+                  Receipt Prefix
+                </label>
+                <input
+                  type="text"
+                  placeholder="REC"
+                  value={companySettings.receiptPrefix || "REC"}
+                  onChange={(e) =>
+                    setCompanySettings({
+                      ...companySettings,
+                      receiptPrefix: e.target.value.toUpperCase().trim(),
+                    })
+                  }
+                  disabled={!isEditingCompany}
+                  className="w-full px-4 py-3 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-bold text-sm disabled:opacity-50 uppercase"
+                />
+              </div>
             </div>
           </div>
 
@@ -472,6 +528,75 @@ export default function SettingsPanel({
             </div>
           </div>
 
+          {/* Terms & Conditions */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-indigo-600" />
+                <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Terms & Conditions (Printed on Invoices)
+                </label>
+              </div>
+              {isEditingCompany && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newTC = [...(companySettings.termsAndConditions || [])]
+                    newTC.push("")
+                    setCompanySettings({
+                      ...companySettings,
+                      termsAndConditions: newTC,
+                    })
+                  }}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                >
+                  <span>+ Add Policy Line</span>
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {(companySettings.termsAndConditions || []).map((term, index) => (
+                <div key={index} className="flex gap-2 items-center">
+                  <span className="text-xs font-black text-slate-400 w-5 text-right">{index + 1}.</span>
+                  <input
+                    type="text"
+                    placeholder="Enter policy statement"
+                    value={term}
+                    onChange={(e) => {
+                      const newTC = [...(companySettings.termsAndConditions || [])]
+                      newTC[index] = e.target.value
+                      setCompanySettings({
+                        ...companySettings,
+                        termsAndConditions: newTC,
+                      })
+                    }}
+                    disabled={!isEditingCompany}
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-medium text-xs disabled:opacity-50"
+                  />
+                  {isEditingCompany && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTC = [...(companySettings.termsAndConditions || [])]
+                        newTC.splice(index, 1)
+                        setCompanySettings({
+                          ...companySettings,
+                          termsAndConditions: newTC,
+                        })
+                      }}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {(!companySettings.termsAndConditions || companySettings.termsAndConditions.length === 0) && (
+                <p className="text-xs text-slate-400 italic">No terms configured</p>
+              )}
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-50">
             {isEditingCompany ? (
               <>
@@ -480,15 +605,20 @@ export default function SettingsPanel({
                   onClick={() => {
                     setIsEditingCompany(false)
                     setCompanySettings({
-                      companyName: user?.companyName || "XYZ Tourism",
-                      companyTagline:
-                        user?.companyTagline || "Tourism & Travels",
-                      companyHeadquarters:
-                        user?.companyHeadquarters ||
-                        "City, State, 123456",
-                      companyPhone:
-                        user?.companyPhone || "+91 98765 43210",
+                      companyName: user?.companyName || "Yatra Tours",
+                      companyTagline: user?.companyTagline || "Tourism & Travels",
+                      companyHeadquarters: user?.companyHeadquarters || "",
+                      companyPhone: user?.companyPhone || "",
                       companyLogo: user?.companyLogo || "",
+                      gstNumber: user?.gstNumber || "",
+                      invoicePrefix: user?.invoicePrefix || "YHB",
+                      receiptPrefix: user?.receiptPrefix || "REC",
+                      termsAndConditions: user?.termsAndConditions || [
+                        "Valid Aadhar card is strictly required for all travelers.",
+                        "Advance payment is non-refundable upon confirmation.",
+                        "Final balance must be settled 24 hours prior to departure.",
+                        "Company is not liable for itinerary changes due to weather.",
+                      ],
                       bankDetails: user?.bankDetails || {
                         accountName: "",
                         accountNumber: "",

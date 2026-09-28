@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
 import TwoFactorSetup from "./components/TwoFactorSetup"
@@ -10,44 +10,33 @@ import { getAuthToken } from "./data/client"
 
 export default function App() {
   const [user, setUser] = useState(() => {
+    const token = getAuthToken()
+    if (!token) return null
     const saved = localStorage.getItem("user")
-    return saved ? JSON.parse(saved) : null
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        localStorage.removeItem("user")
+      }
+    } else {
+      localStorage.removeItem("auth-token")
+      localStorage.removeItem("tokenId")
+    }
+    return null
   })
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading] = useState(false)
   const [twoFactorToken, setTwoFactorToken] = useState(null)
   const [show2FASetup, setShow2FASetup] = useState(false)
   const [temp2FAToken, setTemp2FAToken] = useState(null)
-  const [resetPasswordToken, setResetPasswordToken] = useState(null)
-  const [recover2FAToken, setRecover2FAToken] = useState(null)
-
-  useEffect(() => {
-    const token = getAuthToken()
-    if (token && !user) {
-      const savedUser = localStorage.getItem("user")
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser))
-        } catch {
-          localStorage.removeItem("user")
-        }
-      } else {
-        localStorage.removeItem("auth-token")
-        localStorage.removeItem("tokenId")
-      }
-    }
-    setIsLoading(false)
-  }, [user])
-
-  useEffect(() => {
+  const [resetPasswordToken, setResetPasswordToken] = useState(() => {
     const path = window.location.pathname
-    if (path.startsWith("/reset-password/")) {
-      const token = path.split("/").pop()
-      setResetPasswordToken(token)
-    } else if (path.startsWith("/recover-2fa/")) {
-      const token = path.split("/").pop()
-      setRecover2FAToken(token)
-    }
-  }, [])
+    return path.startsWith("/reset-password/") ? path.split("/").pop() : null
+  })
+  const [recover2FAToken, setRecover2FAToken] = useState(() => {
+    const path = window.location.pathname
+    return path.startsWith("/recover-2fa/") ? path.split("/").pop() : null
+  })
 
   const handleLogout = async () => {
     await logout()

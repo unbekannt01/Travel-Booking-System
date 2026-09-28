@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 import express from "express"
 import mongoose from "mongoose"
 import cors from "cors"
@@ -43,18 +42,18 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/sb_tou
 mongoose
   .connect(MONGODB_URI)
   .then(async () => {
-    console.log("[v0] Connected to MongoDB")
+    console.log("Connected to MongoDB")
     try {
       const indexes = await Booking.collection.indexes()
       const oldIdx = indexes.find((i) => i.name === "invoiceNo_1" && i.unique)
       if (oldIdx) {
         await Booking.collection.dropIndex("invoiceNo_1")
-        console.log("[v0] Dropped legacy global unique invoiceNo_1 index")
+        console.log("Dropped legacy global unique invoiceNo_1 index")
       }
       await Booking.syncIndexes()
     } catch {
       // Ignore if collection does not exist yet
     }
-    app.listen(PORT, () => console.log(`[v0] Server running on port ${PORT}`))
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
   })
-  .catch((err) => console.error("[v0] MongoDB connection error:", err))
+  .catch((err) => console.error("MongoDB connection error:", err))

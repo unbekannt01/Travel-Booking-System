@@ -15,10 +15,19 @@ export default function InvoiceView({ booking, onBack, user }) {
 
   // ── Build the full HTML for the invoice (used in print window) ──
   const buildInvoiceHTML = () => {
-    const companyName = user?.companyName?.toUpperCase() || "XYZ TOURISM"
+    const companyName = user?.companyName?.toUpperCase() || "YATRA TOURS"
     const companyTagline = user?.companyTagline || "Tourism & Travels"
-    const companyHQ = user?.companyHeadquarters || "Junagadh, Gujarat, 362001"
-    const companyPhone = user?.companyPhone || "+91 98765 43210"
+    const companyHQ = user?.companyHeadquarters || ""
+    const companyPhone = user?.companyPhone || ""
+    const gstHTML = user?.gstNumber ? `<div style="font-size:11px;font-weight:900;color:#4f46e5;margin:2px 0;">GSTIN: ${user.gstNumber}</div>` : ""
+    const defaultTC = [
+      "Valid Aadhar card is strictly required for all travelers.",
+      "Advance payment is non-refundable upon confirmation.",
+      "Final balance must be settled 24 hours prior to departure.",
+      "Company is not liable for itinerary changes due to weather.",
+    ]
+    const tcList = user?.termsAndConditions?.length ? user.termsAndConditions : defaultTC
+    const tcHTML = tcList.map((t) => `<li>• ${t}</li>`).join("")
     const logoHTML = user?.companyLogo
       ? `<img src="${user.companyLogo}" alt="logo" style="width:56px;height:56px;object-fit:contain;" />`
       : `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
@@ -153,6 +162,7 @@ export default function InvoiceView({ booking, onBack, user }) {
         <div class="label">Headquarters</div>
         <div style="font-size:12px;font-weight:700;color:#334155;margin-top:2px;">📍 ${companyHQ}</div>
         <div style="font-size:12px;font-weight:700;color:#334155;margin-top:2px;">📞 ${companyPhone}</div>
+        ${gstHTML}
       </div>
       ${organizersHTML ? `<div><div class="label">Tour Organizers</div>${organizersHTML}</div>` : ""}
       <div>
@@ -242,10 +252,7 @@ export default function InvoiceView({ booking, onBack, user }) {
     <div class="tc">
       <h4>⚑ Booking Policy & T&C</h4>
       <ul style="list-style:none;">
-        <li>• Valid Aadhar card is strictly required for all travelers.</li>
-        <li>• Advance payment is non-refundable upon confirmation.</li>
-        <li>• Final balance must be settled 24 hours prior to departure.</li>
-        <li>• Company is not liable for itinerary changes due to weather.</li>
+        ${tcHTML}
       </ul>
       ${user?.bankDetails?.upiId || user?.bankDetails?.accountNumber ? `
       <div style="margin-top:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:12px 14px;">
@@ -403,6 +410,11 @@ export default function InvoiceView({ booking, onBack, user }) {
                     <Phone size={13} style={{ color: "#4f46e5" }} />
                     {user?.companyPhone || "+91 98765 43210"}
                   </p>
+                  {user?.gstNumber && (
+                    <p className="text-xs font-bold text-slate-600 mt-1">
+                      GSTIN: <span className="font-mono text-slate-800 font-black">{user.gstNumber}</span>
+                    </p>
+                  )}
                 </div>
                 {user?.organizers?.length > 0 && (
                   <div>
@@ -513,10 +525,14 @@ export default function InvoiceView({ booking, onBack, user }) {
                   <CheckCircle2 size={13} style={{ color: "#4f46e5" }} /> Booking Policy & T&C
                 </h4>
                 <ul className="text-[10px] font-bold text-slate-400 space-y-1.5 uppercase tracking-tight leading-relaxed list-none">
-                  <li>• Valid Aadhar card is strictly required for all travelers.</li>
-                  <li>• Advance payment is non-refundable upon confirmation.</li>
-                  <li>• Final balance must be settled 24 hours prior to departure.</li>
-                  <li>• Company is not liable for itinerary changes due to weather.</li>
+                  {(user?.termsAndConditions?.length ? user.termsAndConditions : [
+                    "Valid Aadhar card is strictly required for all travelers.",
+                    "Advance payment is non-refundable upon confirmation.",
+                    "Final balance must be settled 24 hours prior to departure.",
+                    "Company is not liable for itinerary changes due to weather.",
+                  ]).map((term, i) => (
+                    <li key={i}>• {term}</li>
+                  ))}
                 </ul>
 
                 {(user?.bankDetails?.upiId || user?.bankDetails?.accountNumber) && (

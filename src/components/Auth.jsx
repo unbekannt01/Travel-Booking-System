@@ -47,7 +47,7 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
         onAuthSuccess(data.user)
       }
     } catch (err) {
-      console.error("[v0] Auth Error:", err.message)
+      console.error("Auth Error:", err.message)
       setError(err.message || "Authentication failed. Please check your connection.")
     } finally {
       setLoading(false)

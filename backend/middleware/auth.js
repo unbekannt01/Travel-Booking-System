@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 import jwt from "jsonwebtoken"
 import User from "../models/User.js"
 
@@ -25,7 +24,7 @@ const verifyToken = async (req, res, next) => {
     req.user = { id: decoded.id, email: user.email, name: user.name }
     next()
   } catch (error) {
-    console.error("[v0] Token verification error:", error.message)
+    console.error("Token verification error:", error.message)
     res.status(401).json({ message: "Invalid or expired token" })
   }
 }

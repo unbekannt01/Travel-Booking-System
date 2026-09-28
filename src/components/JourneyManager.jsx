@@ -3,7 +3,6 @@ import { MapPin, Check, Download, MessageCircle, Mail } from "lucide-react"
 import { togglePassengerCheckin } from "../data/bookings"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
-import { maskAadhaar } from "../utils/formatters"
 
 export default function JourneyManager({ bookings, onUpdateBooking }) {
   const { toast } = useToast()

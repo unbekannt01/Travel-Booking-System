@@ -18,8 +18,6 @@ import { formatDisplayDate } from "../utils/date";
 
 export default function PassengerManagement({
   bookings,
-  onUpdateBooking,
-  onDeleteBooking,
   onEditBooking,
 }) {
   const [selectedTour, setSelectedTour] = useState("all");
@@ -153,7 +151,6 @@ export default function PassengerManagement({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredBookings.flatMap((booking) => {
-                const firstPassengerIndex = 0;
                 return booking.passengers.map((p, idx) => {
                   const passengerKey = `${booking._id || booking.id}-${p._id || idx}`
                   const isAadhaarVisible = !!unmaskedAadhaar[passengerKey]

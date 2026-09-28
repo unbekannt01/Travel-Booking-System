@@ -4,7 +4,7 @@
  */
 export function isValidIndianPhone(phone) {
   if (!phone) return false
-  const clean = phone.toString().replace(/[\s\-\(\)\+]/g, "")
+  const clean = phone.toString().replace(/[\s\-()+]/g, "")
   if (clean.length === 12 && clean.startsWith("91")) {
     return /^[6-9]\d{9}$/.test(clean.slice(2))
   }
