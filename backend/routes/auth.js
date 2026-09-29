@@ -61,6 +61,7 @@ const formatUserResponse = (user) => ({
   invoiceTheme: user.invoiceTheme || "classic",
   invoiceColor: user.invoiceColor || "#4f46e5",
   documentLanguage: user.documentLanguage || "en",
+  ticketTemplate: user.ticketTemplate || "classic",
   termsAndConditions: user.termsAndConditions || [],
   bankDetails: user.bankDetails,
   organizers: user.organizers,
@@ -396,6 +397,7 @@ router.put("/update-company", async (req, res) => {
       invoiceTheme,
       invoiceColor,
       documentLanguage,
+      ticketTemplate,
       termsAndConditions,
       organizers,
       bankDetails,
@@ -418,6 +420,9 @@ router.put("/update-company", async (req, res) => {
     }
     if (documentLanguage !== undefined && ["en", "hi", "gu"].includes(documentLanguage)) {
       updateData.documentLanguage = documentLanguage
+    }
+    if (ticketTemplate !== undefined && ["classic", "modern", "heritage", "corporate", "thermal", "transit"].includes(ticketTemplate)) {
+      updateData.ticketTemplate = ticketTemplate
     }
     if (termsAndConditions !== undefined && Array.isArray(termsAndConditions)) {
       updateData.termsAndConditions = termsAndConditions

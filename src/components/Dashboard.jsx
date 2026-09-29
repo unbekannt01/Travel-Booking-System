@@ -70,6 +70,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     invoiceTheme: user?.invoiceTheme || "classic",
     invoiceColor: user?.invoiceColor || "#4f46e5",
     documentLanguage: user?.documentLanguage || "en",
+    ticketTemplate: user?.ticketTemplate || "classic",
     termsAndConditions: user?.termsAndConditions || [
       "Valid Aadhar card is strictly required for all travelers.",
       "Advance payment is non-refundable upon confirmation.",
@@ -101,6 +102,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         invoiceTheme: user.invoiceTheme || "classic",
         invoiceColor: user.invoiceColor || "#4f46e5",
         documentLanguage: user.documentLanguage || "en",
+        ticketTemplate: user.ticketTemplate || "classic",
         termsAndConditions: user.termsAndConditions || [
           "Valid Aadhar card is strictly required for all travelers.",
           "Advance payment is non-refundable upon confirmation.",

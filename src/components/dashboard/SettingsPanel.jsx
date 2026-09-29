@@ -1,6 +1,7 @@
-import { Shield, Building2, Check, Edit3, X, Landmark, FileText, Palette, Sparkles, Languages } from "lucide-react"
+import { Shield, Building2, Check, Edit3, X, Landmark, FileText, Palette, Sparkles, Languages, LayoutTemplate } from "lucide-react"
 import { useToast } from "../common/ToastContext"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
+import { TICKET_TEMPLATES } from "../tickets/ticketRegistry"
 
 export default function SettingsPanel({
   user,
@@ -761,6 +762,66 @@ export default function SettingsPanel({
                     </div>
                   )
                 })()}
+              </div>
+            </div>
+          </div>
+
+          {/* Ticket & Boarding Pass Design Template */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LayoutTemplate size={18} className="text-indigo-600" />
+                <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Ticket & Boarding Pass Design Template
+                </label>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">
+                Applied automatically to all customer boarding passes
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {TICKET_TEMPLATES.map((tmpl) => {
+                  const isSelected = (companySettings.ticketTemplate || "classic") === tmpl.id
+                  return (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      disabled={!isEditingCompany}
+                      onClick={() => setCompanySettings({ ...companySettings, ticketTemplate: tmpl.id })}
+                      className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
+                        isSelected
+                          ? "border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 shadow-xs"
+                          : "border-slate-200 hover:border-slate-300 bg-white"
+                      } ${!isEditingCompany ? "opacity-75 cursor-default" : "cursor-pointer"}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: tmpl.accentDefault }}
+                          />
+                          <span className="text-xs font-black text-slate-900">{tmpl.name}</span>
+                        </div>
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                          {tmpl.badge}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed mb-3">
+                        {tmpl.description}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] pt-2 border-t border-slate-100">
+                        <span className="text-slate-400 font-bold">{tmpl.previewStyle}</span>
+                        {isSelected && (
+                          <span className="flex items-center gap-1 font-black text-indigo-600">
+                            <Check size={12} strokeWidth={3} /> Selected
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>

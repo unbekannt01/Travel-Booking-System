@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema(
       enum: ["en", "hi", "gu"],
       default: "en",
     },
+    ticketTemplate: {
+      type: String,
+      enum: ["classic", "modern", "heritage", "corporate", "thermal", "transit"],
+      default: "classic",
+    },
     termsAndConditions: {
       type: [String],
       default: [

@@ -18,12 +18,14 @@ import {
   Banknote,
   X,
   Ticket,
+  Layers,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
 import BoardingPassModal from "./common/BoardingPassModal"
+import SeatLayoutModal from "./common/SeatLayoutModal"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
@@ -83,6 +85,10 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
 
   // Phase 3: Batch check-in loading
   const [batchLoading, setBatchLoading] = useState(null) // bookingId currently batch-processing
+
+  // Phase 6: Passenger Seat Layout modal state
+  const [showSeatLayoutModal, setShowSeatLayoutModal] = useState(false)
+  const [activeLayoutDeparture, setActiveLayoutDeparture] = useState(null)
 
   const uniqueTours = useMemo(() => [...new Set(bookings.map((b) => b.tourName))].filter(Boolean), [bookings])
 
@@ -476,6 +482,18 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
                 <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-20">
                   <button
                     type="button"
+                    onClick={() => {
+                      setShowExportOptions(false)
+                      setActiveLayoutDeparture(activeDepartureObj || (departures.length > 0 ? departures[0] : null))
+                      setShowSeatLayoutModal(true)
+                    }}
+                    className="w-full px-4 py-2.5 text-left hover:bg-indigo-50 font-black text-xs text-indigo-700 flex items-center gap-2 border-b border-slate-100"
+                  >
+                    <Layers size={14} className="text-indigo-600" />
+                    <span>Seat Layout Chart (PDF)</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handlePrintSeatLayout(true)}
                     className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-xs text-slate-700"
                   >
@@ -584,6 +602,18 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
                       <button
                         type="button"
                         onClick={() => {
+                          setActiveLayoutDeparture(dep)
+                          setShowSeatLayoutModal(true)
+                        }}
+                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all"
+                        title="Download / Print Passenger Seat Layout"
+                      >
+                        <Layers size={13} className="text-indigo-600" />
+                        <span>Layout</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
                           setSelectedDepartureKey(dep.key)
                           setViewMode("manifest")
                         }}
@@ -622,7 +652,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
                   📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
                 </p>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-3 flex-wrap items-center">
                 <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center">
                   <p className="text-[10px] font-black uppercase text-indigo-200">Boarded</p>
                   <p className="text-xl font-black">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
@@ -631,6 +661,17 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
                   <p className="text-[10px] font-black uppercase text-indigo-200">Occupancy</p>
                   <p className="text-xl font-black">{activeDepartureObj.occupancyPct}%</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveLayoutDeparture(activeDepartureObj)
+                    setShowSeatLayoutModal(true)
+                  }}
+                  className="bg-white text-indigo-900 hover:bg-indigo-50 px-4 py-2.5 rounded-2xl text-center font-black text-xs shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Layers size={15} className="text-indigo-600" />
+                  <span>Seat Layout PDF</span>
+                </button>
               </div>
             </div>
           )}
@@ -1134,6 +1175,19 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
           user={user}
           initialPassengerIndex={boardingPassTarget.paxIndex}
           onClose={() => setBoardingPassTarget(null)}
+        />
+      )}
+
+      {/* Phase 6: Passenger Seat Layout Modal */}
+      {showSeatLayoutModal && (
+        <SeatLayoutModal
+          departure={activeLayoutDeparture}
+          bookings={bookings}
+          user={user}
+          onClose={() => {
+            setShowSeatLayoutModal(false)
+            setActiveLayoutDeparture(null)
+          }}
         />
       )}
     </div>

@@ -5,18 +5,18 @@ import {
   Printer,
   Share2,
   Bus,
-  MapPin,
-  Clock,
-  Phone,
-  Calendar,
-  ShieldCheck,
-  CheckCircle2,
   Languages,
   User,
+  LayoutTemplate,
 } from "lucide-react"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { formatDisplayDate } from "../../utils/date"
-import { maskAadhaar } from "../../utils/formatters"
+import {
+  TICKET_TEMPLATES,
+  getTicketTemplate,
+  buildBatchPrintableTicketsHTML,
+  buildSingleTicketCardHTML,
+} from "../tickets/ticketRegistry"
 
 export default function BoardingPassModal({
   booking,
@@ -26,16 +26,18 @@ export default function BoardingPassModal({
   initialPassengerIndex = 0,
 }) {
   const [selectedLang, setSelectedLang] = useState(user?.documentLanguage || "en")
+  const [selectedTemplate, setSelectedTemplate] = useState(
+    user?.ticketTemplate || "classic"
+  )
   const [selectedPaxIndex, setSelectedPaxIndex] = useState(
     initialPassengerIndex === "all" ? "all" : Number(initialPassengerIndex) || 0
   )
   const [qrCodes, setQrCodes] = useState({})
 
   const t = getDocumentTranslation(selectedLang)
-  const accentColor = user?.invoiceColor || "#4f46e5"
+  const accentColor = user?.invoiceColor || getTicketTemplate(selectedTemplate).accentDefault
   const companyName = user?.companyName || "YATRA TOURS"
   const companyPhone = user?.companyPhone || ""
-  const companyHQ = user?.companyHeadquarters || ""
   const busNumber =
     departure?.busNumber ||
     booking?.busNumber ||
@@ -47,7 +49,8 @@ export default function BoardingPassModal({
     ? `${primaryOrganizer.name} (${primaryOrganizer.phone})`
     : companyPhone || "Operator Office"
 
-  const passengers = useMemo(() => booking?.passengers || [], [booking?.passengers])
+  const rawPassengers = booking?.passengers
+  const passengers = useMemo(() => rawPassengers || [], [rawPassengers])
 
   // Generate QR codes for all passengers
   useEffect(() => {
@@ -57,7 +60,6 @@ export default function BoardingPassModal({
       for (let i = 0; i < passengers.length; i++) {
         const pax = passengers[i]
         const seat = pax.seatId || `P${i + 1}`
-        // QR format: invoiceNo + seatId as requested in spec
         const qrPayload = `${booking.invoiceNo}-${seat}`
         try {
           const url = await QRCode.toDataURL(qrPayload, {
@@ -81,370 +83,21 @@ export default function BoardingPassModal({
     }
   }, [booking, passengers])
 
-  const getDeckLabel = (seatId) => {
-    if (!seatId) return "Seat"
-    if (seatId.toLowerCase().startsWith("lower")) return "Lower Deck"
-    if (seatId.toLowerCase().startsWith("upper")) return "Upper Deck"
-    return "Reserved"
-  }
-
-  // Build printable HTML document for window.print()
-  const buildPrintableHTML = (paxIndex) => {
+  const handlePrint = (paxIndex) => {
     const listToPrint =
       paxIndex === "all"
-        ? passengers.map((p, idx) => ({ pax: p, idx }))
-        : [{ pax: passengers[paxIndex], idx: paxIndex }]
+        ? passengers.map((p, idx) => ({ pax: p, idx, qrUrl: qrCodes[idx] || "" }))
+        : [{ pax: passengers[paxIndex], idx: paxIndex, qrUrl: qrCodes[paxIndex] || "" }]
 
-    const ticketsHTML = listToPrint
-      .map(({ pax, idx }) => {
-        const seat = pax.seatId || "—"
-        const qrUrl = qrCodes[idx] || ""
-        const deckLabel = getDeckLabel(seat)
-        const isPaid = (booking.advanceReceived || 0) >= (booking.totalAmount || 0)
-        const dueAmount = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
+    const html = buildBatchPrintableTicketsHTML({
+      templateId: selectedTemplate,
+      booking,
+      passengersWithQRs: listToPrint,
+      user,
+      departure,
+      lang: selectedLang,
+    })
 
-        return `
-        <div class="ticket-card">
-          <!-- Main Left Section -->
-          <div class="ticket-main">
-            <!-- Header -->
-            <div class="ticket-header">
-              <div class="company-brand">
-                <h2>${companyName.toUpperCase()}</h2>
-                <p class="tagline">${user?.companyTagline || "Tourism & Travels"}</p>
-                <p class="hq">${companyHQ ? "📍 " + companyHQ : ""} ${companyPhone ? " | 📞 " + companyPhone : ""}</p>
-              </div>
-              <div class="ticket-badge">
-                <span class="badge-title">${t.boardingPass.toUpperCase()}</span>
-                <span class="badge-sub">${t.ticketVerifiedNotice}</span>
-              </div>
-            </div>
-
-            <!-- Tour & Journey Banner -->
-            <div class="tour-banner">
-              <div>
-                <span class="meta-label">${t.tourName.toUpperCase()}</span>
-                <div class="tour-title">${booking.tourName}</div>
-              </div>
-              <div style="text-align: right;">
-                <span class="meta-label">${t.journeyDate.toUpperCase()}</span>
-                <div class="journey-date">${formatDisplayDate(booking.journeyDate)}</div>
-              </div>
-            </div>
-
-            <!-- Passenger Details Grid -->
-            <div class="passenger-grid">
-              <div>
-                <span class="meta-label">${t.travelerName.toUpperCase()}</span>
-                <div class="meta-value-bold">${pax.name || "Passenger " + (idx + 1)}</div>
-                <div class="meta-sub">${pax.age ? pax.age + " Yrs" : ""} • ${pax.gender || ""} • ${pax.city || ""}${pax.aadhar ? " • " + maskAadhaar(pax.aadhar) : ""}</div>
-              </div>
-              <div>
-                <span class="meta-label">${t.busNumber.toUpperCase()}</span>
-                <div class="meta-value-bold">${busNumber}</div>
-                <div class="meta-sub">Invoice: #${booking.invoiceNo}</div>
-              </div>
-              <div>
-                <span class="meta-label">${t.emergencyContact.toUpperCase()}</span>
-                <div class="meta-value-bold">${organizerContact}</div>
-                <div class="meta-sub">Customer: ${booking.contactName} (${booking.contactPhone})</div>
-              </div>
-            </div>
-
-            <!-- Important Instructions -->
-            <div class="instructions-box">
-              <div class="inst-header">⚑ ${t.importantInstructions}</div>
-              <ul class="inst-list">
-                <li>• ${t.inst1}</li>
-                <li>• ${t.inst2}</li>
-                <li>• ${t.inst3}</li>
-                <li>• ${t.inst4}</li>
-              </ul>
-            </div>
-          </div>
-
-          <!-- Stub Right Section -->
-          <div class="ticket-stub">
-            <div class="stub-header">
-              <span class="stub-tag">${deckLabel.toUpperCase()}</span>
-              <div class="seat-badge">${seat}</div>
-              <span class="seat-title">${t.seatNumber}</span>
-            </div>
-
-            <div class="qr-container">
-              ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="qr-img"/>` : `<div class="qr-placeholder">QR CODE</div>`}
-              <span class="qr-label">${booking.invoiceNo}-${seat}</span>
-            </div>
-
-            <div class="stub-footer">
-              <div class="payment-status ${isPaid ? "paid" : "due"}">
-                ${isPaid ? t.confirmed : `Due: ₹${dueAmount.toLocaleString()}`}
-              </div>
-              <div class="stub-verify">${t.scanVerification}</div>
-            </div>
-          </div>
-        </div>
-        `
-      })
-      .join("")
-
-    return `<!DOCTYPE html>
-<html lang="${selectedLang}">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Boarding Passes - #${booking.invoiceNo}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background:#f8fafc; color:#0f172a; padding:20px; }
-  
-  .ticket-card {
-    max-width: 820px;
-    margin: 0 auto 28px;
-    background: #ffffff;
-    border: 2px solid #e2e8f0;
-    border-radius: 16px;
-    display: flex;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-    page-break-after: always;
-  }
-  .ticket-card:last-child {
-    page-break-after: avoid;
-  }
-
-  /* Left Main */
-  .ticket-main {
-    flex: 1;
-    padding: 24px 28px;
-    border-right: 2px dashed #cbd5e1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .ticket-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 1px solid #f1f5f9;
-    padding-bottom: 12px;
-  }
-  .company-brand h2 {
-    font-size: 20px;
-    font-weight: 900;
-    color: ${accentColor};
-    letter-spacing: -0.02em;
-  }
-  .company-brand .tagline {
-    font-size: 10px;
-    font-weight: 800;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-  .company-brand .hq {
-    font-size: 10px;
-    font-weight: 600;
-    color: #94a3b8;
-    margin-top: 2px;
-  }
-  .ticket-badge {
-    text-align: right;
-  }
-  .badge-title {
-    display: inline-block;
-    background: ${accentColor};
-    color: #fff;
-    font-size: 10px;
-    font-weight: 900;
-    padding: 3px 10px;
-    border-radius: 999px;
-    letter-spacing: 0.15em;
-  }
-  .badge-sub {
-    display: block;
-    font-size: 9px;
-    font-weight: 700;
-    color: #94a3b8;
-    margin-top: 4px;
-  }
-
-  .tour-banner {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 12px 18px;
-    margin: 14px 0;
-  }
-  .tour-title {
-    font-size: 16px;
-    font-weight: 900;
-    color: #0f172a;
-  }
-  .journey-date {
-    font-size: 15px;
-    font-weight: 900;
-    color: ${accentColor};
-  }
-
-  .passenger-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 14px;
-  }
-  .meta-label {
-    display: block;
-    font-size: 8px;
-    font-weight: 900;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    margin-bottom: 2px;
-  }
-  .meta-value-bold {
-    font-size: 13px;
-    font-weight: 900;
-    color: #0f172a;
-  }
-  .meta-sub {
-    font-size: 10px;
-    font-weight: 600;
-    color: #64748b;
-    margin-top: 1px;
-  }
-
-  .instructions-box {
-    background: #f8fafc;
-    border-radius: 10px;
-    padding: 10px 14px;
-    border: 1px solid #f1f5f9;
-  }
-  .inst-header {
-    font-size: 9px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #334155;
-    margin-bottom: 4px;
-  }
-  .inst-list {
-    list-style: none;
-    font-size: 8.5px;
-    font-weight: 600;
-    color: #64748b;
-    line-height: 1.5;
-  }
-
-  /* Right Stub */
-  .ticket-stub {
-    width: 210px;
-    background: #fafafa;
-    padding: 24px 18px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    text-align: center;
-  }
-  .stub-tag {
-    font-size: 9px;
-    font-weight: 900;
-    letter-spacing: 0.15em;
-    color: #64748b;
-    text-transform: uppercase;
-  }
-  .seat-badge {
-    font-size: 32px;
-    font-weight: 900;
-    color: ${accentColor};
-    letter-spacing: -0.04em;
-    line-height: 1.1;
-  }
-  .seat-title {
-    font-size: 9px;
-    font-weight: 800;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-
-  .qr-container {
-    margin: 12px 0;
-  }
-  .qr-img {
-    width: 110px;
-    height: 110px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 3px;
-    background: #fff;
-  }
-  .qr-placeholder {
-    width: 110px;
-    height: 110px;
-    background: #e2e8f0;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 900;
-    color: #64748b;
-  }
-  .qr-label {
-    display: block;
-    font-size: 9px;
-    font-family: monospace;
-    font-weight: 800;
-    color: #475569;
-    margin-top: 4px;
-  }
-
-  .payment-status {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 900;
-    padding: 3px 8px;
-    border-radius: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .payment-status.paid {
-    background: #ecfdf5;
-    color: #059669;
-  }
-  .payment-status.due {
-    background: #fffbeb;
-    color: #b45309;
-  }
-  .stub-verify {
-    font-size: 8px;
-    font-weight: 700;
-    color: #94a3b8;
-    text-transform: uppercase;
-    margin-top: 4px;
-  }
-
-  @page { size: A4 portrait; margin: 10mm; }
-  @media print {
-    body { background: #ffffff; padding: 0; }
-    .ticket-card { box-shadow: none; border-color: #cbd5e1; margin-bottom: 20px; }
-  }
-</style>
-</head>
-<body>
-  ${ticketsHTML}
-</body>
-</html>`
-  }
-
-  const handlePrint = (paxIndex) => {
-    const html = buildPrintableHTML(paxIndex)
     const win = window.open("", "_blank", "width=900,height=750")
     if (!win) {
       alert("Please allow popups to print boarding passes.")
@@ -455,29 +108,50 @@ export default function BoardingPassModal({
     win.focus()
     setTimeout(() => {
       win.print()
-    }, 500)
+    }, 450)
   }
 
   const handleShareWhatsApp = (pax) => {
     const seat = pax.seatId || "—"
-    const text = `*${companyName.toUpperCase()} — ${t.boardingPass.toUpperCase()}*\n\n*${t.tourName}:* ${booking.tourName}\n*${t.journeyDate}:* ${formatDisplayDate(booking.journeyDate)}\n*${t.travelerName}:* ${pax.name}\n*${t.seatNumber}:* ${seat} (${getDeckLabel(seat)})\n*${t.busNumber}:* ${busNumber}\n*Invoice #:* ${booking.invoiceNo}\n\n*${t.emergencyContact}:* ${organizerContact}\n\n_${t.inst1}_\n_${t.inst2}_\n\n*${t.wishJourney}*`
+    const text = `*${companyName.toUpperCase()} — ${t.boardingPass.toUpperCase()}*\n\n*${t.tourName}:* ${booking.tourName}\n*${t.journeyDate}:* ${formatDisplayDate(booking.journeyDate)}\n*${t.travelerName}:* ${pax.name}\n*${t.seatNumber}:* ${seat}\n*${t.busNumber}:* ${busNumber}\n*Invoice #:* ${booking.invoiceNo}\n\n*${t.emergencyContact}:* ${organizerContact}\n\n_${t.inst1}_\n_${t.inst2}_\n\n*${t.wishJourney}*`
     const phone = booking.contactPhone?.replace(/\D/g, "")
     const url = `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`
     window.open(url, "_blank")
   }
 
-  const activePax =
-    selectedPaxIndex === "all"
-      ? passengers[0] || {}
-      : passengers[selectedPaxIndex] || {}
-
   const activePaxIdx = selectedPaxIndex === "all" ? 0 : selectedPaxIndex
+  const activePax = useMemo(() => passengers[activePaxIdx] || {}, [passengers, activePaxIdx])
   const activeQrUrl = qrCodes[activePaxIdx] || ""
+
+  // Generate preview HTML for current active pax
+  const singleTicketHTML = useMemo(() => {
+    if (!activePax.name && passengers.length === 0) return ""
+    return buildSingleTicketCardHTML({
+      templateId: selectedTemplate,
+      booking,
+      pax: activePax,
+      idx: activePaxIdx,
+      qrUrl: activeQrUrl,
+      user,
+      departure,
+      lang: selectedLang,
+    })
+  }, [
+    selectedTemplate,
+    booking,
+    activePax,
+    activePaxIdx,
+    activeQrUrl,
+    user,
+    departure,
+    selectedLang,
+    passengers.length,
+  ])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden my-auto">
-        {/* Top Header & Language Picker */}
+        {/* Top Header with Template & Language Pickers */}
         <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/70">
           <div className="flex items-center gap-3">
             <div
@@ -496,7 +170,26 @@ export default function BoardingPassModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Ticket Template Selector */}
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-xs gap-1.5">
+              <LayoutTemplate size={14} className="text-indigo-600" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Design:
+              </span>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+                className="bg-transparent text-xs font-black text-slate-800 outline-none cursor-pointer pr-1"
+              >
+                {TICKET_TEMPLATES.map((tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id}>
+                    {tmpl.name} ({tmpl.badge})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Language Selector */}
             <div className="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 shadow-xs">
               <Languages size={14} className="text-slate-400 ml-2 mr-1" />
@@ -519,7 +212,7 @@ export default function BoardingPassModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors ml-2"
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors ml-1"
             >
               <X size={20} />
             </button>
@@ -554,7 +247,9 @@ export default function BoardingPassModal({
               <span>{p.name || `Pax ${idx + 1}`}</span>
               <span
                 className={`text-[10px] font-black px-1.5 py-0.2 rounded-md ${
-                  selectedPaxIndex === idx ? "bg-white/20 text-white" : "bg-slate-100 text-indigo-600"
+                  selectedPaxIndex === idx
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 text-indigo-600"
                 }`}
               >
                 {p.seatId || "—"}
@@ -563,167 +258,165 @@ export default function BoardingPassModal({
           ))}
         </div>
 
-        {/* Modal Body / Ticket Card Preview */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
-          <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl flex flex-col md:flex-row">
-            {/* Left Main */}
-            <div className="flex-1 p-6 md:p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-dashed border-slate-200">
-              <div>
-                {/* Header */}
-                <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-100">
-                  <div>
-                    <h2
-                      className="text-xl font-black tracking-tight"
-                      style={{ color: accentColor }}
-                    >
-                      {companyName.toUpperCase()}
-                    </h2>
-                    <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest mt-0.5">
-                      {user?.companyTagline || "Tourism & Travels"}
-                    </p>
-                    {companyPhone && (
-                      <p className="text-xs font-bold text-slate-400 mt-1 flex items-center gap-1">
-                        <Phone size={12} /> {companyPhone}
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className="inline-block px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white rounded-full shadow-xs"
-                      style={{ backgroundColor: accentColor }}
-                    >
-                      {t.boardingPass}
-                    </span>
-                    <span className="block text-[9px] font-bold text-slate-400 mt-1">
-                      {t.ticketVerifiedNotice}
-                    </span>
-                  </div>
-                </div>
+        {/* Modal Body: Ticket Preview Rendered with Ticket Styles */}
+        <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60">
+          <div className="max-w-3xl mx-auto">
+            {/* Inline ticket stylesheet to render the HTML preview correctly */}
+            <style>{`
+              .ticket-classic { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 16px; display: flex; overflow: hidden; box-shadow: 0 4px 18px rgba(0,0,0,0.06); }
+              .classic-main { flex: 1; padding: 22px 26px; border-right: 2px dashed #cbd5e1; display: flex; flex-direction: column; justify-content: space-between; }
+              .classic-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; }
+              .brand-title { font-size: 19px; font-weight: 900; letter-spacing: -0.02em; }
+              .brand-tagline { font-size: 9.5px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; }
+              .brand-sub { font-size: 9.5px; font-weight: 600; color: #94a3b8; margin-top: 2px; }
+              .ticket-badge { text-align: right; }
+              .badge-pill { display: inline-block; color: #fff; font-size: 9.5px; font-weight: 900; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.12em; }
+              .badge-sub-text { display: block; font-size: 9px; font-weight: 700; color: #94a3b8; margin-top: 3px; }
+              .classic-tour-strip { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; margin: 12px 0; }
+              .label-tiny { display: block; font-size: 8px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; }
+              .title-bold { font-size: 15px; font-weight: 900; color: #0f172a; }
+              .date-bold { font-size: 14px; font-weight: 900; }
+              .classic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+              .val-bold { font-size: 12.5px; font-weight: 900; color: #0f172a; }
+              .val-sub { font-size: 9.5px; font-weight: 600; color: #64748b; margin-top: 1px; }
+              .classic-instructions { background: #f8fafc; border-radius: 8px; padding: 8px 12px; border: 1px solid #f1f5f9; font-size: 8.5px; color: #64748b; }
+              .inst-head { display: block; font-weight: 900; text-transform: uppercase; color: #334155; margin-bottom: 2px; }
+              .classic-stub { width: 210px; background: #fafafa; padding: 22px 16px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; }
+              .deck-tag { font-size: 8.5px; font-weight: 900; letter-spacing: 0.12em; color: #64748b; text-transform: uppercase; }
+              .seat-huge { font-size: 32px; font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; }
+              .seat-label { font-size: 8.5px; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
+              .qr-box { margin: 8px 0; }
+              .qr-img { width: 100px; height: 100px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 3px; background: #fff; }
+              .qr-ph { width: 100px; height: 100px; background: #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #64748b; }
+              .qr-code-text { display: block; font-size: 8.5px; font-family: monospace; font-weight: 800; color: #475569; margin-top: 3px; }
+              .pay-tag { display: inline-block; font-size: 9px; font-weight: 900; padding: 2px 8px; border-radius: 6px; text-transform: uppercase; }
+              .pay-tag.paid { background: #ecfdf5; color: #059669; }
+              .pay-tag.due { background: #fffbeb; color: #b45309; }
+              .scan-verify { font-size: 7.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
 
-                {/* Tour Banner */}
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 my-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {t.tourName}
-                    </span>
-                    <h4 className="text-base font-black text-slate-900 mt-0.5">
-                      {booking.tourName}
-                    </h4>
-                  </div>
-                  <div className="sm:text-right">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {t.journeyDate}
-                    </span>
-                    <p
-                      className="text-sm font-black mt-0.5"
-                      style={{ color: accentColor }}
-                    >
-                      {formatDisplayDate(booking.journeyDate)}
-                    </p>
-                  </div>
-                </div>
+              .ticket-modern { background: #ffffff; border-radius: 20px; border: 1px solid #cbd5e1; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+              .modern-accent-bar { height: 6px; width: 100%; }
+              .modern-body { padding: 22px 26px; }
+              .modern-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 16px; }
+              .modern-brand { display: flex; align-items: center; gap: 10px; }
+              .modern-logo-dot { width: 12px; height: 12px; border-radius: 999px; }
+              .modern-company { font-size: 17px; font-weight: 900; color: #0f172a; }
+              .modern-route { font-size: 11px; font-weight: 700; color: #64748b; }
+              .modern-date-badge { text-align: right; }
+              .modern-date { display: block; font-size: 13px; font-weight: 800; color: #0f172a; }
+              .modern-inv { font-size: 9.5px; font-weight: 700; color: #94a3b8; font-family: monospace; }
+              .modern-content { display: flex; gap: 20px; align-items: center; }
+              .modern-details { flex: 1; }
+              .modern-data-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+              .modern-cell { background: #f8fafc; border-radius: 12px; padding: 10px 12px; border: 1px solid #e2e8f0; }
+              .m-lbl { display: block; font-size: 8px; font-weight: 900; color: #94a3b8; letter-spacing: 0.08em; margin-bottom: 2px; }
+              .m-val { font-size: 12px; font-weight: 900; color: #0f172a; }
+              .m-sub { font-size: 9px; font-weight: 600; color: #64748b; }
+              .modern-notes { display: flex; gap: 6px; flex-wrap: wrap; }
+              .m-note-pill { background: #f1f5f9; color: #475569; font-size: 8.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
+              .pill-paid { background: #ecfdf5; color: #047857; }
+              .pill-due { background: #fffbeb; color: #b45309; }
+              .modern-qr-card { width: 140px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px; text-align: center; }
+              .m-seat-circle { font-size: 22px; font-weight: 900; border: 2px solid; border-radius: 12px; padding: 2px 0; margin-bottom: 2px; }
+              .m-seat-lbl { font-size: 7.5px; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em; display: block; margin-bottom: 6px; }
+              .modern-qr-img { width: 85px; height: 85px; margin: 0 auto; display: block; border-radius: 6px; }
+              .m-code { display: block; font-size: 8px; font-family: monospace; color: #64748b; margin-top: 4px; }
 
-                {/* Passenger Info Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {t.travelerName}
-                    </span>
-                    <p className="text-sm font-black text-slate-900 mt-0.5">
-                      {activePax.name || `Passenger ${activePaxIdx + 1}`}
-                    </p>
-                    <p className="text-xs font-bold text-slate-500">
-                      {activePax.age ? `${activePax.age}Y` : ""} • {activePax.gender || ""} • {activePax.city || ""}{activePax.aadhar ? ` • ${maskAadhaar(activePax.aadhar)}` : ""}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {t.busNumber}
-                    </span>
-                    <p className="text-sm font-black text-slate-900 mt-0.5">
-                      {busNumber}
-                    </p>
-                    <p className="text-xs font-bold text-slate-500 font-mono">
-                      Inv #{booking.invoiceNo}
-                    </p>
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {t.emergencyContact}
-                    </span>
-                    <p className="text-xs font-black text-slate-900 mt-0.5">
-                      {organizerContact}
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-500">
-                      {booking.contactName} ({booking.contactPhone})
-                    </p>
-                  </div>
-                </div>
-              </div>
+              .ticket-heritage { background: #fffcf8; border: 3px double #d97706; border-radius: 14px; padding: 12px; }
+              .heritage-border { border: 1px solid #fde68a; border-radius: 8px; padding: 14px 18px; }
+              .heritage-top { text-align: center; margin-bottom: 12px; }
+              .heritage-symbol { font-size: 12px; font-weight: 900; color: #b45309; letter-spacing: 0.2em; }
+              .heritage-title { font-size: 20px; font-weight: 900; letter-spacing: 0.04em; }
+              .heritage-tag { font-size: 9.5px; font-weight: 800; color: #92400e; text-transform: uppercase; }
+              .heritage-hq { font-size: 9px; color: #78350f; margin-top: 2px; }
+              .heritage-strip { display: flex; justify-content: space-between; border-top: 2px solid; border-bottom: 2px solid; padding: 8px 12px; margin-bottom: 12px; background: #fffbeb; }
+              .h-lbl { display: block; font-size: 8px; font-weight: 900; color: #92400e; letter-spacing: 0.08em; }
+              .h-val-lg { font-size: 14px; font-weight: 900; color: #451a03; }
+              .heritage-main { display: flex; gap: 16px; }
+              .heritage-pax-box { flex: 1; }
+              .h-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+              .h-pax-name { font-size: 13px; font-weight: 900; color: #451a03; }
+              .h-pax-sub { font-size: 9px; color: #78350f; }
+              .heritage-guidelines { background: #fef3c7; border-radius: 6px; padding: 6px 10px; font-size: 8.5px; color: #78350f; border-left: 3px solid #d97706; }
+              .heritage-seat-stub { width: 150px; text-align: center; border-left: 2px dashed; padding-left: 14px; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+              .h-deck { font-size: 8px; font-weight: 900; color: #92400e; }
+              .h-seat { font-size: 28px; font-weight: 900; line-height: 1.1; }
+              .h-seat-label { font-size: 8px; font-weight: 800; color: #b45309; }
+              .h-qr { margin: 6px 0; }
+              .h-status { font-size: 8.5px; font-weight: 900; padding: 2px 6px; border-radius: 4px; }
+              .h-paid { background: #dcfce7; color: #166534; }
+              .h-due { background: #fee2e2; color: #991b1b; }
 
-              {/* Instructions */}
-              <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 text-[11px] text-slate-600">
-                <p className="font-black text-slate-800 text-[10px] uppercase tracking-wider mb-1">
-                  ⚑ {t.importantInstructions}
-                </p>
-                <p className="font-semibold text-slate-500 leading-snug">
-                  • {t.inst1} <br />
-                  • {t.inst2}
-                </p>
-              </div>
-            </div>
+              .ticket-corporate { background: #ffffff; border: 2px solid #0f172a; border-radius: 8px; padding: 16px 20px; }
+              .corp-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 10px; }
+              .corp-company { font-size: 18px; font-weight: 900; color: #0f172a; letter-spacing: -0.01em; }
+              .corp-meta { font-size: 9px; color: #475569; font-weight: 600; margin-top: 2px; }
+              .corp-doc-type { text-align: right; }
+              .corp-badge { display: inline-block; background: #0f172a; color: #fff; font-size: 8.5px; font-weight: 900; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.1em; }
+              .corp-ref { display: block; font-size: 9px; font-family: monospace; font-weight: 800; color: #64748b; margin-top: 2px; }
+              .corp-banner { display: grid; grid-template-columns: repeat(4, 1fr); background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 12px; margin-bottom: 12px; gap: 8px; }
+              .c-lbl { display: block; font-size: 7.5px; font-weight: 900; color: #64748b; letter-spacing: 0.08em; }
+              .c-val-bold { font-size: 11.5px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+              .corp-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+              .corp-table th { background: #f1f5f9; padding: 5px 8px; font-size: 8px; font-weight: 800; text-align: left; border: 1px solid #cbd5e1; }
+              .corp-table td { padding: 6px 8px; font-size: 9.5px; border: 1px solid #cbd5e1; }
+              .corp-footer-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; align-items: center; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+              .corp-instructions p { font-size: 8.5px; color: #64748b; margin-top: 2px; line-height: 1.4; }
+              .corp-qr-wrap { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+              .corp-qr { width: 75px; height: 75px; border: 1px solid #cbd5e1; padding: 2px; }
+              .corp-sign-box { text-align: center; }
+              .sign-space { width: 110px; height: 35px; border-bottom: 1px dashed #94a3b8; }
+              .corp-sign-box span { font-size: 7.5px; font-weight: 800; color: #64748b; display: block; margin-top: 3px; }
 
-            {/* Right Stub */}
-            <div className="w-full md:w-56 bg-slate-50/80 p-6 flex flex-col items-center justify-between text-center gap-4">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  {getDeckLabel(activePax.seatId)}
-                </span>
-                <div
-                  className="text-4xl font-black my-1"
-                  style={{ color: accentColor }}
-                >
-                  {activePax.seatId || "—"}
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {t.seatNumber}
-                </span>
-              </div>
+              .ticket-thermal { max-width: 520px; margin: 0 auto; }
+              .thermal-box { background: #ffffff; border: 2px dashed #0f172a; padding: 16px 20px; font-family: "Courier New", Courier, monospace; }
+              .thermal-top { text-align: center; }
+              .th-company { font-size: 16px; font-weight: 900; }
+              .th-phone { font-size: 9.5px; color: #475569; }
+              .th-dashed { border-top: 1px dashed #0f172a; margin: 8px 0; }
+              .th-inv-row { display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 700; }
+              .th-tour { font-size: 13px; font-weight: 900; margin: 4px 0; }
+              .thermal-body { display: flex; gap: 14px; align-items: center; margin: 8px 0; }
+              .th-seat-banner { background: #0f172a; color: #fff; padding: 10px; border-radius: 6px; text-align: center; min-width: 90px; }
+              .th-deck { font-size: 8px; letter-spacing: 0.1em; }
+              .th-seat { font-size: 24px; font-weight: 900; margin: 2px 0; }
+              .th-coach { font-size: 8px; }
+              .th-pax { flex: 1; font-size: 9px; line-height: 1.5; }
+              .th-row { display: flex; justify-content: space-between; }
+              .th-fare { border-top: 1px solid #e2e8f0; margin-top: 4px; padding-top: 2px; }
+              .thermal-qr-box { text-align: center; }
+              .thermal-qr { width: 75px; height: 75px; }
+              .th-code { font-size: 8px; font-weight: 700; }
+              .th-rules { font-size: 7.5px; text-align: center; color: #64748b; letter-spacing: 0.05em; }
 
-              <div className="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
-                {activeQrUrl ? (
-                  <img
-                    src={activeQrUrl}
-                    alt="QR"
-                    className="w-28 h-28 object-contain"
-                  />
-                ) : (
-                  <div className="w-28 h-28 bg-slate-100 rounded-xl flex items-center justify-center text-xs font-bold text-slate-400">
-                    Loading QR...
-                  </div>
-                )}
-                <span className="text-[9px] font-mono font-bold text-slate-400 mt-1">
-                  {booking.invoiceNo}-{activePax.seatId || "PAX"}
-                </span>
-              </div>
+              .ticket-transit { background: #ffffff; border-radius: 16px; border: 2px solid #e2e8f0; display: flex; overflow: hidden; }
+              .transit-main { flex: 1; padding: 20px 24px; }
+              .transit-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px; }
+              .transit-route-badge { display: inline-block; background: #059669; color: #fff; font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.08em; margin-bottom: 4px; }
+              .transit-company { font-size: 18px; font-weight: 900; }
+              .transit-tour { font-size: 13px; font-weight: 800; color: #1e293b; }
+              .transit-date-box { text-align: right; }
+              .tr-lbl { display: block; font-size: 8px; font-weight: 800; color: #94a3b8; letter-spacing: 0.08em; }
+              .tr-date { font-size: 13px; font-weight: 900; color: #0f172a; }
+              .tr-inv { font-size: 9px; color: #64748b; font-family: monospace; }
+              .transit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+              .transit-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; }
+              .tr-val { font-size: 12px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+              .tr-sub { font-size: 8.5px; color: #64748b; }
+              .transit-notice { display: flex; justify-content: space-between; font-size: 8.5px; font-weight: 700; color: #059669; background: #ecfdf5; padding: 6px 12px; border-radius: 8px; }
+              .transit-stub { width: 190px; background: #f8fafc; border-left: 2px dashed #cbd5e1; padding: 20px 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; }
+              .transit-deck-pill { font-size: 8.5px; font-weight: 900; padding: 3px 10px; border-radius: 999px; letter-spacing: 0.1em; color: #fff; }
+              .deck-lower { background: #059669; }
+              .deck-upper { background: #4f46e5; }
+              .transit-seat { font-size: 32px; font-weight: 900; line-height: 1.1; margin: 4px 0; }
+              .transit-qr-wrap { margin: 8px 0; }
+              .tr-qr-code { display: block; font-size: 8px; font-family: monospace; color: #475569; margin-top: 2px; }
+              .transit-footer { font-size: 8px; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em; }
+              .text-green { color: #059669 !important; }
+              .text-amber { color: #d97706 !important; }
+            `}</style>
 
-              <div>
-                <span
-                  className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                    (booking.advanceReceived || 0) >= (booking.totalAmount || 0)
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {(booking.advanceReceived || 0) >= (booking.totalAmount || 0)
-                    ? t.confirmed
-                    : `Due ₹${Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0)).toLocaleString()}`}
-                </span>
-                <p className="text-[9px] font-bold text-slate-400 mt-1">
-                  {t.scanVerification}
-                </p>
-              </div>
-            </div>
+            <div dangerouslySetInnerHTML={{ __html: singleTicketHTML }} />
           </div>
         </div>
 
@@ -732,7 +425,7 @@ export default function BoardingPassModal({
           <div className="text-xs font-bold text-slate-400">
             {selectedPaxIndex === "all" ? (
               <span>
-                Printing will generate <strong>{passengers.length}</strong> separate boarding passes
+                Printing will generate <strong>{passengers.length}</strong> separate boarding passes in <strong>{getTicketTemplate(selectedTemplate).name}</strong> style
               </span>
             ) : (
               <span>
