@@ -1,15 +1,33 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
 import TwoFactorSetup from "./components/TwoFactorSetup"
 import TwoFactorVerify from "./components/TwoFactorVerify"
 import ResetPassword from "./components/ResetPassword"
 import Recover2FA from "./components/Recover2FA"
-import { logout } from "./data/auth"
+import { logout, login } from "./data/auth"
 import { getAuthToken } from "./data/client"
+import { isDesktop } from "./data/adapters"
 
 export default function App() {
   const [user, setUser] = useState(() => {
+    if (isDesktop) {
+      const saved = localStorage.getItem("user")
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        id: "local-operator",
+        _id: "local-operator",
+        userName: "Admin Operator",
+        companyName: "XYZ Tourism",
+        role: "admin",
+      }
+    }
     const token = getAuthToken()
     if (!token) return null
     const saved = localStorage.getItem("user")
@@ -25,6 +43,22 @@ export default function App() {
     }
     return null
   })
+
+  useEffect(() => {
+    if (isDesktop) {
+      login()
+        .then((res) => {
+          if (res && res.user) {
+            setUser(res.user)
+            localStorage.setItem("user", JSON.stringify(res.user))
+          }
+        })
+        .catch((err) => {
+          console.error("Error loading desktop operator session:", err)
+        })
+    }
+  }, [])
+
   const [isLoading] = useState(false)
   const [twoFactorToken, setTwoFactorToken] = useState(null)
   const [show2FASetup, setShow2FASetup] = useState(false)
@@ -39,6 +73,10 @@ export default function App() {
   })
 
   const handleLogout = async () => {
+    if (isDesktop) {
+      alert("Desktop mode runs locally as the single operator.")
+      return
+    }
     await logout()
     setUser(null)
     setTwoFactorToken(null)

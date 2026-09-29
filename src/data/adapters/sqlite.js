@@ -105,7 +105,12 @@ export async function getCompanySettings(user) {
 }
 
 export async function updateCompanySettings(settings) {
-  return invokeIpc("settings:update", settings)
+  const updatedSettings = await invokeIpc("settings:update", settings)
+  const session = await invokeIpc("auth:getOperatorSession")
+  return {
+    ...updatedSettings,
+    user: session.user,
+  }
 }
 
 // --- AUTH (Desktop single-user operator) ---
@@ -118,7 +123,6 @@ export async function register() {
 }
 
 export async function logout() {
-  // Desktop mode is single-operator local mode; no-op or clear session
   return { success: true }
 }
 
@@ -127,7 +131,7 @@ export async function updateProfile(userName) {
 }
 
 export async function updateCompany(companySettings) {
-  return invokeIpc("settings:update", companySettings)
+  return updateCompanySettings(companySettings)
 }
 
 export async function setup2FA() {

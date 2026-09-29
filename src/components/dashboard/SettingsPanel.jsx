@@ -2,6 +2,7 @@ import { Shield, Building2, Check, Edit3, X, Landmark, FileText, Palette, Sparkl
 import { useToast } from "../common/ToastContext"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { TICKET_TEMPLATES } from "../tickets/ticketRegistry"
+import { isDesktop } from "../../data/adapters"
 
 export default function SettingsPanel({
   user,
@@ -40,32 +41,39 @@ export default function SettingsPanel({
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">
               <h4 className="font-black text-slate-900 mb-1">
-                Two-Factor Authentication (2FA)
+                {isDesktop ? "Offline Desktop Security" : "Two-Factor Authentication (2FA)"}
               </h4>
               <p className="text-sm text-slate-500 font-medium">
-                Add an extra layer of security by requiring a 6-digit
-                code from Google Authenticator when logging in.
+                {isDesktop
+                  ? "This desktop instance runs in single-operator offline mode. All bookings, manifests, and payments are stored in your local SQLite database."
+                  : "Add an extra layer of security by requiring a 6-digit code from Google Authenticator when logging in."}
               </p>
-              {user?.twoFactorEnabled && (
+              {isDesktop ? (
+                <span className="inline-flex items-center gap-1.5 mt-2 text-xs font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
+                  <Check size={14} strokeWidth={3} /> Offline Single Operator Active
+                </span>
+              ) : user?.twoFactorEnabled ? (
                 <span className="inline-flex items-center gap-1.5 mt-2 text-xs font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
                   <Check size={14} strokeWidth={3} /> Currently Enabled
                 </span>
-              )}
+              ) : null}
             </div>
-            {user?.twoFactorEnabled ? (
-              <button
-                onClick={() => setShow2FADisable(true)}
-                className="px-5 py-2.5 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition-all"
-              >
-                Disable 2FA
-              </button>
-            ) : (
-              <button
-                onClick={() => setShow2FASetup(true)}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all"
-              >
-                Enable 2FA
-              </button>
+            {!isDesktop && (
+              user?.twoFactorEnabled ? (
+                <button
+                  onClick={() => setShow2FADisable(true)}
+                  className="px-5 py-2.5 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition-all"
+                >
+                  Disable 2FA
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShow2FASetup(true)}
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all"
+                >
+                  Enable 2FA
+                </button>
+              )
             )}
           </div>
         </div>
