@@ -5,6 +5,10 @@
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
+    "sync:logic": "node scripts/sync-business-logic.js",
+    "pretest": "npm run sync:logic",
+    "pretest:desktop": "npm run sync:logic",
+    "prebuild": "npm run sync:logic",
     "dev": "vite",
     "dev:desktop": "concurrently -k \"vite\" \"electron .\"",
     "build": "vite build",

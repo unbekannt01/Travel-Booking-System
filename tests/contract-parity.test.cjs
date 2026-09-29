@@ -116,4 +116,117 @@ describe("Adapter Contract & Business Logic Parity", () => {
     const nextRec = businessLogic.calculateNextReceiptNo([`${recPrefix}001`], recPrefix)
     assert.strictEqual(nextRec, `${recPrefix}002`)
   })
+
+  test("businessLogic.js (ESM) and businessLogic.cjs (CJS) are 100% in sync and return identical outputs", async () => {
+    const esmLogic = await import("../shared/businessLogic.js")
+    const cjsLogic = require("../shared/businessLogic.cjs")
+
+    // 1. Export key parity
+    const esmKeys = Object.keys(esmLogic).sort()
+    const cjsKeys = Object.keys(cjsLogic).sort()
+    assert.deepStrictEqual(
+      esmKeys,
+      cjsKeys,
+      "Exported function names between shared/businessLogic.js and shared/businessLogic.cjs must be identical"
+    )
+
+    // 2. round2
+    const testNumbers = [10.555, 0, 100, 100.1234, -45.678, "99.999", "invalid"]
+    for (const num of testNumbers) {
+      assert.strictEqual(esmLogic.round2(num), cjsLogic.round2(num), `round2 divergence on ${num}`)
+    }
+
+    // 3. calculatePricing across scenarios
+    const pricingScenarios = [
+      { baseAmount: 10000, discountType: "fixed", discountValue: 500, gstRate: 5, isTaxInclusive: false },
+      { baseAmount: 12500, discountType: "percentage", discountValue: 10, gstRate: 5, isTaxInclusive: true },
+      { baseAmount: 8000, discountType: "fixed", discountValue: 0, gstRate: 0, isTaxInclusive: false },
+      { baseAmount: 0, discountType: "fixed", discountValue: 100, gstRate: 18, isTaxInclusive: false },
+    ]
+    for (const scenario of pricingScenarios) {
+      assert.deepStrictEqual(
+        esmLogic.calculatePricing(scenario),
+        cjsLogic.calculatePricing(scenario),
+        "calculatePricing divergence"
+      )
+    }
+
+    // 4. generateTourCode & getMonthCode
+    const tours = ["Kedarnath Yatra", "Somnath", "Char Dham Express", "Goa", "", null]
+    for (const t of tours) {
+      assert.strictEqual(esmLogic.generateTourCode(t), cjsLogic.generateTourCode(t), `generateTourCode divergence on ${t}`)
+    }
+    const dates = ["2026-01-01", "2026-05-15", "2026-10-31", new Date()]
+    for (const d of dates) {
+      assert.strictEqual(esmLogic.getMonthCode(d), cjsLogic.getMonthCode(d), `getMonthCode divergence on ${d}`)
+    }
+
+    // 5. buildInvoicePrefix & calculateNextInvoiceNo
+    for (const t of ["Kedarnath", "Dwarka"]) {
+      for (const d of ["2026-06-01", "2026-11-20"]) {
+        const esmPfx = esmLogic.buildInvoicePrefix("ABC", t, d)
+        const cjsPfx = cjsLogic.buildInvoicePrefix("ABC", t, d)
+        assert.strictEqual(esmPfx, cjsPfx)
+
+        const list = [`${esmPfx}001`, `${esmPfx}005`, `${esmPfx}002`]
+        assert.strictEqual(
+          esmLogic.calculateNextInvoiceNo(list, esmPfx),
+          cjsLogic.calculateNextInvoiceNo(list, cjsPfx)
+        )
+      }
+    }
+
+    // 6. buildReceiptPrefix & calculateNextReceiptNo
+    const esmRecPfx = esmLogic.buildReceiptPrefix("REC", "2026-09-15")
+    const cjsRecPfx = cjsLogic.buildReceiptPrefix("REC", "2026-09-15")
+    assert.strictEqual(esmRecPfx, cjsRecPfx)
+    assert.strictEqual(
+      esmLogic.calculateNextReceiptNo([`${esmRecPfx}010`], esmRecPfx),
+      cjsLogic.calculateNextReceiptNo([`${esmRecPfx}010`], cjsRecPfx)
+    )
+
+    // 7. validateIndianPhone & validateAadhaar
+    const phones = ["9876543210", "+919876543210", "09876543210", "12345", "", null]
+    for (const p of phones) {
+      assert.strictEqual(esmLogic.validateIndianPhone(p), cjsLogic.validateIndianPhone(p))
+    }
+    const aadhars = ["123456789012", "1234 5678 9012", "123", "", null]
+    for (const a of aadhars) {
+      assert.strictEqual(esmLogic.validateAadhaar(a), cjsLogic.validateAadhaar(a))
+    }
+
+    // 8. calculateCancellationRefund
+    const cancelCases = [
+      { totalPaid: 10000, cancellationCharge: 2000 },
+      { totalPaid: 5000, cancellationCharge: 0 },
+      { totalPaid: 3000, cancellationCharge: 3000 },
+    ]
+    for (const c of cancelCases) {
+      assert.deepStrictEqual(
+        esmLogic.calculateCancellationRefund(c),
+        cjsLogic.calculateCancellationRefund(c)
+      )
+    }
+
+    // 9. computeLedgerTotals
+    const payments = [
+      { amount: 5000, type: "advance", isVoid: false },
+      { amount: 2000, type: "partial", isVoid: false },
+      { amount: 1000, type: "partial", isVoid: true },
+      { amount: 500, type: "refund", isVoid: false },
+    ]
+    assert.deepStrictEqual(
+      esmLogic.computeLedgerTotals(payments, 10000),
+      cjsLogic.computeLedgerTotals(payments, 10000)
+    )
+
+    // 10. findSeatConflicts
+    const passList = [{ seatId: "U1" }, { seatId: "U2" }]
+    const occupiedMap = new Map([["U1", true]])
+    assert.deepStrictEqual(
+      esmLogic.findSeatConflicts({ passengers: passList, occupiedSeatMap: occupiedMap }),
+      cjsLogic.findSeatConflicts({ passengers: passList, occupiedSeatMap: occupiedMap })
+    )
+  })
 })
+
