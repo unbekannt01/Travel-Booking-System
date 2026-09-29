@@ -120,6 +120,7 @@ export const checkSeatConflicts = async ({ userId, tourName, journeyDate, passen
     tourName,
     journeyDate: { $gte: start, $lte: end },
     status: { $nin: ["Cancelled", "cancelled"] },
+    $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
   }
   if (excludeBookingId) {
     query._id = { $ne: excludeBookingId }
@@ -180,7 +181,10 @@ router.get("/invoice/:invoiceNo", verifyToken, async (req, res) => {
 // GET /api/bookings
 router.get("/", verifyToken, async (req, res) => {
   try {
-    const bookings = await Booking.find({ userId: req.user.id }).sort({ createdAt: -1 })
+    const bookings = await Booking.find({
+      userId: req.user.id,
+      $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+    }).sort({ createdAt: -1 })
     res.json(bookings)
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -739,7 +743,7 @@ router.post("/:id/payments", verifyToken, async (req, res) => {
   }
 })
 
-// DELETE /api/bookings/:id
+// DELETE /api/bookings/:id (soft delete)
 router.delete("/:id", verifyToken, async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
@@ -749,8 +753,27 @@ router.delete("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to delete this booking" })
     }
 
-    await Booking.findByIdAndDelete(req.params.id)
-    res.json({ message: "Booking deleted successfully" })
+    booking.deletedAt = new Date()
+    await booking.save()
+    res.json({ message: "Booking moved to trash", id: booking._id, invoiceNo: booking.invoiceNo })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// PUT /api/bookings/:id/restore (restore soft-deleted booking)
+router.put("/:id/restore", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id)
+
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+    if (booking.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to restore this booking" })
+    }
+
+    booking.deletedAt = null
+    await booking.save()
+    res.json(booking)
   } catch (error) {
     res.status(500).json({ message: error.message })
   }

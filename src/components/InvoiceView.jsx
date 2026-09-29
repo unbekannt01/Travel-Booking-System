@@ -13,13 +13,16 @@ import {
 
 export default function InvoiceView({ booking, onBack, user }) {
 
+  const theme = user?.invoiceTheme || "classic"
+  const accentColor = user?.invoiceColor || "#4f46e5"
+
   // ── Build the full HTML for the invoice (used in print window) ──
   const buildInvoiceHTML = () => {
     const companyName = user?.companyName?.toUpperCase() || "YATRA TOURS"
     const companyTagline = user?.companyTagline || "Tourism & Travels"
     const companyHQ = user?.companyHeadquarters || ""
     const companyPhone = user?.companyPhone || ""
-    const gstHTML = user?.gstNumber ? `<div style="font-size:11px;font-weight:900;color:#4f46e5;margin:2px 0;">GSTIN: ${user.gstNumber}</div>` : ""
+    const gstHTML = user?.gstNumber ? `<div style="font-size:11px;font-weight:900;color:${accentColor};margin:2px 0;">GSTIN: ${user.gstNumber}</div>` : ""
     const defaultTC = [
       "Valid Aadhar card is strictly required for all travelers.",
       "Advance payment is non-refundable upon confirmation.",
@@ -31,14 +34,14 @@ export default function InvoiceView({ booking, onBack, user }) {
     const logoHTML = user?.companyLogo
       ? `<img src="${user.companyLogo}" alt="logo" style="width:56px;height:56px;object-fit:contain;" />`
       : `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
-           stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           stroke="${accentColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
            <rect x="1" y="6" width="22" height="14" rx="2"/><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
            <line x1="1" y1="10" x2="23" y2="10"/>
          </svg>`
 
     const organizersHTML = user?.organizers?.length
       ? user.organizers.map(o =>
-          `<p style="font-size:12px;font-weight:700;color:#4f46e5;margin:2px 0;">
+          `<p style="font-size:12px;font-weight:700;color:${accentColor};margin:2px 0;">
              📞 ${o.name}${o.phone ? " — " + o.phone : ""}
            </p>`).join("")
       : ""
@@ -72,17 +75,42 @@ export default function InvoiceView({ booking, onBack, user }) {
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; color:#0f172a; }
   .page { max-width:800px; margin:20px auto; background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.10); }
 
+  /* Base layout */
+  .page {
+    max-width: 800px;
+    margin: 20px auto;
+    background: #fff;
+    ${theme === "modern" ? "border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.08);" : ""}
+    ${theme === "classic" ? "border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: 0 4px 16px rgba(0,0,0,0.06);" : ""}
+    ${theme === "minimal" ? "border-radius: 4px; border: 1px solid #e2e8f0; box-shadow: none;" : ""}
+    overflow: hidden;
+  }
+
   /* Header */
-  .header { background:#4f46e5; padding:36px 40px; position:relative; overflow:hidden; }
+  .header {
+    ${theme === "modern" ? `background: linear-gradient(135deg, ${accentColor}, #0f172a); padding: 38px 40px;` : ""}
+    ${theme === "classic" ? `background: ${accentColor}; padding: 34px 40px; border-bottom: 3px solid rgba(0,0,0,0.1);` : ""}
+    ${theme === "minimal" ? `background: #ffffff; padding: 30px 40px; border-top: 6px solid ${accentColor}; border-bottom: 1px solid #e2e8f0;` : ""}
+    position: relative;
+    overflow: hidden;
+  }
   .header-inner { display:flex; justify-content:space-between; align-items:center; position:relative; z-index:1; }
-  .logo-wrap { background:#fff; border-radius:14px; padding:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .logo-wrap { background:#fff; border-radius:${theme === "minimal" ? "6px" : "14px"}; padding:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .brand { margin-left:16px; }
-  .brand h1 { font-size:28px; font-weight:900; color:#fff; letter-spacing:-0.03em; line-height:1; }
-  .brand p  { font-size:11px; font-weight:700; color:#c7d2fe; letter-spacing:0.25em; text-transform:uppercase; margin-top:4px; }
-  .invoice-badge { background:rgba(99,102,241,0.35); border:1px solid rgba(165,180,252,0.4);
-                   padding:5px 14px; border-radius:999px; font-size:9px; font-weight:900;
-                   color:#fff; letter-spacing:0.15em; text-transform:uppercase; }
-  .invoice-word { font-size:48px; font-weight:900; color:rgba(255,255,255,0.12); letter-spacing:-0.04em; margin-top:4px; }
+  .brand h1 { font-size:28px; font-weight:900; color:${theme === "minimal" ? "#0f172a" : "#ffffff"}; letter-spacing:-0.03em; line-height:1; }
+  .brand p  { font-size:11px; font-weight:700; color:${theme === "minimal" ? accentColor : "#c7d2fe"}; letter-spacing:0.25em; text-transform:uppercase; margin-top:4px; }
+  .invoice-badge {
+    background:${theme === "minimal" ? "#f1f5f9" : "rgba(255,255,255,0.2)"};
+    border:1px solid ${theme === "minimal" ? "#cbd5e1" : "rgba(255,255,255,0.3)"};
+    padding:5px 14px;
+    border-radius:999px;
+    font-size:9px;
+    font-weight:900;
+    color:${theme === "minimal" ? "#334155" : "#ffffff"};
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+  }
+  .invoice-word { font-size:48px; font-weight:900; color:${theme === "minimal" ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.12)"}; letter-spacing:-0.04em; margin-top:4px; }
 
   /* Meta row */
   .meta { display:flex; gap:32px; padding:32px 40px 24px; border-bottom:1px solid #f1f5f9; flex-wrap:wrap; }
@@ -92,18 +120,26 @@ export default function InvoiceView({ booking, onBack, user }) {
   .label { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.15em; color:#94a3b8; margin-bottom:3px; }
   .value { font-size:13px; font-weight:900; color:#0f172a; }
   .value-green { color:#059669; }
-  .value-indigo { color:#4f46e5; font-size:20px; }
+  .value-indigo { color:${accentColor}; font-size:20px; }
   .value-right { text-align:right; }
 
   /* Tour cards */
   .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding:0 40px; margin-bottom:24px; }
-  .card { background:#eef2ff; border:1px solid #e0e7ff; border-radius:14px; padding:16px; display:flex; align-items:center; gap:12px; }
-  .card-icon { background:#fff; border-radius:10px; padding:10px; color:#4f46e5; flex-shrink:0; }
-  .card-label { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.15em; color:#818cf8; margin-bottom:2px; }
+  .card {
+    background:${theme === "minimal" ? "#ffffff" : "#f8fafc"};
+    border:1px solid ${theme === "minimal" ? "#e2e8f0" : "#e0e7ff"};
+    border-radius:${theme === "minimal" ? "6px" : "14px"};
+    padding:16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .card-icon { background:#fff; border-radius:10px; padding:10px; color:${accentColor}; flex-shrink:0; }
+  .card-label { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.15em; color:${accentColor}; margin-bottom:2px; }
   .card-value { font-size:13px; font-weight:900; color:#1e1b4b; }
 
   /* Table */
-  .table-wrap { margin:0 40px 24px; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; }
+  .table-wrap { margin:0 40px 24px; border:1px solid #e2e8f0; border-radius:${theme === "minimal" ? "6px" : "14px"}; overflow:hidden; }
   .table-head-row { background:#f8fafc; padding:10px 14px; }
   .table-head-row p { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.2em; color:#94a3b8; }
   table { width:100%; border-collapse:collapse; }
@@ -119,14 +155,25 @@ export default function InvoiceView({ booking, onBack, user }) {
   .fin-row { display:flex; justify-content:space-between; font-size:11px; }
   .fin-label { font-weight:700; color:#94a3b8; text-transform:uppercase; font-size:9px; letter-spacing:0.1em; }
   .fin-val { font-weight:900; color:#0f172a; }
-  .balance-card { background:#4f46e5; border-radius:14px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; color:#fff; margin-top:4px; }
-  .balance-label { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.25em; opacity:0.75; margin-bottom:4px; }
-  .balance-amount { font-size:28px; font-weight:900; letter-spacing:-0.03em; }
+  .balance-card {
+    background:${theme === "minimal" ? "#f8fafc" : accentColor};
+    border:${theme === "minimal" ? `2px solid ${accentColor}` : "none"};
+    border-radius:${theme === "minimal" ? "8px" : "14px"};
+    padding:16px 20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    color:${theme === "minimal" ? "#0f172a" : "#ffffff"};
+    margin-top:4px;
+    ${theme === "modern" ? "box-shadow: 0 8px 24px rgba(0,0,0,0.12);" : ""}
+  }
+  .balance-label { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.25em; opacity:0.8; margin-bottom:4px; }
+  .balance-amount { font-size:28px; font-weight:900; letter-spacing:-0.03em; color:${theme === "minimal" ? accentColor : "#ffffff"}; }
 
   /* Footer */
   .footer { background:#f8fafc; border-top:1px solid #e2e8f0; padding:20px; text-align:center; }
   .footer h3 { font-size:16px; font-weight:900; color:#0f172a; }
-  .footer p  { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.3em; color:#4f46e5; opacity:0.7; margin-top:4px; }
+  .footer p  { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.3em; color:${accentColor}; opacity:0.85; margin-top:4px; }
 
   @page { size:A4 portrait; margin:8mm; }
   @media print {
@@ -377,12 +424,31 @@ export default function InvoiceView({ booking, onBack, user }) {
 
       {/* Screen Preview */}
       <div className="max-w-4xl mx-auto mt-6 lg:mt-10 mb-12 px-4 lg:px-0">
-        <div className="bg-white rounded-3xl overflow-hidden border border-slate-100"
-             style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.08)" }}>
-
+        <div
+          className={`bg-white overflow-hidden border ${
+            theme === "modern"
+              ? "rounded-3xl border-slate-100 shadow-2xl"
+              : theme === "classic"
+                ? "rounded-xl border-slate-300 shadow-lg"
+                : "rounded-lg border-slate-200 shadow-sm"
+          }`}
+        >
           {/* Header */}
-          <div className="p-8 lg:p-10 text-white relative overflow-hidden"
-               style={{ backgroundColor: "#4f46e5" }}>
+          <div
+            className={`p-8 lg:p-10 relative overflow-hidden ${
+              theme === "minimal"
+                ? "bg-white text-slate-900 border-b border-slate-200"
+                : "text-white"
+            }`}
+            style={{
+              backgroundColor: theme === "minimal" ? "#ffffff" : accentColor,
+              borderTop: theme === "minimal" ? `6px solid ${accentColor}` : undefined,
+              backgroundImage:
+                theme === "modern"
+                  ? `linear-gradient(135deg, ${accentColor}, #0f172a)`
+                  : undefined,
+            }}
+          >
             <div className="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
               <div className="flex items-center gap-4">
                 {user?.companyLogo ? (
@@ -390,31 +456,56 @@ export default function InvoiceView({ booking, onBack, user }) {
                     <img src={user.companyLogo} alt="Logo" className="w-14 h-14 object-contain" />
                   </div>
                 ) : (
-                  <div className="bg-white p-3 rounded-2xl shadow-xl shrink-0" style={{ color: "#4f46e5" }}>
+                  <div
+                    className="bg-white p-3 rounded-2xl shadow-xl shrink-0"
+                    style={{ color: accentColor }}
+                  >
                     <Bus size={28} strokeWidth={2.5} />
                   </div>
                 )}
                 <div>
-                  <h1 className="text-3xl lg:text-4xl font-black tracking-tighter leading-none mb-1">
+                  <h1
+                    className={`text-3xl lg:text-4xl font-black tracking-tighter leading-none mb-1 ${
+                      theme === "minimal" ? "text-slate-900" : "text-white"
+                    }`}
+                  >
                     {user?.companyName?.toUpperCase() || "XYZ TOURISM"}
                   </h1>
-                  <p className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: "#c7d2fe" }}>
+                  <p
+                    className="text-sm font-bold tracking-[0.25em] uppercase"
+                    style={{ color: theme === "minimal" ? accentColor : "#c7d2fe" }}
+                  >
                     {user?.companyTagline || "Tourism & Travels"}
                   </p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <span className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border"
-                      style={{ backgroundColor: "rgba(99,102,241,0.35)", borderColor: "rgba(165,180,252,0.4)" }}>
+                <span
+                  className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border"
+                  style={{
+                    backgroundColor: theme === "minimal" ? "#f1f5f9" : "rgba(255,255,255,0.2)",
+                    borderColor: theme === "minimal" ? "#cbd5e1" : "rgba(255,255,255,0.3)",
+                    color: theme === "minimal" ? "#334155" : "#ffffff",
+                  }}
+                >
                   Official Booking Invoice
                 </span>
-                <span className="text-4xl font-black tracking-tighter" style={{ opacity: 0.15 }}>INVOICE</span>
+                <span
+                  className="text-4xl font-black tracking-tighter"
+                  style={{ opacity: theme === "minimal" ? 0.08 : 0.15 }}
+                >
+                  INVOICE
+                </span>
               </div>
             </div>
-            <div className="absolute right-0 bottom-0 pointer-events-none"
-                 style={{ opacity: 0.08, transform: "translate(25%, 25%) rotate(-15deg)" }}>
-              <Bus size={320} />
-            </div>
+            {theme !== "minimal" && (
+              <div
+                className="absolute right-0 bottom-0 pointer-events-none"
+                style={{ opacity: 0.08, transform: "translate(25%, 25%) rotate(-15deg)" }}
+              >
+                <Bus size={320} />
+              </div>
+            )}
           </div>
 
           {/* Body */}

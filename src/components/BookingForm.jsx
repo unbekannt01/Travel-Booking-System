@@ -13,11 +13,14 @@ import {
   Layout,
   X,
   LockKeyhole,
+  Wand2,
+  ShieldAlert,
 } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue } from "../utils/date"
 import { isValidIndianPhone, isValidAadhaar } from "../utils/validators"
 import { calculatePricing } from "../utils/pricing"
+import { autoAssignSeats } from "../utils/seatAssignment"
 
 const CustomSelect = ({ label, value, options, onChange, placeholder, className = "" }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -272,7 +275,7 @@ const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => {
 }
 
 const SeatLegend = () => (
-  <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 py-2.5 px-6 bg-slate-50 border border-slate-200/80 rounded-2xl w-full max-w-xl mx-auto mb-4">
+  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 py-2 px-5 bg-slate-50 border border-slate-200/80 rounded-2xl w-full max-w-2xl mx-auto mb-4">
     <div className="flex items-center gap-2">
       <div className="w-5 h-5 rounded-md border-2 border-slate-200 bg-white" />
       <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Available</span>
@@ -286,6 +289,12 @@ const SeatLegend = () => (
         <LockKeyhole size={10} className="text-red-500" />
       </div>
       <span className="text-[11px] font-black uppercase tracking-wider text-red-600">Booked</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="w-5 h-5 rounded-md border-2 border-amber-300 bg-amber-50 flex items-center justify-center">
+        <ShieldAlert size={10} className="text-amber-600" />
+      </div>
+      <span className="text-[11px] font-black uppercase tracking-wider text-amber-700">Blocked</span>
     </div>
   </div>
 )
@@ -345,6 +354,9 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
 
   const [showSeatMap, setShowSeatMap] = useState(false)
   const [activePassengerIndex, setActivePassengerIndex] = useState(0)
+  const [showAutoAssignModal, setShowAutoAssignModal] = useState(false)
+  const [deckPreference, setDeckPreference] = useState("any")
+  const [tempAssignments, setTempAssignments] = useState([])
 
   const pricingBreakdown = useMemo(() => {
     return calculatePricing({
@@ -452,6 +464,67 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
       totalAmount: newTotal,
       baseAmount: newTotal,
     })
+  }
+
+  const handleOpenAutoAssign = () => {
+    if (!formData.tourName || !formData.journeyDate) {
+      toast.error("Please select a tour and journey date first to check seat availability.")
+      return
+    }
+
+    const { assignments } = autoAssignSeats({
+      passengers: formData.passengers,
+      bookedSeats,
+      deckPreference,
+      layout: formData.seatLayout || "2x1",
+    })
+
+    if (assignments.length === 0) {
+      const allSeated = formData.passengers.every((p) => p.seatId)
+      if (allSeated) {
+        toast.info("All travelers already have seats assigned!")
+      } else {
+        toast.error("No free seats found on this coach layout.")
+      }
+      return
+    }
+
+    setTempAssignments(assignments)
+    setShowAutoAssignModal(true)
+  }
+
+  const handleDeckPreferenceChange = (newPref) => {
+    setDeckPreference(newPref)
+    const { assignments } = autoAssignSeats({
+      passengers: formData.passengers,
+      bookedSeats,
+      deckPreference: newPref,
+      layout: formData.seatLayout || "2x1",
+    })
+    setTempAssignments(assignments)
+  }
+
+  const handleApplyAutoAssign = () => {
+    const updated = [...formData.passengers]
+    tempAssignments.forEach(({ passengerIndex, proposedSeatId }) => {
+      if (updated[passengerIndex]) {
+        updated[passengerIndex] = {
+          ...updated[passengerIndex],
+          seatId: proposedSeatId,
+        }
+      }
+    })
+
+    const newTotal = calculateTotal(updated, formData.tourName)
+    setFormData((prev) => ({
+      ...prev,
+      passengers: updated,
+      totalAmount: newTotal,
+      baseAmount: newTotal,
+    }))
+
+    setShowAutoAssignModal(false)
+    toast.success(`Assigned ${tempAssignments.length} seats successfully!`)
   }
 
   const addPassenger = () => {
@@ -664,13 +737,23 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                 </div>
                 <h3 className="font-black text-lg text-slate-900">Passenger Manifest</h3>
               </div>
-              <button
-                type="button"
-                onClick={addPassenger}
-                className="text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl font-black text-xs transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95"
-              >
-                <UserPlus size={16} /> Add Passenger
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenAutoAssign}
+                  className="text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-4 py-2.5 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-xs"
+                  title="Auto-assign remaining unseated travelers"
+                >
+                  <Wand2 size={15} /> Auto-assign Seats
+                </button>
+                <button
+                  type="button"
+                  onClick={addPassenger}
+                  className="text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl font-black text-xs transition-all shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95 cursor-pointer"
+                >
+                  <UserPlus size={16} /> Add Passenger
+                </button>
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -818,13 +901,22 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                       </p>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowSeatMap(false)}
-                    className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all active:scale-95"
-                  >
-                    <X size={20} />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleOpenAutoAssign}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
+                    >
+                      <Wand2 size={15} /> Auto-assign Seats
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSeatMap(false)}
+                      className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all active:scale-95"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-y-auto custom-scrollbar flex-1 p-6 md:p-8">
@@ -843,6 +935,112 @@ export default function BookingForm({ onSave, tours, editData, onCancel, booking
                     className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-12 py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-200 transition-all active:scale-[0.98] float-right"
                   >
                     Confirm Selection
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showAutoAssignModal && (
+            <div className="fixed inset-0 z-99999 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl">
+                      <Wand2 size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-lg font-black text-slate-900">Auto-assign Seats</h4>
+                      <p className="text-xs font-bold text-slate-400">
+                        Proposing {tempAssignments.length} nearby seats
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAutoAssignModal(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Deck Preference selector */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    Deck Preference
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "any", label: "Any Deck" },
+                      { id: "lower", label: "Lower Deck" },
+                      { id: "upper", label: "Upper Deck" },
+                    ].map((deck) => (
+                      <button
+                        key={deck.id}
+                        type="button"
+                        onClick={() => handleDeckPreferenceChange(deck.id)}
+                        className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                          deckPreference === deck.id
+                            ? "bg-indigo-600 text-white shadow-xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {deck.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Proposed list with manual override */}
+                <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                  {tempAssignments.map((assign, idx) => (
+                    <div
+                      key={assign.passengerIndex}
+                      className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-900 truncate">
+                          {assign.passengerName}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          Passenger #{assign.passengerIndex + 1}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400">Assigned:</span>
+                        <input
+                          type="text"
+                          value={assign.proposedSeatId}
+                          onChange={(e) => {
+                            const val = e.target.value.trim()
+                            const updated = [...tempAssignments]
+                            updated[idx].proposedSeatId = val
+                            setTempAssignments(updated)
+                          }}
+                          className="w-28 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-indigo-700 text-center uppercase"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAutoAssignModal(false)}
+                    className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyAutoAssign}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-100 active:scale-95 transition-all cursor-pointer"
+                  >
+                    Apply Assignments
                   </button>
                 </div>
               </div>

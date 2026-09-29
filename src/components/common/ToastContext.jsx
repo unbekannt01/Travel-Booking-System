@@ -10,19 +10,24 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
-  const showToast = useCallback((message, type = "info") => {
+  const showToast = useCallback((message, type = "info", options = {}) => {
     const id = Date.now() + Math.random().toString(36).substr(2, 9)
-    setToasts((prev) => [...prev, { id, message, type }])
-    setTimeout(() => {
-      removeToast(id)
-    }, 4000)
+    const duration = options.duration !== undefined ? options.duration : (options.action ? 8000 : 4000)
+    setToasts((prev) => [...prev, { id, message, type, action: options.action }])
+    if (duration > 0) {
+      setTimeout(() => {
+        removeToast(id)
+      }, duration)
+    }
     return id
   }, [removeToast])
 
   const toast = {
-    success: (msg) => showToast(msg, "success"),
-    error: (msg) => showToast(msg, "error"),
-    info: (msg) => showToast(msg, "info"),
+    success: (msg, opts) => showToast(msg, "success", opts),
+    error: (msg, opts) => showToast(msg, "error", opts),
+    info: (msg, opts) => showToast(msg, "info", opts),
+    action: (msg, actionObj, duration = 8000) => showToast(msg, "info", { action: actionObj, duration }),
+    undo: (msg, onUndo, duration = 8000) => showToast(msg, "info", { action: { label: "Undo", onClick: onUndo }, duration }),
   }
 
   return (
@@ -46,6 +51,17 @@ export function ToastProvider({ children }) {
               {t.type === "info" && <Info size={20} strokeWidth={2.5} />}
             </div>
             <p className="text-sm font-bold flex-1 leading-snug">{t.message}</p>
+            {t.action && (
+              <button
+                onClick={() => {
+                  if (t.action.onClick) t.action.onClick()
+                  removeToast(t.id)
+                }}
+                className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all shrink-0 shadow-sm"
+              >
+                {t.action.label || "Undo"}
+              </button>
+            )}
             <button
               onClick={() => removeToast(t.id)}
               className="p-1 rounded-lg hover:bg-white/20 transition-colors shrink-0"

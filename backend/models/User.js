@@ -22,6 +22,12 @@ const userSchema = new mongoose.Schema(
     gstNumber: { type: String, default: "" },
     invoicePrefix: { type: String, default: "YHB" },
     receiptPrefix: { type: String, default: "REC" },
+    invoiceTheme: {
+      type: String,
+      enum: ["classic", "modern", "minimal"],
+      default: "classic",
+    },
+    invoiceColor: { type: String, default: "#4f46e5" },
     termsAndConditions: {
       type: [String],
       default: [

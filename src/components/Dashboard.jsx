@@ -7,6 +7,7 @@ import {
   createBooking,
   updateBooking,
   deleteBooking,
+  restoreBooking,
   cancelBooking,
 } from "../data/bookings"
 import {
@@ -66,6 +67,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     gstNumber: user?.gstNumber || "",
     invoicePrefix: user?.invoicePrefix || "YHB",
     receiptPrefix: user?.receiptPrefix || "REC",
+    invoiceTheme: user?.invoiceTheme || "classic",
+    invoiceColor: user?.invoiceColor || "#4f46e5",
     termsAndConditions: user?.termsAndConditions || [
       "Valid Aadhar card is strictly required for all travelers.",
       "Advance payment is non-refundable upon confirmation.",
@@ -94,6 +97,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         gstNumber: user.gstNumber || "",
         invoicePrefix: user.invoicePrefix || "YHB",
         receiptPrefix: user.receiptPrefix || "REC",
+        invoiceTheme: user.invoiceTheme || "classic",
+        invoiceColor: user.invoiceColor || "#4f46e5",
         termsAndConditions: user.termsAndConditions || [
           "Valid Aadhar card is strictly required for all travelers.",
           "Advance payment is non-refundable upon confirmation.",
@@ -241,9 +246,12 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   }
 
   const handleDeleteBooking = async (id) => {
+    const bookingToDelete = bookings.find((b) => (b._id || b.id) === id)
+    const invoiceLabel = bookingToDelete?.invoiceNo ? `#${bookingToDelete.invoiceNo}` : "this reservation"
+
     const confirmed = await confirm({
       title: "Delete Booking?",
-      message: "Are you sure you want to delete this booking? This action cannot be undone.",
+      message: `Are you sure you want to delete ${invoiceLabel}? It will be removed from your active manifests and lists, with an option to undo.`,
       confirmText: "Delete Booking",
       cancelText: "Cancel",
       isDestructive: true,
@@ -253,7 +261,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       try {
         await deleteBooking(id)
         setBookings((prev) => prev.filter((b) => (b._id || b.id) !== id))
-        toast.success("Booking deleted successfully")
+
+        toast.undo(`Booking ${invoiceLabel} deleted.`, async () => {
+          try {
+            const restored = await restoreBooking(id)
+            setBookings((prev) => [restored, ...prev])
+            toast.success(`Booking ${invoiceLabel} restored!`)
+          } catch (restoreErr) {
+            console.error("Error restoring booking:", restoreErr)
+            toast.error("Failed to restore booking")
+          }
+        }, 8000)
       } catch (error) {
         console.error("Error deleting booking:", error)
         toast.error(error.message || "Failed to delete booking")

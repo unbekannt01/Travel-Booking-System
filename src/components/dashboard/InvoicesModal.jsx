@@ -1,4 +1,5 @@
-import { FileText, Filter, X, Eye, Edit3, Trash2, Ban, CheckCircle2 } from "lucide-react"
+import { useState, useMemo } from "react"
+import { FileText, Filter, X, Eye, Edit3, Trash2, Ban, CheckCircle2, Search, Clock, Check } from "lucide-react"
 
 export default function InvoicesModal({
   isOpen,
@@ -13,54 +14,137 @@ export default function InvoicesModal({
   handleDeleteBooking,
   handleCancelBooking,
 }) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all") // all | paid | pending | cancelled
+
+  const displayedInvoices = useMemo(() => {
+    return filteredInvoices.filter((b) => {
+      const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+      const isPaid = !isCancelled && (b.isPaid || balance === 0)
+      const isPending = !isCancelled && !isPaid
+
+      if (statusFilter === "paid" && !isPaid) return false
+      if (statusFilter === "pending" && !isPending) return false
+      if (statusFilter === "cancelled" && !isCancelled) return false
+
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim()
+        const matchesInvoice = b.invoiceNo?.toLowerCase().includes(q)
+        const matchesName = b.contactName?.toLowerCase().includes(q)
+        const matchesPhone = b.contactPhone?.toLowerCase().includes(q)
+        const matchesTour = b.tourName?.toLowerCase().includes(q)
+        const matchesPassenger = b.passengers?.some((p) => p.name?.toLowerCase().includes(q))
+        if (!matchesInvoice && !matchesName && !matchesPhone && !matchesTour && !matchesPassenger) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [filteredInvoices, statusFilter, searchTerm])
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-100 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-indigo-600 p-2 rounded-xl text-white">
-              <FileText size={20} />
+        {/* Sticky Header & Toolbar */}
+        <div className="sticky top-0 bg-white z-20 border-b border-slate-100 shadow-xs">
+          <div className="p-6 pb-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-md shadow-indigo-100">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900">
+                  All Booking Invoices
+                </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Showing {displayedInvoices.length} of {filteredInvoices.length} Invoices
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xl font-black text-slate-900">
-                All Booking Invoices
-              </h3>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                {filteredInvoices.length} Total Invoices
-              </p>
+
+            <div className="flex items-center gap-3 w-full lg:w-auto">
+              <div className="relative flex-1 lg:flex-none lg:min-w-56">
+                <Filter
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={16}
+                />
+                <select
+                  value={invoiceTourFilter}
+                  onChange={(e) => setInvoiceTourFilter(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none appearance-none cursor-pointer"
+                >
+                  <option value="all">All Tours</option>
+                  {uniqueTours.map((tour) => (
+                    <option key={tour} value={tour}>
+                      {tour}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={() => {
+                  onClose()
+                  setInvoiceTourFilter("all")
+                  setSearchTerm("")
+                  setStatusFilter("all")
+                }}
+                className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                aria-label="Close invoices modal"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-3 w-full lg:w-auto">
-            <div className="relative flex-1 lg:flex-none lg:min-w-60">
-              <Filter
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                size={16}
+
+          {/* Sticky Search & Filter Chips Bar */}
+          <div className="px-6 pb-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            {/* Search input */}
+            <div className="relative flex-1 max-w-md">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search invoice #, name, phone, tour, passenger..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
               />
-              <select
-                value={invoiceTourFilter}
-                onChange={(e) => setInvoiceTourFilter(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none appearance-none cursor-pointer"
-              >
-                <option value="all">All Tours</option>
-                {uniqueTours.map((tour) => (
-                  <option key={tour} value={tour}>
-                    {tour}
-                  </option>
-                ))}
-              </select>
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => {
-                onClose()
-                setInvoiceTourFilter("all")
-              }}
-              className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-              aria-label="Close invoices modal"
-            >
-              <X size={20} />
-            </button>
+
+            {/* Status Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+              {[
+                { id: "all", label: "All" },
+                { id: "paid", label: "Paid" },
+                { id: "pending", label: "Pending" },
+                { id: "cancelled", label: "Cancelled" },
+              ].map((chip) => {
+                const isActive = statusFilter === chip.id
+                return (
+                  <button
+                    key={chip.id}
+                    onClick={() => setStatusFilter(chip.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                      isActive
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
 
@@ -81,7 +165,7 @@ export default function InvoicesModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredInvoices.map((b) => (
+                {displayedInvoices.map((b) => (
                   <tr
                     key={b.id}
                     className="hover:bg-slate-50/50 transition-colors group"

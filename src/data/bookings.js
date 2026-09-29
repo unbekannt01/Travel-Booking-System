@@ -40,6 +40,13 @@ export async function deleteBooking(id) {
   })
 }
 
+export async function restoreBooking(id) {
+  const data = await request(`/api/bookings/${id}/restore`, {
+    method: "PUT",
+  })
+  return normalizeBooking(data)
+}
+
 export async function updatePassenger(bookingId, passengerIndex, passengerData) {
   const data = await request(`/api/bookings/${bookingId}/passengers/${passengerIndex}`, {
     method: "PUT",

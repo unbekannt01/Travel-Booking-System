@@ -1,4 +1,4 @@
-import { Shield, Building2, Check, Edit3, X, Landmark, FileText } from "lucide-react"
+import { Shield, Building2, Check, Edit3, X, Landmark, FileText, Palette, Sparkles } from "lucide-react"
 import { useToast } from "../common/ToastContext"
 
 export default function SettingsPanel({
@@ -528,6 +528,195 @@ export default function SettingsPanel({
             </div>
           </div>
 
+          {/* Invoice & Receipt Theme & Accent Color */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <Palette size={18} className="text-indigo-600" />
+              <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Invoice & Receipt Theme & Styling
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7 space-y-5">
+                {/* Theme selection */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    Layout Theme
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "classic", label: "Classic", desc: "Formal boxed layout with clean borders" },
+                      { id: "modern", label: "Modern", desc: "Vibrant header cards & pill badges" },
+                      { id: "minimal", label: "Minimal", desc: "Refined monochrome with airy spacing" },
+                    ].map((theme) => {
+                      const isSelected = (companySettings.invoiceTheme || "classic") === theme.id
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          disabled={!isEditingCompany}
+                          onClick={() => setCompanySettings({ ...companySettings, invoiceTheme: theme.id })}
+                          className={`p-3.5 rounded-2xl border text-left transition-all ${
+                            isSelected
+                              ? "border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/20 shadow-xs"
+                              : "border-slate-200 hover:border-slate-300 bg-white"
+                          } ${!isEditingCompany ? "opacity-70 cursor-default" : "cursor-pointer"}`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-black text-slate-900 capitalize">{theme.label}</span>
+                            {isSelected && <Check size={14} className="text-indigo-600 font-bold" />}
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-tight font-medium">{theme.desc}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Accent Color picker */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    Brand Accent Color
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {[
+                      { name: "Indigo", hex: "#4f46e5" },
+                      { name: "Sky", hex: "#0284c7" },
+                      { name: "Emerald", hex: "#059669" },
+                      { name: "Amber", hex: "#d97706" },
+                      { name: "Rose", hex: "#e11d48" },
+                      { name: "Slate", hex: "#334155" },
+                    ].map((col) => {
+                      const isSelected = (companySettings.invoiceColor || "#4f46e5").toLowerCase() === col.hex.toLowerCase()
+                      return (
+                        <button
+                          key={col.hex}
+                          type="button"
+                          disabled={!isEditingCompany}
+                          onClick={() => setCompanySettings({ ...companySettings, invoiceColor: col.hex })}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                            isSelected
+                              ? "border-slate-900 bg-slate-900 text-white shadow-xs"
+                              : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                          } ${!isEditingCompany ? "opacity-70 cursor-default" : "cursor-pointer"}`}
+                        >
+                          <span className="w-3.5 h-3.5 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: col.hex }} />
+                          <span>{col.name}</span>
+                        </button>
+                      )
+                    })}
+
+                    {/* Custom color input */}
+                    <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                      <input
+                        type="color"
+                        disabled={!isEditingCompany}
+                        value={companySettings.invoiceColor || "#4f46e5"}
+                        onChange={(e) => setCompanySettings({ ...companySettings, invoiceColor: e.target.value })}
+                        className="w-8 h-8 rounded-lg cursor-pointer border border-slate-200 p-0.5 bg-white disabled:opacity-50"
+                        title="Pick custom color"
+                      />
+                      <span className="text-[11px] font-mono font-bold text-slate-500 uppercase">
+                        {companySettings.invoiceColor || "#4f46e5"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="lg:col-span-5 bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Live Template Preview
+                  </span>
+                  <span
+                    className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: companySettings.invoiceColor || "#4f46e5" }}
+                  >
+                    {companySettings.invoiceTheme || "classic"}
+                  </span>
+                </div>
+
+                {/* Mini Mock Invoice */}
+                <div
+                  className={`bg-white rounded-xl shadow-xs overflow-hidden border ${
+                    (companySettings.invoiceTheme || "classic") === "classic"
+                      ? "border-slate-300"
+                      : (companySettings.invoiceTheme || "classic") === "modern"
+                        ? "border-indigo-100 shadow-md"
+                        : "border-slate-100"
+                  }`}
+                >
+                  {/* Mock Header */}
+                  <div
+                    className={`p-3 text-white ${
+                      (companySettings.invoiceTheme || "classic") === "minimal"
+                        ? "!bg-white !text-slate-900 border-b border-slate-200"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor:
+                        (companySettings.invoiceTheme || "classic") === "minimal"
+                          ? undefined
+                          : companySettings.invoiceColor || "#4f46e5",
+                    }}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-black tracking-tight">
+                          {companySettings.companyName || "Yatra Tours"}
+                        </p>
+                        <p className={`text-[9px] font-medium opacity-80 ${(companySettings.invoiceTheme || "classic") === "minimal" ? "!text-slate-400" : ""}`}>
+                          {companySettings.companyTagline || "Tourism & Travels"}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${
+                          (companySettings.invoiceTheme || "classic") === "minimal"
+                            ? "bg-slate-100 text-slate-700"
+                            : "bg-white/20 text-white"
+                        }`}>
+                          #{companySettings.invoicePrefix || "YHB"}-SAMPLE-01
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mock Content */}
+                  <div className="p-3 space-y-2 text-[10px]">
+                    <div className="flex justify-between text-slate-500 font-bold border-b border-slate-100 pb-1">
+                      <span>Tour: Kedarnath Yatra</span>
+                      <span>Date: 25 Oct 2026</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between font-medium text-slate-700">
+                        <span>1. Ramesh Patel (L-1)</span>
+                        <span>₹4,500</span>
+                      </div>
+                      <div className="flex justify-between font-medium text-slate-700">
+                        <span>2. Sarita Patel (L-2)</span>
+                        <span>₹4,500</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
+                      <span className="font-bold text-slate-500">Balance Due</span>
+                      <span
+                        className="font-black text-xs px-2 py-0.5 rounded-lg text-white"
+                        style={{ backgroundColor: companySettings.invoiceColor || "#4f46e5" }}
+                      >
+                        ₹3,000
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Terms & Conditions */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
@@ -613,6 +802,8 @@ export default function SettingsPanel({
                       gstNumber: user?.gstNumber || "",
                       invoicePrefix: user?.invoicePrefix || "YHB",
                       receiptPrefix: user?.receiptPrefix || "REC",
+                      invoiceTheme: user?.invoiceTheme || "classic",
+                      invoiceColor: user?.invoiceColor || "#4f46e5",
                       termsAndConditions: user?.termsAndConditions || [
                         "Valid Aadhar card is strictly required for all travelers.",
                         "Advance payment is non-refundable upon confirmation.",

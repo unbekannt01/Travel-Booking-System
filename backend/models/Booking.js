@@ -52,11 +52,13 @@ const bookingSchema = new mongoose.Schema(
     payments: [paymentRecordSchema],
     passengers: [passengerSchema],
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
 )
 
 // Ensure invoiceNo is unique per user (not globally)
 bookingSchema.index({ userId: 1, invoiceNo: 1 }, { unique: true })
+bookingSchema.index({ userId: 1, deletedAt: 1 })
 
 export default mongoose.model("Booking", bookingSchema)

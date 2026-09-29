@@ -58,6 +58,8 @@ const formatUserResponse = (user) => ({
   gstNumber: user.gstNumber || "",
   invoicePrefix: user.invoicePrefix || "YHB",
   receiptPrefix: user.receiptPrefix || "REC",
+  invoiceTheme: user.invoiceTheme || "classic",
+  invoiceColor: user.invoiceColor || "#4f46e5",
   termsAndConditions: user.termsAndConditions || [],
   bankDetails: user.bankDetails,
   organizers: user.organizers,
@@ -390,6 +392,8 @@ router.put("/update-company", async (req, res) => {
       gstNumber,
       invoicePrefix,
       receiptPrefix,
+      invoiceTheme,
+      invoiceColor,
       termsAndConditions,
       organizers,
       bankDetails,
@@ -404,6 +408,12 @@ router.put("/update-company", async (req, res) => {
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber
     if (invoicePrefix !== undefined) updateData.invoicePrefix = (invoicePrefix || "YHB").toUpperCase().trim()
     if (receiptPrefix !== undefined) updateData.receiptPrefix = (receiptPrefix || "REC").toUpperCase().trim()
+    if (invoiceTheme !== undefined && ["classic", "modern", "minimal"].includes(invoiceTheme)) {
+      updateData.invoiceTheme = invoiceTheme
+    }
+    if (invoiceColor !== undefined && typeof invoiceColor === "string") {
+      updateData.invoiceColor = invoiceColor.trim()
+    }
     if (termsAndConditions !== undefined && Array.isArray(termsAndConditions)) {
       updateData.termsAndConditions = termsAndConditions
     }

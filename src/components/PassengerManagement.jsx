@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ShieldCheck,
   MapPin,
@@ -12,6 +12,10 @@ import {
   X,
   Printer,
   Edit3,
+  Search,
+  CheckCircle2,
+  Ban,
+  Clock,
 } from "lucide-react";
 import { maskAadhaar } from "../utils/formatters";
 import { formatDisplayDate } from "../utils/date";
@@ -21,6 +25,8 @@ export default function PassengerManagement({
   onEditBooking,
 }) {
   const [selectedTour, setSelectedTour] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [showPreview, setShowPreview] = useState(false);
   const [includeAadhar, setIncludeAadhar] = useState(true);
   const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({});
@@ -36,10 +42,41 @@ export default function PassengerManagement({
     Boolean
   );
 
-  const filteredBookings =
-    selectedTour === "all"
-      ? bookings
-      : bookings.filter((b) => b.tourName === selectedTour);
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (selectedTour !== "all" && b.tourName !== selectedTour) return false;
+
+      const isCancelled = b.status === "Cancelled" || b.status === "cancelled";
+      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0));
+      const isPaid = !isCancelled && (b.isPaid || balance === 0);
+      const isPending = !isCancelled && !isPaid;
+
+      if (statusFilter === "paid" && !isPaid) return false;
+      if (statusFilter === "pending" && !isPending) return false;
+      if (statusFilter === "cancelled" && !isCancelled) return false;
+
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const matchesContact =
+          b.contactName?.toLowerCase().includes(q) ||
+          b.contactPhone?.toLowerCase().includes(q);
+        const matchesInvoice = b.invoiceNo?.toLowerCase().includes(q);
+        const matchesTour = b.tourName?.toLowerCase().includes(q);
+        const matchesPax = b.passengers?.some(
+          (p) =>
+            p.name?.toLowerCase().includes(q) ||
+            p.city?.toLowerCase().includes(q) ||
+            p.seatId?.toLowerCase().includes(q) ||
+            p.contact?.toLowerCase().includes(q)
+        );
+        if (!matchesContact && !matchesInvoice && !matchesTour && !matchesPax) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [bookings, selectedTour, statusFilter, searchTerm]);
 
   const getJourneyDate = () => {
     const booking = filteredBookings[0];
@@ -108,6 +145,57 @@ export default function PassengerManagement({
               <FileDown size={16} /> With Aadhar
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Sticky Search and Filter Chips Toolbar */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Search input */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search passenger, phone, city, tour, seat..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Filter chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0">
+            Status:
+          </span>
+          {[
+            { id: "all", label: "All" },
+            { id: "paid", label: "Paid" },
+            { id: "pending", label: "Pending" },
+            { id: "cancelled", label: "Cancelled" },
+          ].map((chip) => {
+            const isActive = statusFilter === chip.id;
+            return (
+              <button
+                key={chip.id}
+                onClick={() => setStatusFilter(chip.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                  isActive
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
