@@ -1,8 +1,31 @@
-import { Shield, Building2, Check, Edit3, X, Landmark, FileText, Palette, Sparkles, Languages, LayoutTemplate } from "lucide-react"
+import {
+  Shield,
+  Building2,
+  Check,
+  Edit3,
+  X,
+  Landmark,
+  FileText,
+  Palette,
+  Sparkles,
+  Languages,
+  LayoutTemplate,
+  Database,
+  Download,
+  Upload,
+  RefreshCw,
+  FolderArchive,
+} from "lucide-react"
+import { useState, useEffect } from "react"
 import { useToast } from "../common/ToastContext"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { TICKET_TEMPLATES } from "../tickets/ticketRegistry"
 import { isDesktop } from "../../data/adapters"
+import {
+  getBackupStats,
+  exportDatabaseBackup,
+  restoreDatabaseBackup,
+} from "../../data/settings"
 
 export default function SettingsPanel({
   user,
@@ -16,6 +39,55 @@ export default function SettingsPanel({
   formatIndianPhone,
 }) {
   const { toast } = useToast()
+  const [backupStats, setBackupStats] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isRestoring, setIsRestoring] = useState(false)
+
+  useEffect(() => {
+    if (isDesktop) {
+      getBackupStats()
+        .then(setBackupStats)
+        .catch((err) => console.error("Error loading backup stats:", err))
+    }
+  }, [])
+
+  const handleExportBackup = async () => {
+    setIsExporting(true)
+    try {
+      const res = await exportDatabaseBackup()
+      if (res && res.success) {
+        toast.success(`Database backup saved: ${res.filePath}`)
+        const updated = await getBackupStats()
+        setBackupStats(updated)
+      } else if (!res?.canceled) {
+        toast.error(res?.error || "Failed to export backup")
+      }
+    } catch (err) {
+      toast.error(err.message || "Export error")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleRestoreBackup = async () => {
+    if (!window.confirm("Restoring a backup will overwrite current bookings, tours, and payments with the backup file data. Are you sure you want to proceed?")) {
+      return
+    }
+    setIsRestoring(true)
+    try {
+      const res = await restoreDatabaseBackup()
+      if (res && res.success) {
+        toast.success("Database restored successfully! Application reloaded.")
+      } else if (!res?.canceled) {
+        toast.error(res?.error || "Failed to restore backup")
+      }
+    } catch (err) {
+      toast.error(err.message || "Restore error")
+    } finally {
+      setIsRestoring(false)
+    }
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div>
@@ -78,6 +150,83 @@ export default function SettingsPanel({
           </div>
         </div>
       </div>
+
+      {/* Database Backup & Safety (Desktop Mode) */}
+      {isDesktop && (
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-7 border-b border-slate-50 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-50 p-2 rounded-xl text-emerald-600">
+                <Database size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  Database Backup & Recovery
+                </h3>
+                <p className="text-xs text-slate-500 font-bold">
+                  Automated rolling snapshots & full offline recovery
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+              <Check size={14} strokeWidth={3} /> Auto-Snapshot Active
+            </span>
+          </div>
+
+          <div className="p-7 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2 text-slate-600 font-bold text-xs uppercase tracking-wider mb-1">
+                  <FolderArchive size={14} className="text-emerald-500" /> Rolling Snapshots
+                </div>
+                <div className="text-xl font-black text-slate-900">
+                  {backupStats?.backupCount ?? 0} Daily Snapshots Kept
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Daily backups are taken automatically on app launch (retaining the 7 most recent).
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                <div className="flex items-center gap-2 text-slate-600 font-bold text-xs uppercase tracking-wider mb-1">
+                  <RefreshCw size={14} className="text-blue-500" /> Last Backup Taken
+                </div>
+                <div className="text-xl font-black text-slate-900">
+                  {backupStats?.lastBackupTime
+                    ? new Date(backupStats.lastBackupTime).toLocaleString("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : "Today on startup"}
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  Stored safely in your application data directory.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
+              <button
+                onClick={handleExportBackup}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all disabled:opacity-50"
+              >
+                <Download size={16} />
+                {isExporting ? "Exporting Backup..." : "Export Database Backup"}
+              </button>
+
+              <button
+                onClick={handleRestoreBackup}
+                disabled={isRestoring}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all disabled:opacity-50"
+              >
+                <Upload size={16} />
+                {isRestoring ? "Restoring..." : "Restore from Backup File"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Company Settings */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">

@@ -71,7 +71,13 @@ app.whenReady().then(() => {
     // 3. Register IPC Handlers
     registerIpcHandlers(db, app)
 
-    // 4. Create Window
+    // 4. Auto Daily Backup
+    const { performAutoDailyBackup } = require("./backup.cjs")
+    performAutoDailyBackup(db).catch((err) => {
+      console.error("[YatraHub Backup] Initial daily backup check failed:", err)
+    })
+
+    // 5. Create Window
     createWindow()
   } catch (err) {
     console.error("[YatraHub Main] Failed to initialize application:", err)

@@ -180,3 +180,17 @@ export function getAuthToken() {
 
 export function setAuthToken() {}
 export function removeAuthToken() {}
+
+// --- BACKUP & RESTORE ---
+export async function getBackupStats() {
+  return invokeIpc("backup:getStats")
+}
+
+export async function exportDatabaseBackup() {
+  return invokeIpc("backup:export")
+}
+
+export async function restoreDatabaseBackup() {
+  return invokeIpc("backup:restore")
+}
+

@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --test tests/*.test.js",
-    "test:desktop": "cross-env ELECTRON_RUN_AS_NODE=1 electron --test tests/sqlite-db.test.cjs"
+    "test:desktop": "cross-env ELECTRON_RUN_AS_NODE=1 electron --test tests/*.test.cjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

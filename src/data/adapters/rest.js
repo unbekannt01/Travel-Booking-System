@@ -329,3 +329,17 @@ export async function finalize2FARecovery(token) {
 }
 
 export { getAuthToken, setAuthToken, removeAuthToken }
+
+// --- BACKUP & RESTORE (Web mode fallback) ---
+export async function getBackupStats() {
+  return { backupCount: 0, lastBackupTime: null, isWeb: true }
+}
+
+export async function exportDatabaseBackup() {
+  throw new Error("Manual database file export is only available in offline desktop mode.")
+}
+
+export async function restoreDatabaseBackup() {
+  throw new Error("Manual database file restore is only available in offline desktop mode.")
+}
+

@@ -117,8 +117,43 @@ function registerIpcHandlers(db, app) {
       dbPath: getDbPath(),
     }
   })
+
+  // BACKUP & RESTORE
+  const {
+    getBackupStats,
+    exportDatabaseBackup,
+    restoreDatabaseBackup,
+    performAutoDailyBackup,
+  } = require("./backup.cjs")
+
+  ipcMain.handle("backup:getStats", async () => {
+    return getBackupStats()
+  })
+
+  ipcMain.handle("backup:export", async (event) => {
+    const { BrowserWindow } = require("electron")
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return exportDatabaseBackup(db, win)
+  })
+
+  ipcMain.handle("backup:restore", async (event) => {
+    const { BrowserWindow } = require("electron")
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return restoreDatabaseBackup(
+      () => db,
+      (newDb) => {
+        db = newDb
+      },
+      win
+    )
+  })
+
+  ipcMain.handle("backup:runNow", async () => {
+    return performAutoDailyBackup(db)
+  })
 }
 
 module.exports = {
   registerIpcHandlers,
 }
+
