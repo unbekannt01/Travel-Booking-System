@@ -4,96 +4,37 @@ import User from "../models/User.js"
 import Payment from "../models/Payment.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
+import {
+  generateTourCode,
+  getMonthCode,
+  buildInvoicePrefix,
+  calculateNextInvoiceNo,
+  getDayBounds,
+  validateIndianPhone,
+  validateAadhaar,
+  calculateCancellationRefund,
+} from "../../shared/businessLogic.js"
+
+export {
+  generateTourCode,
+  getMonthCode,
+  getDayBounds,
+  validateIndianPhone,
+  validateAadhaar,
+}
 
 const router = express.Router()
 
-// Helper function to generate tour code from tour name
-export const generateTourCode = (tourName) => {
-  if (!tourName) return "GEN"
-  const words = tourName.trim().split(/\s+/)
-  if (words.length === 1) {
-    return tourName.substring(0, 3).toUpperCase().padEnd(3, "X")
-  }
-  return words
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("")
-    .substring(0, 3)
-    .padEnd(3, "X")
-}
-
-// Helper function to get month code (JAN, FEB, etc.)
-export const getMonthCode = (date) => {
-  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
-  const d = new Date(date)
-  const month = isNaN(d.getMonth()) ? new Date().getMonth() : d.getMonth()
-  return months[month]
-}
-
-// Safely extracts YYYY-MM-DD and returns day bounds for query
-export const getDayBounds = (dateInput) => {
-  let dateStr = ""
-  if (typeof dateInput === "string") {
-    const match = dateInput.match(/^(\d{4}-\d{2}-\d{2})/)
-    if (match) {
-      dateStr = match[1]
-    }
-  }
-  if (!dateStr) {
-    const d = new Date(dateInput)
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, "0")
-    const day = String(d.getDate()).padStart(2, "0")
-    dateStr = `${year}-${month}-${day}`
-  }
-
-  const start = new Date(`${dateStr}T00:00:00.000Z`)
-  const end = new Date(`${dateStr}T23:59:59.999Z`)
-  return { start, end, dateStr }
-}
-
 // Generates next unique invoice number for user with customizable prefix
 export const getNextInvoiceNo = async (userId, tourName, journeyDate, customPrefix = "YHB") => {
-  const tourCode = generateTourCode(tourName)
-  const monthCode = getMonthCode(journeyDate || new Date())
-  const pfx = (customPrefix || "YHB").toUpperCase().trim()
-  const prefix = `${pfx}-${tourCode}-${monthCode}-`
-
+  const prefix = buildInvoicePrefix(customPrefix, tourName, journeyDate)
   const existingBookings = await Booking.find({
     userId,
     invoiceNo: { $regex: `^${prefix}` },
   }).select("invoiceNo")
 
-  let maxSerial = 0
-  for (const b of existingBookings) {
-    const match = b.invoiceNo.match(/(\d{3,})$/)
-    if (match) {
-      const num = parseInt(match[1], 10)
-      if (num > maxSerial) maxSerial = num
-    }
-  }
-
-  const nextSerial = maxSerial + 1
-  return `${prefix}${String(nextSerial).padStart(3, "0")}`
-}
-
-// Indian mobile validation
-export const validateIndianPhone = (phone) => {
-  if (!phone) return false
-  const clean = phone.toString().replace(/[\s\-()+]/g, "")
-  if (clean.length === 12 && clean.startsWith("91")) {
-    return /^[6-9]\d{9}$/.test(clean.slice(2))
-  }
-  if (clean.length === 11 && clean.startsWith("0")) {
-    return /^[6-9]\d{9}$/.test(clean.slice(1))
-  }
-  return /^[6-9]\d{9}$/.test(clean)
-}
-
-// Aadhaar validation
-export const validateAadhaar = (aadhar) => {
-  if (!aadhar) return true // Aadhaar is optional
-  const clean = aadhar.toString().replace(/\s+/g, "")
-  return /^\d{12}$/.test(clean)
+  const existingInvoices = existingBookings.map((b) => b.invoiceNo)
+  return calculateNextInvoiceNo(existingInvoices, prefix)
 }
 
 // Seat conflict validation
@@ -631,20 +572,15 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
 
     const { reason, cancellationCharge, refundPaymentMode = "Cash" } = req.body
     const totalPaid = Math.round((booking.advanceReceived || 0) * 100) / 100
-    let fee = 0
-    if (cancellationCharge !== undefined && cancellationCharge !== null && cancellationCharge !== "") {
-      fee = Math.round(Number(cancellationCharge) * 100) / 100
-      if (isNaN(fee) || fee < 0) {
-        return res.status(400).json({ message: "Cancellation charge cannot be negative." })
-      }
-      if (fee > totalPaid) {
-        return res.status(400).json({
-          message: `Cancellation charge ₹${fee} cannot exceed total amount collected ₹${totalPaid}.`,
-        })
-      }
+    let calc
+    try {
+      calc = calculateCancellationRefund({ totalPaid, cancellationCharge })
+    } catch (calcErr) {
+      return res.status(400).json({ message: calcErr.message })
     }
 
-    const refundAmount = Math.max(0, Math.round((totalPaid - fee) * 100) / 100)
+    const fee = calc.cancellationCharge
+    const refundAmount = calc.refundAmount
 
     booking.status = "Cancelled"
     booking.cancellationReason = reason || "Cancelled by operator"

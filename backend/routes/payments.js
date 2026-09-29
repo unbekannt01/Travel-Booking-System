@@ -3,32 +3,24 @@ import Payment from "../models/Payment.js"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
 import verifyToken from "../middleware/auth.js"
+import {
+  buildReceiptPrefix,
+  calculateNextReceiptNo,
+  computeLedgerTotals,
+} from "../../shared/businessLogic.js"
 
 const router = express.Router()
 
 // Helper: Generate next receipt number e.g. REC-2609-001
-export const getNextReceiptNo = async (userId, customPrefix = "REC") => {
-  const now = new Date()
-  const year = String(now.getFullYear()).slice(-2)
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const prefix = `${customPrefix.toUpperCase()}-${year}${month}-`
+export const getNextReceiptNo = async (userId, customPrefix = "REC", date = new Date()) => {
+  const prefix = buildReceiptPrefix(customPrefix, date)
 
   const existingPayments = await Payment.find({
     userId,
     receiptNo: { $regex: `^${prefix}` },
   }).select("receiptNo")
 
-  let maxSerial = 0
-  for (const p of existingPayments) {
-    const parts = p.receiptNo.split("-")
-    const serial = parseInt(parts[parts.length - 1], 10)
-    if (!isNaN(serial) && serial > maxSerial) {
-      maxSerial = serial
-    }
-  }
-
-  const nextSerial = maxSerial + 1
-  return `${prefix}${String(nextSerial).padStart(3, "0")}`
+  return calculateNextReceiptNo(prefix, existingPayments.map((p) => p.receiptNo))
 }
 
 // Recalculate booking financials from payment ledger
@@ -39,17 +31,7 @@ export const syncBookingPayments = async (bookingId, userId) => {
     isVoid: false,
   })
 
-  let totalReceived = 0
-  for (const p of payments) {
-    if (p.type === "refund") {
-      totalReceived -= p.amount
-    } else {
-      totalReceived += p.amount
-    }
-  }
-
-  // Ensure advanceReceived doesn't drop below 0
-  totalReceived = Math.max(0, Math.round(totalReceived * 100) / 100)
+  const { totalReceived } = computeLedgerTotals(payments)
 
   const booking = await Booking.findOne({ _id: bookingId, userId })
   if (booking) {
