@@ -40,6 +40,23 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false)
 
   const isDev = !app.isPackaged && process.env.NODE_ENV !== "production"
+
+  if (!isDev) {
+    // Force-close DevTools no matter how it was triggered
+    mainWindow.webContents.on("devtools-opened", () => {
+      mainWindow.webContents.closeDevTools()
+    })
+
+    // Block common shortcuts as a first line of defense
+    mainWindow.webContents.on("before-input-event", (event, input) => {
+      const key = input.key.toLowerCase()
+      if (key === "f12") event.preventDefault()
+      if (input.control && input.shift && key === "i") event.preventDefault()
+      if (input.control && input.shift && key === "j") event.preventDefault() // console shortcut
+      if (input.control && key === "u") event.preventDefault() // view-source shortcut
+    })
+  }
+
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173"
 
   if (isDev) {
