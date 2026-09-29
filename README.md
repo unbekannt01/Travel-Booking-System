@@ -60,20 +60,47 @@ Open your browser at **`http://localhost:5173`**.
 
 ---
 
+## 🖥️ Offline Windows Desktop App (Electron + SQLite)
+
+YatraHub can run as a **100% offline Windows desktop application** with an embedded high-performance SQLite database (`better-sqlite3`).
+
+### 1. Run in Desktop Development Mode
+```bash
+# Starts Vite dev server and launches Electron desktop window concurrently
+npm run dev:desktop
+```
+- **Zero Login Required**: Automatically logs in as the local operator.
+- **Embedded SQLite**: Database file stored at `%APPDATA%/yatrahub/yatrahub.db`.
+- **Automatic Daily Backups**: Rolling daily snapshots retained automatically (last 7 days).
+- **Manual Backup & Restore**: One-click database export and restore directly from Settings.
+
+### 2. Package Windows NSIS Installer
+```bash
+# Packages standalone Windows NSIS installer into release/
+npm run dist:win
+```
+
+---
+
 ## 🧪 Automated Test Suite
 
-YatraHub includes a comprehensive, zero-dependency automated test suite leveraging Node's native test runner (`node --test`).
-
-```bash
-# Run all automated tests
-npm test
-
-# Run ESLint validation
-npm run lint
-
-# Build production bundle
-npm run build
-```
+YatraHub includes a comprehensive, dual-mode automated test suite:
+- **Web & Business Logic Tests** (84 tests across 14 test suites via native Node test runner):
+  ```bash
+  npm test
+  ```
+- **Offline Desktop & SQLite Engine Tests** (14 tests verifying schema, seat locks, backups & parity):
+  ```bash
+  npm run test:desktop
+  ```
+- **Code Hygiene & Linting**:
+  ```bash
+  npm run lint
+  ```
+- **Production Bundle Compilation**:
+  ```bash
+  npm run build
+  ```
 
 ### Test Coverage Summary (**84 tests across 14 test suites**):
 1. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):

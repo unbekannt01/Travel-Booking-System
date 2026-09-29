@@ -11,7 +11,42 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --test tests/*.test.js",
-    "test:desktop": "cross-env ELECTRON_RUN_AS_NODE=1 electron --test tests/*.test.cjs"
+    "test:desktop": "cross-env ELECTRON_RUN_AS_NODE=1 electron --test tests/*.test.cjs",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.yatrahub.desktop",
+    "productName": "YatraHub",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "shared/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "YatraHub"
+    }
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
