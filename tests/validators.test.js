@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { isValidIndianPhone, isValidAadhaar } from "../src/utils/validators.js"
 import { maskAadhaar, formatAadhaarInput } from "../src/utils/formatters.js"
-import { validateIndianPhone, validateAadhaar } from "../backend/routes/bookings.js"
+import { validateIndianPhone, validateAadhaar } from "../shared/businessLogic.js"
 
 test("Phone validation - valid Indian mobile numbers", () => {
   const validPhones = [

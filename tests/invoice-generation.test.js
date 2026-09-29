@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { generateTourCode, getMonthCode } from "../backend/routes/bookings.js"
+import { generateTourCode, getMonthCode } from "../shared/businessLogic.js"
 
 test("Invoice Tour Code generation", () => {
   assert.equal(generateTourCode("Kedarnath Yatra"), "KYX")
