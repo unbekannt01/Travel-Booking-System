@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt, Ban } from "lucide-react"
+import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt, Ban, Printer } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { formatDisplayDate } from "../utils/date"
 import { listPayments } from "../data/payments"
+import ReceiptModal from "./common/ReceiptModal"
 
-export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) {
+export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, user }) {
   const { toast } = useToast()
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState("")
@@ -15,6 +16,7 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) 
   const [loadingLedger, setLoadingLedger] = useState(false)
   const [voidingPaymentId, setVoidingPaymentId] = useState(null)
   const [voidReason, setVoidReason] = useState("")
+  const [viewReceiptPayment, setViewReceiptPayment] = useState(null)
 
   const closeLedgerModal = () => {
     setViewLedgerBooking(null)
@@ -506,17 +508,28 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) 
                             )}
                           </td>
                           <td className="px-4 py-3.5 text-center">
-                            {!isVoid && onVoidPayment && p._id ? (
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => setVoidingPaymentId(p._id)}
-                                className="px-2.5 py-1 text-[10px] font-black text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                onClick={() => setViewReceiptPayment(p)}
+                                className="px-2 py-1 text-[10px] font-black text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1"
+                                title="View & Print Official Receipt"
                               >
-                                Void
+                                <Printer size={11} />
+                                <span>Receipt</span>
                               </button>
-                            ) : isVoid ? (
-                              <span className="text-[10px] font-black text-slate-400 uppercase">Voided</span>
-                            ) : null}
+                              {!isVoid && onVoidPayment && p._id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setVoidingPaymentId(p._id)}
+                                  className="px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  Void
+                                </button>
+                              ) : isVoid ? (
+                                <span className="text-[10px] font-black text-slate-400 uppercase">Voided</span>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       )
@@ -529,6 +542,22 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) 
                     <div>
                       <p className="font-black text-slate-700">Initial Advance Recorded: ₹{(viewLedgerBooking.advanceReceived || 0).toLocaleString()}</p>
                       <p className="text-xs text-slate-400 mt-1">Payment mode: {viewLedgerBooking.paymentMode || "Cash"}</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setViewReceiptPayment({
+                            receiptNo: `#${user?.receiptPrefix || "REC"}-001`,
+                            amount: viewLedgerBooking.advanceReceived,
+                            paymentDate: viewLedgerBooking.date,
+                            paymentMode: viewLedgerBooking.paymentMode || "Cash",
+                            notes: "Initial advance received upon booking",
+                          })
+                        }
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black rounded-xl transition-colors"
+                      >
+                        <Printer size={13} />
+                        <span>Print Advance Receipt</span>
+                      </button>
                     </div>
                   ) : (
                     "No payment records found for this booking."
@@ -548,6 +577,16 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment }) 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official Payment Receipt Modal */}
+      {viewReceiptPayment && viewLedgerBooking && (
+        <ReceiptModal
+          booking={viewLedgerBooking}
+          payment={viewReceiptPayment}
+          user={user}
+          onClose={() => setViewReceiptPayment(null)}
+        />
       )}
     </div>
   )

@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema(
       default: "classic",
     },
     invoiceColor: { type: String, default: "#4f46e5" },
+    documentLanguage: {
+      type: String,
+      enum: ["en", "hi", "gu"],
+      default: "en",
+    },
     termsAndConditions: {
       type: [String],
       default: [

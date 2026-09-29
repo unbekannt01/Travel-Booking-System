@@ -69,6 +69,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     receiptPrefix: user?.receiptPrefix || "REC",
     invoiceTheme: user?.invoiceTheme || "classic",
     invoiceColor: user?.invoiceColor || "#4f46e5",
+    documentLanguage: user?.documentLanguage || "en",
     termsAndConditions: user?.termsAndConditions || [
       "Valid Aadhar card is strictly required for all travelers.",
       "Advance payment is non-refundable upon confirmation.",
@@ -99,6 +100,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         receiptPrefix: user.receiptPrefix || "REC",
         invoiceTheme: user.invoiceTheme || "classic",
         invoiceColor: user.invoiceColor || "#4f46e5",
+        documentLanguage: user.documentLanguage || "en",
         termsAndConditions: user.termsAndConditions || [
           "Valid Aadhar card is strictly required for all travelers.",
           "Advance payment is non-refundable upon confirmation.",
@@ -512,6 +514,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               handleCancelBooking={handleCancelBooking}
               handleMarkPaymentPaid={handleMarkPaymentPaid}
               handleVoidPayment={handleVoidPayment}
+              user={user}
             />
           )}
 
@@ -537,6 +540,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 setEditingBooking(booking)
                 setActiveTab("form")
               }}
+              user={user}
             />
           )}
 
@@ -549,7 +553,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           )}
 
           {activeTab === "journey" && (
-            <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} />
+            <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} user={user} />
           )}
 
           {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}

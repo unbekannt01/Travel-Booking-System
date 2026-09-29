@@ -17,11 +17,13 @@ import {
   ArrowLeftRight,
   Banknote,
   X,
+  Ticket,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
+import BoardingPassModal from "./common/BoardingPassModal"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
@@ -45,8 +47,9 @@ const generateAllSeats = (busType) => {
   return seats
 }
 
-export default function JourneyManager({ bookings, onUpdateBooking }) {
+export default function JourneyManager({ bookings, onUpdateBooking, user }) {
   const { toast } = useToast()
+  const [boardingPassTarget, setBoardingPassTarget] = useState(null)
   const todayStr = useMemo(() => toDateInputValue(new Date()), [])
   const tomorrowStr = useMemo(() => {
     const d = new Date()
@@ -758,6 +761,17 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                       )
                     })()}
 
+                    {/* Boarding Passes */}
+                    <button
+                      type="button"
+                      onClick={() => setBoardingPassTarget({ booking, paxIndex: "all" })}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-all border border-indigo-100 shadow-xs"
+                      title="View & Print Boarding Passes with QR"
+                    >
+                      <Ticket size={14} />
+                      <span>Boarding Passes ({booking.passengers.length})</span>
+                    </button>
+
                     {/* Spacer */}
                     <div className="flex-1" />
 
@@ -880,18 +894,28 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleCheckIn(booking, passenger, idx)}
-                                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
-                                    isCheckedIn
-                                      ? "bg-green-600 text-white shadow-md shadow-green-100"
-                                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                  }`}
-                                >
-                                  <Check size={14} />
-                                  {isCheckedIn ? "Boarded" : "Check In"}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                      isCheckedIn
+                                        ? "bg-green-600 text-white shadow-md shadow-green-100"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                    }`}
+                                  >
+                                    <Check size={14} />
+                                    {isCheckedIn ? "Boarded" : "Check In"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
+                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                                    title="View & Print Passenger Boarding Pass with QR"
+                                  >
+                                    <Ticket size={16} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           )
@@ -1101,6 +1125,16 @@ export default function JourneyManager({ bookings, onUpdateBooking }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Boarding Passes Modal */}
+      {boardingPassTarget && (
+        <BoardingPassModal
+          booking={boardingPassTarget.booking}
+          user={user}
+          initialPassengerIndex={boardingPassTarget.paxIndex}
+          onClose={() => setBoardingPassTarget(null)}
+        />
       )}
     </div>
   )

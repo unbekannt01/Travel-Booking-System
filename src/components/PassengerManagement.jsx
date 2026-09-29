@@ -16,13 +16,16 @@ import {
   CheckCircle2,
   Ban,
   Clock,
+  Ticket,
 } from "lucide-react";
 import { maskAadhaar } from "../utils/formatters";
 import { formatDisplayDate } from "../utils/date";
+import BoardingPassModal from "./common/BoardingPassModal";
 
 export default function PassengerManagement({
   bookings,
   onEditBooking,
+  user,
 }) {
   const [selectedTour, setSelectedTour] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,6 +33,7 @@ export default function PassengerManagement({
   const [showPreview, setShowPreview] = useState(false);
   const [includeAadhar, setIncludeAadhar] = useState(true);
   const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({});
+  const [boardingPassTarget, setBoardingPassTarget] = useState(null);
 
   const toggleAadhaarVisibility = (key) => {
     setUnmaskedAadhaar((prev) => ({
@@ -303,6 +307,15 @@ export default function PassengerManagement({
                     <td className="px-8 py-5">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          type="button"
+                          onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
+                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="View & Print Boarding Pass & QR"
+                        >
+                          <Ticket size={18} />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onEditBooking(booking)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                           title="Edit Passenger Details"
@@ -524,6 +537,16 @@ export default function PassengerManagement({
           }
         }
       `}</style>
+
+      {/* Boarding Pass Modal */}
+      {boardingPassTarget && (
+        <BoardingPassModal
+          booking={boardingPassTarget.booking}
+          user={user}
+          initialPassengerIndex={boardingPassTarget.paxIndex}
+          onClose={() => setBoardingPassTarget(null)}
+        />
+      )}
     </div>
   );
 }

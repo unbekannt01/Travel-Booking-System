@@ -33,6 +33,7 @@ export default function DashboardHome({
   handleCancelBooking,
   handleMarkPaymentPaid,
   handleVoidPayment,
+  user,
 }) {
   const [recentSearch, setRecentSearch] = useState("")
   const [recentStatus, setRecentStatus] = useState("all") // all | paid | pending | cancelled
@@ -506,6 +507,7 @@ export default function DashboardHome({
         bookings={bookings}
         onMarkPaid={handleMarkPaymentPaid}
         onVoidPayment={handleVoidPayment}
+        user={user}
       />
     </div>
   )
