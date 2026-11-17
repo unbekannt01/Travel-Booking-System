@@ -1,42 +1,14 @@
+import "./config/env.js"
 import express from "express"
 import helmet from "helmet"
 import cookieParser from "cookie-parser"
 import mongoose from "mongoose"
 import cors from "cors"
-import dotenv from "dotenv"
-import path from "path"
-import { fileURLToPath } from "url"
 import { mongoSanitize } from "./middleware/sanitize.js"
 import authRoutes from "./routes/auth.js"
 import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
 import paymentRoutes from "./routes/payments.js"
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-dotenv.config()
-dotenv.config({ path: path.join(__dirname, ".env") })
-
-const insecureSecrets = [
-  "secret",
-  "your_jwt_secret",
-  "your_jwt_secret_key_here",
-  "changeme",
-  "default_secret",
-  "12345678",
-  "secretkey",
-]
-if (
-  !process.env.JWT_SECRET ||
-  process.env.JWT_SECRET.length < 32 ||
-  insecureSecrets.includes(process.env.JWT_SECRET.toLowerCase())
-) {
-  console.error(
-    "FATAL: JWT_SECRET environment variable is missing, too short (< 32 characters), or set to an insecure default value."
-  )
-  process.exit(1)
-}
 
 const app = express()
 
