@@ -1,4 +1,5 @@
 import express from "express"
+import helmet from "helmet"
 import cookieParser from "cookie-parser"
 import mongoose from "mongoose"
 import cors from "cors"
@@ -40,8 +41,24 @@ if (
 const app = express()
 
 app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+)
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "http://localhost:5173",
+].filter(Boolean)
+
+app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5500", "http://127.0.0.1:5500"],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+      return callback(new Error("CORS policy violation: origin not allowed"), false)
+    },
     credentials: true,
   }),
 )

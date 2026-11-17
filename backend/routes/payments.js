@@ -3,6 +3,7 @@ import Payment from "../models/Payment.js"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
 import Counter from "../models/Counter.js"
+import { logAudit } from "../models/AuditLog.js"
 import verifyToken from "../middleware/auth.js"
 import {
   buildReceiptPrefix,
@@ -187,6 +188,13 @@ router.post("/:id/void", verifyToken, async (req, res) => {
     payment.voidedAt = new Date()
     payment.voidedBy = req.user.userName || req.user.email || "Operator"
     await payment.save()
+
+    await logAudit({
+      userId: req.user.id,
+      action: "PAYMENT_VOIDED",
+      req,
+      meta: { paymentId: payment._id, receiptNo: payment.receiptNo, amount: payment.amount },
+    })
 
     // Recalculate booking totals
     const { booking: updatedBooking } = await syncBookingPayments(payment.bookingId, req.user.id)

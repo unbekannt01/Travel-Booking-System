@@ -4,6 +4,7 @@ import User from "../models/User.js"
 import Payment from "../models/Payment.js"
 import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
+import { logAudit } from "../models/AuditLog.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
 import {
@@ -777,6 +778,14 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
     }
 
     await booking.save()
+
+    await logAudit({
+      userId: req.user.id,
+      action: "BOOKING_CANCELLED",
+      req,
+      meta: { bookingId: booking._id, invoiceNo: booking.invoiceNo, refundAmount },
+    })
+
     res.json(booking)
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })

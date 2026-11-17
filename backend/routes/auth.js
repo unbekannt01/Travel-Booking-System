@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import rateLimit from "express-rate-limit"
 import crypto from "crypto"
 import { encryptTotp, decryptTotp } from "../utils/crypto.js"
+import { logAudit } from "../models/AuditLog.js"
 import jwt from "jsonwebtoken"
 import speakeasy from "speakeasy"
 import QRCode from "qrcode"
@@ -230,6 +231,7 @@ router.post("/verify-2fa-setup", verifyToken, async (req, res) => {
     user.twoFactorEnabled = true
     user.failed2FAAttempts = 0
     await user.save()
+    await logAudit({ userId: user._id, action: "2FA_ENABLED", req })
 
     res.json({
       message: "2FA enabled successfully",
@@ -274,6 +276,7 @@ router.post("/login", authLimiter, async (req, res) => {
         user.failedLoginAttempts = 0
       }
       await user.save()
+      await logAudit({ userId: user._id, action: "LOGIN_FAILED", req, meta: { reason: "incorrect_password" } })
       return res.status(400).json({ message: "Incorrect password. Please try again." })
     }
 
@@ -319,6 +322,7 @@ router.post("/login", authLimiter, async (req, res) => {
 
     await user.save()
     setSessionCookie(res, token)
+    await logAudit({ userId: user._id, action: "LOGIN_SUCCESS", req })
 
     res.json({
       token,
@@ -444,6 +448,7 @@ router.post("/logout", async (req, res) => {
         user.activeTokens = user.activeTokens.filter((t) => t.token !== token && t.expiresAt > now)
         user.tokenVersion = (user.tokenVersion || 0) + 1
         await user.save()
+        await logAudit({ userId: user._id, action: "LOGOUT", req })
       }
     }
 
@@ -570,6 +575,7 @@ router.post("/disable-2fa", verifyToken, async (req, res) => {
     user.twoFactorSecret = null
     user.twoFactorEncrypted = false
     await user.save()
+    await logAudit({ userId: user._id, action: "2FA_DISABLED", req })
 
     res.json({
       message: "2FA disabled successfully",
@@ -846,6 +852,7 @@ router.post("/finalize-2fa-recovery", async (req, res) => {
     user.twoFactorEncrypted = false
     user.tokenVersion = (user.tokenVersion || 0) + 1
     await user.save()
+    await logAudit({ userId: user._id, action: "2FA_RECOVERY_COMPLETED", req })
 
     // Delete single-use token immediately
     await EmailToken.deleteOne({ _id: emailToken._id })
