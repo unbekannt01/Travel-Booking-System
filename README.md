@@ -8,8 +8,9 @@
 ## ⚡ Quickstart (< 5 minutes)
 
 ### Prerequisites
-- **Node.js**: v18+ (tested on Node v20, v22, and v24)
-- **MongoDB**: Local MongoDB (`mongodb://localhost:27017/sb_tourism`) or MongoDB Atlas URI
+- **Node.js**: v20+ (LTS recommended)
+- **MongoDB**: Local MongoDB instance running on port 27017 (`mongodb://localhost:27017/yatrahub`)
+- **npm**: v10+
 
 ### 1. Clone & Setup
 ```bash
@@ -21,14 +22,17 @@ cd Travel-Booking-System
 Create `backend/.env` (or copy from `backend/.env.example`):
 ```env
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/sb_tourism
+MONGODB_URI=mongodb://localhost:27017/yatrahub
 JWT_SECRET=super_secret_jwt_key_yatrahub_2026
 FRONTEND_URL=http://localhost:5173
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_app_password
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+EMAIL_USER=your_email@example.com
+EMAIL_PASS=your_email_app_password
 ```
 
-Create `.env` in the root for frontend Vite (optional, defaults to `http://localhost:5000`):
+Create `.env` in the root for frontend Vite (optional, defaults to `http://localhost:5000` with dev proxy enabled):
 ```env
 VITE_API_URL=http://localhost:5000
 ```
@@ -60,47 +64,20 @@ Open your browser at **`http://localhost:5173`**.
 
 ---
 
-## 🖥️ Offline Windows Desktop App (Electron + SQLite)
-
-YatraHub can run as a **100% offline Windows desktop application** with an embedded high-performance SQLite database (`better-sqlite3`).
-
-### 1. Run in Desktop Development Mode
-```bash
-# Starts Vite dev server and launches Electron desktop window concurrently
-npm run dev:desktop
-```
-- **Zero Login Required**: Automatically logs in as the local operator.
-- **Embedded SQLite**: Database file stored at `%APPDATA%/yatrahub/yatrahub.db`.
-- **Automatic Daily Backups**: Rolling daily snapshots retained automatically (last 7 days).
-- **Manual Backup & Restore**: One-click database export and restore directly from Settings.
-
-### 2. Package Windows NSIS Installer
-```bash
-# Packages standalone Windows NSIS installer into release/
-npm run dist:win
-```
-
----
-
 ## 🧪 Automated Test Suite
 
-YatraHub includes a comprehensive, dual-mode automated test suite:
-- **Web & Business Logic Tests** (84 tests across 14 test suites via native Node test runner):
-  ```bash
-  npm test
-  ```
-- **Offline Desktop & SQLite Engine Tests** (14 tests verifying schema, seat locks, backups & parity):
-  ```bash
-  npm run test:desktop
-  ```
-- **Code Hygiene & Linting**:
-  ```bash
-  npm run lint
-  ```
-- **Production Bundle Compilation**:
-  ```bash
-  npm run build
-  ```
+YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`):
+
+```bash
+# Run all unit and business logic tests (84 tests across 14 suites)
+npm test
+
+# Code hygiene & linting (ESLint)
+npm run lint
+
+# Production bundle compilation (Vite)
+npm run build
+```
 
 ### Test Coverage Summary (**84 tests across 14 test suites**):
 1. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):
@@ -113,12 +90,12 @@ YatraHub includes a comprehensive, dual-mode automated test suite:
    - Advance + balance = total, partial installment ledger appending, overpayment guards, voiding.
 4. **Pricing & GST Calculations** (`tests/pricing-calculations.test.js`):
    - Exclusive and inclusive 5% GST, rupee/percentage discounts, tax-exempt tours, 2-decimal rounding.
-5. **Cancellation & Refunds** (`tests/cancellation-calculations.test.js`):
+5. **Cancellation & Refunds** (`tests/cancellation-ledger.test.js`):
    - Retention fees, full refunds, non-refundable advances, fee validation.
 6. **Multi-language Documents (en, hi, gu)** (`tests/i18n-documents.test.js`):
    - Complete dictionary parity across English, Hindi, and Gujarati for invoices, receipts, and QR passes.
-7. **QR Boarding Passes & Receipts** (`tests/boarding-pass-receipt.test.js`):
-   - Dynamic QR payload (`invoiceNo-seatId`), Aadhaar masking (`XXXX XXXX 1234`), receipt vouchers.
+7. **Boarding Passes & Manifest** (`tests/manifest-boarding.test.js`):
+   - Boarding verification, conductor manifest generation, passenger rosters.
 8. **Ticket Templates Registry** (`tests/ticket-templates.test.js`):
    - Validation for all 6 modular ticket templates (`classic`, `modern`, `heritage`, `corporate`, `thermal`, `transit`), fallback resolution, multilingual output, and batch printing.
 9. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
@@ -138,7 +115,7 @@ YatraHub includes a comprehensive, dual-mode automated test suite:
 
 ## 🎨 Feature Modules & Operator Capabilities
 
-### 1. Custom Ticket Templates (Phase 6)
+### 1. Custom Ticket Templates
 - **6 Professional Ticket Designs**:
   1. **Classic Express**: Traditional dual-column boarding pass with dashed tear-off stub and bold seat badge.
   2. **Modern Minimalist**: Contemporary card with gradient accent bar, rounded pill tags, and soft shadows.
@@ -149,7 +126,7 @@ YatraHub includes a comprehensive, dual-mode automated test suite:
 - **Admin / Settings Selection**: Operators preview and select their preferred ticket template in **Settings → Ticket & Boarding Pass Design Template**. The selected template is saved to their profile and automatically applied to all boarding passes.
 - **Live Preview & Print Fidelity**: Live on-screen preview matches the exact `@page` print output without layout clipping or misalignment.
 
-### 2. Downloadable Passenger Seat Layout (Phase 6)
+### 2. Downloadable Passenger Seat Layout
 - **Pre-Departure Coach Chart**:
   - Full bus layout showing driver cabin (front), left berths, central gangway/aisle, and right berths.
   - Real-time mapping of passenger names, ages, contact numbers, and invoice numbers directly against booked seats.
@@ -157,18 +134,18 @@ YatraHub includes a comprehensive, dual-mode automated test suite:
   - Cancelled bookings automatically release seats back to Available.
 - **Separate Upper & Lower Deck Layouts**:
   - Dedicated visual diagrams and boarding manifests for **Lower Deck** and **Upper Deck**.
-  - Generated with `page-break-after: always` so conductors receive separate, perfectly sized physical sheets for each deck.
+  - Generated with `page-break-after: always` so conductors receive separate, physical sheets for each deck.
   - Interactive deck filter: View Both Decks, Lower Deck Only, or Upper Deck Only.
 - **Export Options**:
   - **Download / Print PDF**: Clean, print-ready document formatted with signature lines and conductor instructions.
   - **Export Conductor CSV**: RFC4180-compliant CSV download with UTF-8 BOM (`\uFEFF`) for flawless Gujarati/Hindi/English rendering in Microsoft Excel.
 
-### 3. Multi-language Documents & QR Passes (Phase 5)
+### 3. Multi-language Documents & QR Passes
 - Document language switcher (**English | हिन्दी | ગુજરાતી**) on invoices, boarding passes, and receipts.
 - Live QR Code on every boarding pass encoding `${invoiceNo}-${seatId}` for instant gate scanning.
 - Official printable Payment Voucher (`REC-XXXX`) with audit trail.
 
-### 4. Money & Departures Coordination (Phases 1–3)
+### 4. Money & Departures Coordination
 - Single-source invoice generation (`YHB-KYX-OCT-001`).
 - Multi-installment payment ledger tracking advance tokens, bank details, and UPI transfers.
 - Cancellation management with retention fees and customer refund calculations.
@@ -253,9 +230,9 @@ Follow this checklist to verify the complete YatraHub system end-to-end:
 
 ---
 
-## 🏗 Architecture & Offline Desktop Readiness
+## 🏗 System Architecture
 
-To enable YatraHub to be converted into an **offline Windows desktop application (Electron + SQLite)** without rewriting the user interface, the codebase enforces strict separation of concerns:
+YatraHub is built as a clean, local web application:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -273,16 +250,25 @@ To enable YatraHub to be converted into an **offline Windows desktop application
 │   src/data/auth.js             src/data/client.js               │
 └────────────────────────────────┬────────────────────────────────┘
                                  │
-             ┌───────────────────┴───────────────────┐
-             ▼                                       ▼
-    Current Web Mode:                     Future Desktop Mode:
-    Express 5 + MongoDB                   Electron IPC + SQLite
-    (HTTP JSON REST API)                  (Zero internet / Local .db)
+                                 ▼  HTTP REST (/api/*)
+┌─────────────────────────────────────────────────────────────────┐
+│                    Express 5 Backend                            │
+│  backend/routes/          backend/middleware/                   │
+│  (auth, bookings, tours,  (authJwt)                             │
+│   payments, settings)                                           │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │
+                                 ▼  Mongoose
+┌─────────────────────────────────────────────────────────────────┐
+│                    Local MongoDB Database                       │
+│  mongodb://localhost:27017/yatrahub                             │
+│  (Users, Bookings, Tours, Payments, Settings)                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Frontend Isolation**: No React component makes direct `fetch()` or `axios` calls to backend endpoints. All data requests route through `src/data/`.
-- **Desktop Transition**: When packaging with Electron and SQLite, only `src/data/client.js` is swapped for an Electron IPC invoke bridge. All UI views, ticket templates, and seat layout modals remain **100% untouched**.
-- See **[`ARCH_DESKTOP.md`](ARCH_DESKTOP.md)** for complete SQLite schema definitions, IPC design, and data backup workflows.
+- **Clean Decoupling**: React components do not make direct ad-hoc API calls; all queries and mutations flow through `src/data/`.
+- **Shared Business Logic**: Core financial calculations (pricing, GST, discount, cancellations, sequential invoice counters, seat conflict checks) are defined in `shared/businessLogic.js` and imported directly by both frontend and backend.
+- **Local Data Sovereignity**: Operates against a local MongoDB instance. Database backups are administered via standard MongoDB tools (`mongodump` / `mongorestore`).
 
 ---
 
@@ -290,17 +276,19 @@ To enable YatraHub to be converted into an **offline Windows desktop application
 
 ```
 Travel-Booking-System/
-├── ARCH_DESKTOP.md           # Plan and SQLite schema for offline Windows app
 ├── README.md                 # Project documentation & manual test checklist
 ├── package.json              # Frontend scripts & dependencies
-├── vite.config.js            # Vite bundler configuration
+├── vite.config.js            # Vite bundler configuration & dev proxy
 │
 ├── backend/                  # Node/Express 5 backend
 │   ├── index.js              # Express app entry & middleware
-│   ├── models/               # Mongoose schemas (Booking, Tour, User)
-│   ├── routes/               # API endpoints (auth, bookings, tours)
+│   ├── models/               # Mongoose schemas (Booking, Tour, User, Payment)
+│   ├── routes/               # API endpoints (auth, bookings, tours, payments, settings)
 │   ├── middleware/           # JWT auth verification
 │   └── package.json          # Backend dependencies
+│
+├── shared/                   # Shared business logic
+│   └── businessLogic.js      # Zero-dependency financial & validation logic (ESM)
 │
 ├── src/                      # React 19 Frontend
 │   ├── components/           # UI Views & Modals
@@ -314,7 +302,8 @@ Travel-Booking-System/
 │   │   ├── TourInventory.jsx # Coach packages & destinations
 │   │   └── TourAnalytics.jsx # Revenue charts & booking statistics
 │   ├── data/                 # Centralized Data Access Layer
-│   │   ├── client.js         # HTTP client (swappable for Electron IPC)
+│   │   ├── adapters/         # REST adapter
+│   │   ├── client.js         # HTTP client with auth headers
 │   │   ├── bookings.js       # Booking queries & mutations
 │   │   ├── tours.js          # Tour package operations
 │   │   ├── payments.js       # Payment ledger recordings
@@ -322,21 +311,34 @@ Travel-Booking-System/
 │   ├── i18n/                 # Multilingual dictionaries (en, hi, gu)
 │   └── utils/                # Pure utilities (date, formatters, pricing, seatLayout, csv)
 │
-└── tests/                    # Automated Test Suite (84 tests across 14 suites)
-    ├── ticket-templates.test.js
-    ├── seat-layout.test.js
-    ├── csv-export.test.js
-    ├── customer-history.test.js
-    ├── boarding-pass-receipt.test.js
-    ├── i18n-documents.test.js
-    ├── cancellation-calculations.test.js
-    ├── double-booking.test.js
-    ├── invoice-generation.test.js
-    ├── passenger-checkin.test.js
-    ├── payment-calculations.test.js
-    ├── pricing-calculations.test.js
-    ├── ui-improvements.test.js
-    └── validators.test.js
+├── tests/                    # Automated Test Suite (84 tests across 14 suites)
+│   ├── cancellation-ledger.test.js
+│   ├── csv-export.test.js
+│   ├── customer-history.test.js
+│   ├── double-booking.test.js
+│   ├── i18n-documents.test.js
+│   ├── invoice-generation.test.js
+│   ├── manifest-boarding.test.js
+│   ├── passenger-checkin.test.js
+│   ├── payment-calculations.test.js
+│   ├── pricing-calculations.test.js
+│   ├── seat-layout.test.js
+│   ├── ticket-templates.test.js
+│   ├── ui-improvements.test.js
+│   └── validators.test.js
+│
+└── docs/                     # Comprehensive Project Documentation
+    ├── ARCHITECTURE.md       # Full architecture specification
+    ├── DECISIONS.md          # Architecture Decision Records (ADRs)
+    ├── DEPLOYMENT.md         # Local deployment & MongoDB setup guide
+    ├── DESIGN.md             # UI components, ticket templates & design system
+    ├── GO LIVE CHECKLIST.md  # Production readiness checklist
+    ├── MEMORY.md             # Progress log & backlog
+    ├── PRD.md                # Product requirements & user personas
+    ├── PROMPTS.md            # Phase prompt history & roadmap
+    ├── RULES.md              # Engineering rules & security guidelines
+    ├── SECURITY.md           # Threat model, posture & security audit
+    └── TEST_PLAN.md          # Test suite details & coverage map
 ```
 
 ---
