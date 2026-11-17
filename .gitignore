@@ -22,6 +22,19 @@ release
 *.local
 *.zip
 
+# Backups
+backups
+
+# Working Documentation (local only)
+docs/SECURITY.md
+docs/MEMORY.md
+docs/PROMPTS.md
+docs/DECISIONS.md
+docs/RULES.md
+docs/PRD.md
+docs/DESIGN.md
+docs/GO LIVE CHECKLIST.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
