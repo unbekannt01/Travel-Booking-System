@@ -12,6 +12,7 @@
 import { getDocumentTranslation } from "../../i18n/documents.js"
 import { formatDisplayDate } from "../../utils/date.js"
 import { maskAadhaar } from "../../utils/formatters.js"
+import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "../../utils/escapeHtml.js"
 
 export const TICKET_TEMPLATES = [
   {
@@ -91,30 +92,43 @@ export const buildSingleTicketCardHTML = ({
   lang = "en",
 }) => {
   const t = getDocumentTranslation(lang)
-  const accentColor = user?.invoiceColor || getTicketTemplate(templateId).accentDefault
-  const companyName = user?.companyName || "YATRA TOURS"
-  const companyPhone = user?.companyPhone || ""
-  const companyHQ = user?.companyHeadquarters || ""
-  const companyTagline = user?.companyTagline || "Tourism & Travels"
-  const gstNumber = user?.gstNumber || ""
+  const accentColor = sanitizeHexColor(user?.invoiceColor || getTicketTemplate(templateId).accentDefault)
+  const companyName = escapeHtml(user?.companyName || "YATRA TOURS")
+  const companyPhone = escapeHtml(user?.companyPhone || "")
+  const companyHQ = escapeHtml(user?.companyHeadquarters || "")
+  const companyTagline = escapeHtml(user?.companyTagline || "Tourism & Travels")
+  const gstNumber = escapeHtml(user?.gstNumber || "")
 
-  const busNumber =
+  const busNumber = escapeHtml(
     departure?.busNumber ||
     booking?.busNumber ||
     booking?.busType ||
     "AC Sleeper Coach"
+  )
 
   const primaryOrganizer = user?.organizers?.[0]
-  const organizerContact = primaryOrganizer
-    ? `${primaryOrganizer.name} (${primaryOrganizer.phone})`
-    : companyPhone || "Operator Office"
+  const organizerContact = escapeHtml(
+    primaryOrganizer
+      ? `${primaryOrganizer.name} (${primaryOrganizer.phone})`
+      : user?.companyPhone || "Operator Office"
+  )
 
-  const seat = pax.seatId || `P${idx + 1}`
-  const deckLabel = getDeckLabel(seat)
+  const rawSeat = pax.seatId || `P${idx + 1}`
+  const seat = escapeHtml(rawSeat)
+  const deckLabel = escapeHtml(getDeckLabel(rawSeat))
   const isPaid = (booking.advanceReceived || 0) >= (booking.totalAmount || 0)
   const dueAmount = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
-  const journeyDateFormatted = formatDisplayDate(booking.journeyDate)
-  const maskedAadhaarVal = pax.aadhar ? maskAadhaar(pax.aadhar) : "—"
+  const journeyDateFormatted = escapeHtml(formatDisplayDate(booking.journeyDate))
+  const maskedAadhaarVal = pax.aadhar ? escapeHtml(maskAadhaar(pax.aadhar)) : "—"
+  const safeQrUrl = sanitizeImageUrl(qrUrl)
+  const invoiceNo = escapeHtml(booking.invoiceNo)
+  const tourName = escapeHtml(booking.tourName)
+  const paxName = escapeHtml(pax.name || "Passenger " + (idx + 1))
+  const paxAge = escapeHtml(pax.age)
+  const paxGender = escapeHtml(pax.gender || "")
+  const paxCity = escapeHtml(pax.city || "")
+  const contactName = escapeHtml(booking.contactName || "")
+  const contactPhone = escapeHtml(booking.contactPhone || "")
 
   // ─────────────────────────────────────────────────────────────
   // TEMPLATE 1: CLASSIC
@@ -131,14 +145,14 @@ export const buildSingleTicketCardHTML = ({
             </div>
             <div class="ticket-badge">
               <span class="badge-pill" style="background: ${accentColor};">${t.boardingPass.toUpperCase()}</span>
-              <span class="badge-sub-text">Invoice #${booking.invoiceNo}</span>
+              <span class="badge-sub-text">Invoice #${invoiceNo}</span>
             </div>
           </div>
 
           <div class="classic-tour-strip">
             <div>
               <span class="label-tiny">${t.tourName.toUpperCase()}</span>
-              <div class="title-bold">${booking.tourName}</div>
+              <div class="title-bold">${tourName}</div>
             </div>
             <div style="text-align: right;">
               <span class="label-tiny">${t.journeyDate.toUpperCase()}</span>
@@ -149,8 +163,8 @@ export const buildSingleTicketCardHTML = ({
           <div class="classic-grid">
             <div>
               <span class="label-tiny">${t.travelerName.toUpperCase()}</span>
-              <div class="val-bold">${pax.name || "Passenger " + (idx + 1)}</div>
-              <div class="val-sub">${pax.age ? pax.age + " Yrs" : ""} • ${pax.gender || ""} • ${pax.city || ""}</div>
+              <div class="val-bold">${paxName}</div>
+              <div class="val-sub">${pax.age ? paxAge + " Yrs" : ""} • ${paxGender} • ${paxCity}</div>
               ${pax.aadhar ? `<div class="val-sub">ID: ${maskedAadhaarVal}</div>` : ""}
             </div>
             <div>
@@ -161,7 +175,7 @@ export const buildSingleTicketCardHTML = ({
             <div>
               <span class="label-tiny">${t.emergencyContact.toUpperCase()}</span>
               <div class="val-bold">${organizerContact}</div>
-              <div class="val-sub">Lead: ${booking.contactName}</div>
+              <div class="val-sub">Lead: ${contactName}</div>
             </div>
           </div>
 
@@ -179,8 +193,8 @@ export const buildSingleTicketCardHTML = ({
           <span class="seat-label">${t.seatNumber}</span>
 
           <div class="qr-box">
-            ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="qr-img"/>` : `<div class="qr-ph">QR</div>`}
-            <span class="qr-code-text">${booking.invoiceNo}-${seat}</span>
+            ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="qr-img"/>` : `<div class="qr-ph">QR</div>`}
+            <span class="qr-code-text">${invoiceNo}-${seat}</span>
           </div>
 
           <div class="pay-tag ${isPaid ? "paid" : "due"}">
@@ -205,12 +219,12 @@ export const buildSingleTicketCardHTML = ({
               <span class="modern-logo-dot" style="background: ${accentColor};"></span>
               <div>
                 <h3 class="modern-company">${companyName}</h3>
-                <p class="modern-route">${booking.tourName}</p>
+                <p class="modern-route">${tourName}</p>
               </div>
             </div>
             <div class="modern-date-badge">
               <span class="modern-date">${journeyDateFormatted}</span>
-              <span class="modern-inv">#${booking.invoiceNo}</span>
+              <span class="modern-inv">#${invoiceNo}</span>
             </div>
           </div>
 
@@ -219,8 +233,8 @@ export const buildSingleTicketCardHTML = ({
               <div class="modern-data-row">
                 <div class="modern-cell">
                   <span class="m-lbl">TRAVELER</span>
-                  <p class="m-val">${pax.name || "Passenger " + (idx + 1)}</p>
-                  <span class="m-sub">${pax.age ? pax.age + " Y" : ""} ${pax.gender || ""} • ${pax.city || ""}</span>
+                  <p class="m-val">${paxName}</p>
+                  <span class="m-sub">${pax.age ? paxAge + " Y" : ""} ${paxGender} • ${paxCity}</span>
                 </div>
                 <div class="modern-cell">
                   <span class="m-lbl">BUS & COACH</span>
@@ -230,7 +244,7 @@ export const buildSingleTicketCardHTML = ({
                 <div class="modern-cell">
                   <span class="m-lbl">EMERGENCY ASSISTANCE</span>
                   <p class="m-val">${organizerContact}</p>
-                  <span class="m-sub">Lead: ${booking.contactPhone}</span>
+                  <span class="m-sub">Lead: ${contactPhone}</span>
                 </div>
               </div>
 
@@ -246,8 +260,8 @@ export const buildSingleTicketCardHTML = ({
                 ${seat}
               </div>
               <span class="m-seat-lbl">ASSIGNED BERTH</span>
-              ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="modern-qr-img"/>` : ""}
-              <span class="m-code">${booking.invoiceNo}-${seat}</span>
+              ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="modern-qr-img"/>` : ""}
+              <span class="m-code">${invoiceNo}-${seat}</span>
             </div>
           </div>
         </div>
@@ -272,7 +286,7 @@ export const buildSingleTicketCardHTML = ({
           <div class="heritage-strip" style="border-color: ${accentColor};">
             <div class="heritage-col">
               <span class="h-lbl">तीर्थ यात्रा / TOUR</span>
-              <span class="h-val-lg">${booking.tourName}</span>
+              <span class="h-val-lg">${tourName}</span>
             </div>
             <div class="heritage-col" style="text-align: right;">
               <span class="h-lbl">यात्रा तिथि / DATE</span>
@@ -285,19 +299,19 @@ export const buildSingleTicketCardHTML = ({
               <div class="h-row">
                 <div>
                   <span class="h-lbl">यात्री का नाम / TRAVELER NAME</span>
-                  <div class="h-pax-name">${pax.name || "Passenger " + (idx + 1)}</div>
-                  <div class="h-pax-sub">${pax.age ? pax.age + " वर्ष" : ""} • ${pax.gender || ""} • शहर: ${pax.city || "—"}</div>
+                  <div class="h-pax-name">${paxName}</div>
+                  <div class="h-pax-sub">${pax.age ? paxAge + " वर्ष" : ""} • ${paxGender} • शहर: ${paxCity || "—"}</div>
                   ${pax.aadhar ? `<div class="h-pax-sub">आधार: ${maskedAadhaarVal}</div>` : ""}
                 </div>
                 <div>
                   <span class="h-lbl">बस क्रमांक / COACH NO.</span>
                   <div class="h-pax-name">${busNumber}</div>
-                  <div class="h-pax-sub">रसीद / INV: #${booking.invoiceNo}</div>
+                  <div class="h-pax-sub">रसीद / INV: #${invoiceNo}</div>
                 </div>
                 <div>
                   <span class="h-lbl">आयोजक संपर्क / ASSISTANCE</span>
                   <div class="h-pax-name">${organizerContact}</div>
-                  <div class="h-pax-sub">मुख्य ग्राहक: ${booking.contactName}</div>
+                  <div class="h-pax-sub">मुख्य ग्राहक: ${contactName}</div>
                 </div>
               </div>
 
@@ -312,7 +326,7 @@ export const buildSingleTicketCardHTML = ({
               <span class="h-seat-label">आरक्षित सीट / SEAT</span>
 
               <div class="h-qr">
-                ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="qr-img"/>` : ""}
+                ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="qr-img"/>` : ""}
               </div>
 
               <div class="h-status ${isPaid ? "h-paid" : "h-due"}">
@@ -338,14 +352,14 @@ export const buildSingleTicketCardHTML = ({
           </div>
           <div class="corp-doc-type">
             <span class="corp-badge">EXECUTIVE TRAVEL VOUCHER</span>
-            <span class="corp-ref">REF: ${booking.invoiceNo}</span>
+            <span class="corp-ref">REF: ${invoiceNo}</span>
           </div>
         </div>
 
         <div class="corp-banner">
           <div class="corp-block">
             <span class="c-lbl">TOUR DESTINATION</span>
-            <div class="c-val-bold">${booking.tourName}</div>
+            <div class="c-val-bold">${tourName}</div>
           </div>
           <div class="corp-block">
             <span class="c-lbl">DEPARTURE DATE</span>
@@ -374,8 +388,8 @@ export const buildSingleTicketCardHTML = ({
             </thead>
             <tbody>
               <tr>
-                <td class="font-bold">${pax.name || "Passenger " + (idx + 1)}</td>
-                <td>${pax.age ? pax.age + " Y" : "—"} / ${pax.gender || "—"} (${pax.city || "—"})</td>
+                <td class="font-bold">${paxName}</td>
+                <td>${pax.age ? paxAge + " Y" : "—"} / ${paxGender || "—"} (${paxCity || "—"})</td>
                 <td>${maskedAadhaarVal}</td>
                 <td>${organizerContact}</td>
                 <td class="font-bold ${isPaid ? "text-emerald-700" : "text-amber-700"}">
@@ -392,7 +406,7 @@ export const buildSingleTicketCardHTML = ({
             </div>
             <div class="corp-counterfoil">
               <div class="corp-qr-wrap">
-                ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="corp-qr"/>` : ""}
+                ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="corp-qr"/>` : ""}
                 <div class="corp-sign-box">
                   <div class="sign-space"></div>
                   <span>CONDUCTOR STAMP & SIGN</span>
@@ -417,10 +431,10 @@ export const buildSingleTicketCardHTML = ({
             <p class="th-phone">Tel: ${companyPhone || organizerContact}</p>
             <div class="th-dashed"></div>
             <div class="th-inv-row">
-              <span>INV: #${booking.invoiceNo}</span>
+              <span>INV: #${invoiceNo}</span>
               <span>DATE: ${journeyDateFormatted}</span>
             </div>
-            <div class="th-tour">${booking.tourName}</div>
+            <div class="th-tour">${tourName}</div>
           </div>
 
           <div class="thermal-body">
@@ -431,11 +445,11 @@ export const buildSingleTicketCardHTML = ({
             </div>
 
             <div class="th-pax">
-              <div class="th-row"><span>PAX:</span> <strong>${pax.name || "Passenger " + (idx + 1)}</strong></div>
-              <div class="th-row"><span>AGE/GEN:</span> <span>${pax.age || "—"} / ${pax.gender || "—"}</span></div>
-              <div class="th-row"><span>CITY:</span> <span>${pax.city || "—"}</span></div>
+              <div class="th-row"><span>PAX:</span> <strong>${paxName}</strong></div>
+              <div class="th-row"><span>AGE/GEN:</span> <span>${paxAge || "—"} / ${paxGender || "—"}</span></div>
+              <div class="th-row"><span>CITY:</span> <span>${paxCity || "—"}</span></div>
               ${pax.aadhar ? `<div class="th-row"><span>AADHAAR:</span> <span>${maskedAadhaarVal}</span></div>` : ""}
-              <div class="th-row"><span>LEAD:</span> <span>${booking.contactName} (${booking.contactPhone})</span></div>
+              <div class="th-row"><span>LEAD:</span> <span>${contactName} (${contactPhone})</span></div>
               <div class="th-row th-fare">
                 <span>STATUS:</span>
                 <strong>${isPaid ? "PAID" : `DUE ₹${dueAmount}`}</strong>
@@ -443,8 +457,8 @@ export const buildSingleTicketCardHTML = ({
             </div>
 
             <div class="thermal-qr-box">
-              ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="thermal-qr"/>` : ""}
-              <div class="th-code">${booking.invoiceNo}-${seat}</div>
+              ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="thermal-qr"/>` : ""}
+              <div class="th-code">${invoiceNo}-${seat}</div>
             </div>
           </div>
 
@@ -467,20 +481,20 @@ export const buildSingleTicketCardHTML = ({
           <div>
             <div class="transit-route-badge">EXPRESS COACH TRANSIT</div>
             <h2 class="transit-company" style="color: ${accentColor};">${companyName.toUpperCase()}</h2>
-            <p class="transit-tour">${booking.tourName}</p>
+            <p class="transit-tour">${tourName}</p>
           </div>
           <div class="transit-date-box">
             <span class="tr-lbl">JOURNEY DATE</span>
             <div class="tr-date">${journeyDateFormatted}</div>
-            <span class="tr-inv">Ticket #${booking.invoiceNo}</span>
+            <span class="tr-inv">Ticket #${invoiceNo}</span>
           </div>
         </div>
 
         <div class="transit-grid">
           <div class="transit-card">
             <span class="tr-lbl">PASSENGER</span>
-            <div class="tr-val">${pax.name || "Passenger " + (idx + 1)}</div>
-            <div class="tr-sub">${pax.age ? pax.age + " Y" : ""} ${pax.gender || ""} • ${pax.city || ""}</div>
+            <div class="tr-val">${paxName}</div>
+            <div class="tr-sub">${pax.age ? paxAge + " Y" : ""} ${paxGender} • ${paxCity}</div>
           </div>
           <div class="transit-card">
             <span class="tr-lbl">COACH ASSIGNED</span>
@@ -490,7 +504,7 @@ export const buildSingleTicketCardHTML = ({
           <div class="transit-card">
             <span class="tr-lbl">PAYMENT STATUS</span>
             <div class="tr-val ${isPaid ? "text-green" : "text-amber"}">${isPaid ? "FULLY PAID" : `DUE ₹${dueAmount}`}</div>
-            <div class="tr-sub">${booking.contactPhone}</div>
+            <div class="tr-sub">${contactPhone}</div>
           </div>
         </div>
 
@@ -508,8 +522,8 @@ export const buildSingleTicketCardHTML = ({
         <span class="tr-lbl">BERTH ASSIGNMENT</span>
 
         <div class="transit-qr-wrap">
-          ${qrUrl ? `<img src="${qrUrl}" alt="QR" class="qr-img"/>` : ""}
-          <span class="tr-qr-code">${booking.invoiceNo}-${seat}</span>
+          ${safeQrUrl ? `<img src="${safeQrUrl}" alt="QR" class="qr-img"/>` : ""}
+          <span class="tr-qr-code">${invoiceNo}-${seat}</span>
         </div>
 
         <div class="transit-footer">
@@ -550,8 +564,9 @@ export const buildBatchPrintableTicketsHTML = ({
 <html lang="${lang}">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Tickets - #${booking.invoiceNo} - ${booking.tourName}</title>
+<title>Tickets - #${escapeHtml(booking?.invoiceNo)} - ${escapeHtml(booking?.tourName)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body {

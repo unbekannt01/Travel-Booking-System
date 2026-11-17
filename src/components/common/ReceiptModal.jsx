@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { formatDisplayDate } from "../../utils/date"
+import { escapeHtml, sanitizeHexColor } from "../../utils/escapeHtml.js"
 
 export default function ReceiptModal({
   booking,
@@ -39,12 +40,29 @@ export default function ReceiptModal({
   const balance = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
 
   const buildPrintableHTML = () => {
+    const safeAccentColor = sanitizeHexColor(accentColor)
+    const safeCompanyName = escapeHtml(companyName.toUpperCase())
+    const safeCompanyTagline = escapeHtml(user?.companyTagline || "Tourism & Travels")
+    const safeCompanyHQ = escapeHtml(companyHQ)
+    const safeCompanyPhone = escapeHtml(companyPhone)
+    const safeGstNumber = escapeHtml(gstNumber)
+    const safeReceiptNo = escapeHtml(receiptNo)
+    const safeContactName = escapeHtml(booking.contactName)
+    const safeContactPhone = escapeHtml(booking.contactPhone)
+    const safePaymentDate = escapeHtml(paymentDate)
+    const safeInvoiceNo = escapeHtml(booking.invoiceNo)
+    const safePaymentMode = escapeHtml((payment?.paymentMode || payment?.mode || "Cash").toUpperCase())
+    const safeTourName = escapeHtml(booking.tourName)
+    const safeJourneyDate = escapeHtml(formatDisplayDate(booking.journeyDate))
+    const safeNotes = payment?.notes ? escapeHtml(payment.notes) : ""
+
     return `<!DOCTYPE html>
 <html lang="${selectedLang}">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Receipt ${receiptNo}</title>
+<title>Receipt ${escapeHtml(receiptNo)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#f8fafc; color:#0f172a; padding:30px; }
@@ -60,9 +78,9 @@ export default function ReceiptModal({
   }
   
   .header {
-    background: ${theme === "minimal" ? "#ffffff" : accentColor};
+    background: ${theme === "minimal" ? "#ffffff" : safeAccentColor};
     color: ${theme === "minimal" ? "#0f172a" : "#ffffff"};
-    border-bottom: 2px solid ${accentColor};
+    border-bottom: 2px solid ${safeAccentColor};
     padding: 24px 30px;
     display: flex;
     justify-content: space-between;
@@ -100,7 +118,7 @@ export default function ReceiptModal({
 
   .amount-card {
     background: #f8fafc;
-    border: 2px dashed ${accentColor};
+    border: 2px dashed ${safeAccentColor};
     border-radius: 12px;
     padding: 18px 24px;
     display: flex;
@@ -108,7 +126,7 @@ export default function ReceiptModal({
     align-items: center;
     margin-bottom: 24px;
   }
-  .amount-big { font-size: 32px; font-weight: 900; color: ${accentColor}; }
+  .amount-big { font-size: 32px; font-weight: 900; color: ${safeAccentColor}; }
 
   .table-rows { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
   .table-rows tr { border-bottom: 1px solid #f1f5f9; }
@@ -135,13 +153,13 @@ export default function ReceiptModal({
   <div class="receipt-box">
     <div class="header">
       <div>
-        <div class="brand-title">${companyName.toUpperCase()}</div>
-        <div class="brand-sub">${user?.companyTagline || "Tourism & Travels"}</div>
-        <div style="font-size:10px;margin-top:2px;">📍 ${companyHQ} | 📞 ${companyPhone} ${gstNumber ? " | GSTIN: " + gstNumber : ""}</div>
+        <div class="brand-title">${safeCompanyName}</div>
+        <div class="brand-sub">${safeCompanyTagline}</div>
+        <div style="font-size:10px;margin-top:2px;">📍 ${safeCompanyHQ} | 📞 ${safeCompanyPhone} ${safeGstNumber ? " | GSTIN: " + safeGstNumber : ""}</div>
       </div>
       <div class="receipt-tag">
         <div class="receipt-badge">${isRefund ? t.refundIssued : t.paymentReceipt}</div>
-        <div class="receipt-num">${receiptNo}</div>
+        <div class="receipt-num">${safeReceiptNo}</div>
       </div>
     </div>
 
@@ -151,13 +169,13 @@ export default function ReceiptModal({
       <div class="meta-grid">
         <div>
           <div class="label">${t.receivedFrom}</div>
-          <div class="val">${booking.contactName}</div>
-          <div style="font-size:11px;color:#64748b;font-weight:700;">📞 ${booking.contactPhone}</div>
+          <div class="val">${safeContactName}</div>
+          <div style="font-size:11px;color:#64748b;font-weight:700;">📞 ${safeContactPhone}</div>
         </div>
         <div style="text-align:right;">
           <div class="label">${t.paymentDate}</div>
-          <div class="val">${paymentDate}</div>
-          <div style="font-size:11px;color:#64748b;font-weight:700;">Invoice: #${booking.invoiceNo}</div>
+          <div class="val">${safePaymentDate}</div>
+          <div style="font-size:11px;color:#64748b;font-weight:700;">Invoice: #${safeInvoiceNo}</div>
         </div>
       </div>
 
@@ -165,7 +183,7 @@ export default function ReceiptModal({
         <div>
           <div class="label">${t.amountReceived}</div>
           <div style="font-size:11px;font-weight:700;color:#64748b;margin-top:2px;">
-            ${t.paymentMode}: <strong style="color:#0f172a;">${(payment?.paymentMode || payment?.mode || "Cash").toUpperCase()}</strong>
+            ${t.paymentMode}: <strong style="color:#0f172a;">${safePaymentMode}</strong>
           </div>
         </div>
         <div class="amount-big">
@@ -176,7 +194,7 @@ export default function ReceiptModal({
       <table class="table-rows">
         <tr>
           <td><span class="label">${t.paymentFor}</span></td>
-          <td>${booking.tourName} (${formatDisplayDate(booking.journeyDate)})</td>
+          <td>${safeTourName} (${safeJourneyDate})</td>
         </tr>
         <tr>
           <td><span class="label">${t.totalBill}</span></td>
@@ -192,7 +210,7 @@ export default function ReceiptModal({
             ${balance > 0 ? `₹${balance.toLocaleString()}` : t.confirmed}
           </td>
         </tr>
-        ${payment?.notes ? `<tr><td><span class="label">${t.notes}</span></td><td>${payment.notes}</td></tr>` : ""}
+        ${payment?.notes ? `<tr><td><span class="label">${t.notes}</span></td><td>${safeNotes}</td></tr>` : ""}
       </table>
 
       <div class="footer-sign">

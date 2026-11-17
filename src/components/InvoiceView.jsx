@@ -14,6 +14,7 @@ import {
   Ticket,
 } from "lucide-react"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../i18n/documents"
+import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "../utils/escapeHtml.js"
 import BoardingPassModal from "./common/BoardingPassModal"
 
 export default function InvoiceView({ booking, onBack, user }) {
@@ -26,12 +27,13 @@ export default function InvoiceView({ booking, onBack, user }) {
 
   // ── Build the full HTML for the invoice (used in print window) ──
   const buildInvoiceHTML = () => {
-    const companyName = user?.companyName?.toUpperCase() || "YATRA TOURS"
-    const companyTagline = user?.companyTagline || "Tourism & Travels"
-    const companyHQ = user?.companyHeadquarters || ""
-    const companyPhone = user?.companyPhone || ""
+    const safeAccentColor = sanitizeHexColor(accentColor)
+    const companyName = escapeHtml(user?.companyName?.toUpperCase() || "YATRA TOURS")
+    const companyTagline = escapeHtml(user?.companyTagline || "Tourism & Travels")
+    const companyHQ = escapeHtml(user?.companyHeadquarters || "")
+    const companyPhone = escapeHtml(user?.companyPhone || "")
     const gstHTML = user?.gstNumber
-      ? `<div style="font-size:11px;font-weight:900;color:${accentColor};margin:2px 0;">GSTIN: ${user.gstNumber}</div>`
+      ? `<div style="font-size:11px;font-weight:900;color:${safeAccentColor};margin:2px 0;">GSTIN: ${escapeHtml(user.gstNumber)}</div>`
       : ""
     const defaultTC = [
       "Valid Aadhar card is strictly required for all travelers.",
@@ -40,11 +42,12 @@ export default function InvoiceView({ booking, onBack, user }) {
       "Company is not liable for itinerary changes due to weather.",
     ]
     const tcList = user?.termsAndConditions?.length ? user.termsAndConditions : defaultTC
-    const tcHTML = tcList.map((item) => `<li>• ${item}</li>`).join("")
-    const logoHTML = user?.companyLogo
-      ? `<img src="${user.companyLogo}" alt="logo" style="width:56px;height:56px;object-fit:contain;" />`
+    const tcHTML = tcList.map((item) => `<li>• ${escapeHtml(item)}</li>`).join("")
+    const safeLogo = sanitizeImageUrl(user?.companyLogo)
+    const logoHTML = safeLogo
+      ? `<img src="${safeLogo}" alt="logo" style="width:56px;height:56px;object-fit:contain;" />`
       : `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
-           stroke="${accentColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+           stroke="${safeAccentColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
            <rect x="1" y="6" width="22" height="14" rx="2"/><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
            <line x1="1" y1="10" x2="23" y2="10"/>
          </svg>`
@@ -53,8 +56,8 @@ export default function InvoiceView({ booking, onBack, user }) {
       ? user.organizers
           .map(
             (o) =>
-              `<p style="font-size:12px;font-weight:700;color:${accentColor};margin:2px 0;">
-             📞 ${o.name}${o.phone ? " — " + o.phone : ""}
+              `<p style="font-size:12px;font-weight:700;color:${safeAccentColor};margin:2px 0;">
+             📞 ${escapeHtml(o.name)}${o.phone ? " — " + escapeHtml(o.phone) : ""}
            </p>`
           )
           .join("")
@@ -65,11 +68,11 @@ export default function InvoiceView({ booking, onBack, user }) {
         (p, i) =>
           `<tr style="background:${i % 2 === 0 ? "#fff" : "#f8fafc"};">
         <td style="padding:10px 14px;font-weight:700;color:#94a3b8;">${i + 1}</td>
-        <td style="padding:10px 14px;font-weight:900;color:#0f172a;">${p.name}</td>
-        <td style="padding:10px 14px;font-weight:700;color:${accentColor};font-size:11px;text-transform:uppercase;">${p.seatId || "—"}</td>
-        <td style="padding:10px 14px;font-weight:700;color:#475569;">${p.city}</td>
-        <td style="padding:10px 14px;font-weight:900;color:#0f172a;text-align:center;">${p.age}</td>
-        <td style="padding:10px 14px;font-weight:700;color:#475569;font-size:11px;text-transform:uppercase;">${p.gender}</td>
+        <td style="padding:10px 14px;font-weight:900;color:#0f172a;">${escapeHtml(p.name)}</td>
+        <td style="padding:10px 14px;font-weight:700;color:${safeAccentColor};font-size:11px;text-transform:uppercase;">${escapeHtml(p.seatId || "—")}</td>
+        <td style="padding:10px 14px;font-weight:700;color:#475569;">${escapeHtml(p.city)}</td>
+        <td style="padding:10px 14px;font-weight:900;color:#0f172a;text-align:center;">${escapeHtml(p.age)}</td>
+        <td style="padding:10px 14px;font-weight:700;color:#475569;font-size:11px;text-transform:uppercase;">${escapeHtml(p.gender)}</td>
       </tr>`
       )
       .join("")
@@ -87,8 +90,9 @@ export default function InvoiceView({ booking, onBack, user }) {
 <html lang="${selectedLang}">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Invoice #${booking.invoiceNo}</title>
+<title>Invoice #${escapeHtml(booking.invoiceNo)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; color:#0f172a; }
@@ -232,9 +236,9 @@ export default function InvoiceView({ booking, onBack, user }) {
       ${organizersHTML ? `<div><div class="label">${t.tourOrganizers}</div>${organizersHTML}</div>` : ""}
       <div>
         <div class="label">${t.customerDetails}</div>
-        <div class="value-indigo" style="margin-top:3px;">${booking.contactName}</div>
-        <div style="font-size:12px;font-weight:700;color:#64748b;margin-top:2px;">${booking.contactPhone}</div>
-        ${booking.contactEmail ? `<div style="font-size:12px;font-weight:700;color:#94a3b8;">${booking.contactEmail}</div>` : ""}
+        <div class="value-indigo" style="margin-top:3px;">${escapeHtml(booking.contactName)}</div>
+        <div style="font-size:12px;font-weight:700;color:#64748b;margin-top:2px;">${escapeHtml(booking.contactPhone)}</div>
+        ${booking.contactEmail ? `<div style="font-size:12px;font-weight:700;color:#94a3b8;">${escapeHtml(booking.contactEmail)}</div>` : ""}
       </div>
     </div>
 
@@ -242,7 +246,7 @@ export default function InvoiceView({ booking, onBack, user }) {
       <div class="meta-box-grid">
         <div>
           <div class="label">${t.invoiceNo}</div>
-          <div class="value">#${booking.invoiceNo}</div>
+          <div class="value">#${escapeHtml(booking.invoiceNo)}</div>
         </div>
         <div class="value-right">
           <div class="label">${t.bookingDate}</div>
@@ -250,7 +254,7 @@ export default function InvoiceView({ booking, onBack, user }) {
         </div>
         <div>
           <div class="label">${t.paymentMode}</div>
-          <div class="value value-green">${booking.paymentMode?.toUpperCase()}</div>
+          <div class="value value-green">${escapeHtml(booking.paymentMode?.toUpperCase())}</div>
         </div>
         <div class="value-right">
           <div class="label">${t.status}</div>
@@ -270,7 +274,7 @@ export default function InvoiceView({ booking, onBack, user }) {
       </div>
       <div>
         <div class="card-label">${t.tourName}</div>
-        <div class="card-value">${booking.tourName}</div>
+        <div class="card-value">${escapeHtml(booking.tourName)}</div>
       </div>
     </div>
     <div class="card">
@@ -291,7 +295,7 @@ export default function InvoiceView({ booking, onBack, user }) {
       </div>
       <div>
         <div class="card-label">${t.travelConfig}</div>
-        <div class="card-value">${booking.busType || "—"}</div>
+        <div class="card-value">${escapeHtml(booking.busType || "—")}</div>
       </div>
     </div>
   </div>
@@ -324,9 +328,9 @@ export default function InvoiceView({ booking, onBack, user }) {
           ? `
       <div style="margin-top:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:12px 14px;">
         <h4 style="font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.15em; color:${accentColor}; margin-bottom:4px;">💳 ${t.bankPaymentDetails}</h4>
-        ${user.bankDetails.upiId ? `<p style="font-size:11px; font-weight:900; color:${accentColor}; margin:2px 0;">${t.upiId}: ${user.bankDetails.upiId}</p>` : ""}
-        ${user.bankDetails.accountName ? `<p style="font-size:10px; font-weight:700; color:#0f172a; margin:2px 0;">${t.accountName}: ${user.bankDetails.accountName}</p>` : ""}
-        ${user.bankDetails.accountNumber ? `<p style="font-size:10px; font-weight:700; color:#475569; margin:2px 0;">${t.accountNumber}: ${user.bankDetails.accountNumber} | ${t.ifscCode}: ${user.bankDetails.ifscCode || ""} | ${t.bankName}: ${user.bankDetails.bankName || ""}</p>` : ""}
+        ${user.bankDetails.upiId ? `<p style="font-size:11px; font-weight:900; color:${accentColor}; margin:2px 0;">${t.upiId}: ${escapeHtml(user.bankDetails.upiId)}</p>` : ""}
+        ${user.bankDetails.accountName ? `<p style="font-size:10px; font-weight:700; color:#0f172a; margin:2px 0;">${t.accountName}: ${escapeHtml(user.bankDetails.accountName)}</p>` : ""}
+        ${user.bankDetails.accountNumber ? `<p style="font-size:10px; font-weight:700; color:#475569; margin:2px 0;">${t.accountNumber}: ${escapeHtml(user.bankDetails.accountNumber)} | ${t.ifscCode}: ${escapeHtml(user.bankDetails.ifscCode || "")} | ${t.bankName}: ${escapeHtml(user.bankDetails.bankName || "")}</p>` : ""}
       </div>`
           : ""
       }
@@ -415,7 +419,7 @@ export default function InvoiceView({ booking, onBack, user }) {
 
   const handleShare = () => {
     const companyName = user?.companyName || "Xyz Tourism"
-    const text = `*${companyName.toUpperCase()}*\n*${t.officialBookingInvoice}: #${booking.invoiceNo}*\n\n*${t.tourName}:* ${booking.tourName}\n*${t.travelerName}:* ${booking.contactName}\n*${t.journeyDate}:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*${t.passengerManifest}:* ${booking.passengers.length} ${t.totalPax}\n\n*${t.finalAmount}:* ₹${booking.totalAmount.toLocaleString()}\n*${t.advancePaid}:* ₹${(booking.advanceReceived || 0).toLocaleString()}\n*${t.balancePayable.toUpperCase()}: ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}*\n\n_${t.wishJourney}_`
+    const text = `*${companyName.toUpperCase()}*\n*${t.officialBookingInvoice}: #${escapeHtml(booking.invoiceNo)}*\n\n*${t.tourName}:* ${escapeHtml(booking.tourName)}\n*${t.travelerName}:* ${escapeHtml(booking.contactName)}\n*${t.journeyDate}:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*${t.passengerManifest}:* ${booking.passengers.length} ${t.totalPax}\n\n*${t.finalAmount}:* ₹${booking.totalAmount.toLocaleString()}\n*${t.advancePaid}:* ₹${(booking.advanceReceived || 0).toLocaleString()}\n*${t.balancePayable.toUpperCase()}: ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}*\n\n_${t.wishJourney}_`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank")
   }
 

@@ -1,3 +1,4 @@
+import { escapeHtml, sanitizeHexColor } from "./escapeHtml.js"
 /**
  * Bus Seat Layout and Manifest Generation Utilities
  * Supports standard Indian sleeper coaches (2x1 and 2x2 layouts)
@@ -275,32 +276,32 @@ export const buildSeatLayoutPrintHTML = ({
   user,
   deckFilter = "both", // 'both' | 'lower' | 'upper'
 }) => {
-  const companyName = user?.companyName || "YATRA TOURS"
-  const companyPhone = user?.companyPhone || ""
-  const companyHQ = user?.companyHeadquarters || ""
-  const gstNumber = user?.gstNumber || ""
-  const accentColor = user?.invoiceColor || "#4f46e5"
+  const companyName = escapeHtml(user?.companyName || "YATRA TOURS")
+  const companyPhone = escapeHtml(user?.companyPhone || "")
+  const companyHQ = escapeHtml(user?.companyHeadquarters || "")
+  const gstNumber = escapeHtml(user?.gstNumber || "")
+  const accentColor = sanitizeHexColor(user?.invoiceColor || "#4f46e5")
 
-  const tourName = departure?.tourName || "Scheduled Tour"
-  const journeyDate = departure?.journeyDate
+  const tourName = escapeHtml(departure?.tourName || "Scheduled Tour")
+  const journeyDate = escapeHtml(departure?.journeyDate
     ? new Date(departure.journeyDate).toLocaleDateString("en-IN", {
         weekday: "short",
         day: "numeric",
         month: "short",
         year: "numeric",
       })
-    : "—"
-  const busNumber = departure?.busNumber || "AC Sleeper Coach"
-  const busType = departure?.busType || `${manifestData.layoutType} Luxury Sleeper`
-  const printedAt = new Date().toLocaleString("en-IN", {
+    : "—")
+  const busNumber = escapeHtml(departure?.busNumber || "AC Sleeper Coach")
+  const busType = escapeHtml(departure?.busType || `${manifestData.layoutType} Luxury Sleeper`)
+  const printedAt = escapeHtml(new Date().toLocaleString("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
-  })
+  }))
 
   const primaryOrganizer = user?.organizers?.[0]
-  const organizerInfo = primaryOrganizer
+  const organizerInfo = escapeHtml(primaryOrganizer
     ? `${primaryOrganizer.name} (${primaryOrganizer.phone})`
-    : companyPhone || "Operator Office"
+    : user?.companyPhone || "Operator Office")
 
   const renderDeckSection = (deckObj) => {
     const isLower = deckObj.deck === "lower"
@@ -365,9 +366,9 @@ export const buildSeatLayoutPrintHTML = ({
                           ${
                             isBooked
                               ? `
-                            <div class="pax-name">${p.name || "Passenger"}</div>
-                            <div class="pax-meta">${p.age ? p.age + "y" : ""} ${p.gender || ""} • Inv #${p.invoiceNo}</div>
-                            <div class="pax-phone">📞 ${p.contactPhone || p.contact || "—"}</div>
+                            <div class="pax-name">${escapeHtml(p.name || "Passenger")}</div>
+                            <div class="pax-meta">${p.age ? escapeHtml(p.age) + "y" : ""} ${escapeHtml(p.gender || "")} • Inv #${escapeHtml(p.invoiceNo)}</div>
+                            <div class="pax-phone">📞 ${escapeHtml(p.contactPhone || p.contact || "—")}</div>
                           `
                               : `
                             <div class="pax-available-label">AVAILABLE</div>
@@ -418,16 +419,16 @@ export const buildSeatLayoutPrintHTML = ({
               <span class="seat-tag ${isBooked ? "tag-booked" : "tag-avail"}">${seat.label}</span>
             </td>
             <td class="font-bold ${isBooked ? "pax-col-name" : "text-muted"}">
-              ${isBooked ? p.name : "Available (Vacant Berth)"}
+              ${isBooked ? escapeHtml(p.name) : "Available (Vacant Berth)"}
             </td>
-            <td class="text-center">${isBooked && p.age ? `${p.age} / ${p.gender?.[0] || "—"}` : "—"}</td>
-            <td>${isBooked ? p.contactPhone || p.contact || "—" : "—"}</td>
-            <td>${isBooked ? p.city || "Boarding Point" : "—"}</td>
-            <td class="text-center font-mono">${isBooked ? "#" + p.invoiceNo : "—"}</td>
+            <td class="text-center">${isBooked && p.age ? `${escapeHtml(p.age)} / ${escapeHtml(p.gender?.[0] || "—")}` : "—"}</td>
+            <td>${isBooked ? escapeHtml(p.contactPhone || p.contact || "—") : "—"}</td>
+            <td>${isBooked ? escapeHtml(p.city || "Boarding Point") : "—"}</td>
+            <td class="text-center font-mono">${isBooked ? "#" + escapeHtml(p.invoiceNo) : "—"}</td>
             <td class="text-center">
               ${
                 isBooked
-                  ? `<span class="badge ${p.isPaid ? "badge-paid" : "badge-due"}">${p.isPaid ? "PAID" : `DUE ₹${p.balanceDue}`}</span>`
+                  ? `<span class="badge ${p.isPaid ? "badge-paid" : "badge-due"}">${p.isPaid ? "PAID" : `DUE ₹${escapeHtml(p.balanceDue)}`}</span>`
                   : `<span class="badge badge-avail">VACANT</span>`
               }
             </td>
@@ -555,6 +556,7 @@ export const buildSeatLayoutPrintHTML = ({
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Passenger Seat Layout - ${tourName} - ${busNumber}</title>
 <style>
