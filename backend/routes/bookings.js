@@ -5,6 +5,7 @@ import Payment from "../models/Payment.js"
 import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
 import { logAudit } from "../models/AuditLog.js"
+import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
 import {
@@ -25,6 +26,24 @@ export {
   getDayBounds,
   validateIndianPhone,
   validateAadhaar,
+  validateVerhoeff,
+}
+
+
+export const maskBookingPaxAadhaar = (booking) => {
+  if (!booking) return booking
+  const b = booking.toObject ? booking.toObject() : { ...booking }
+  if (Array.isArray(b.passengers)) {
+    b.passengers = b.passengers.map((p) => {
+      const copy = { ...p }
+      if (copy.aadhar) {
+        const raw = copy.aadharEncrypted ? decryptAadhaar(copy.aadhar) : copy.aadhar
+        copy.aadhar = maskAadhaar(raw)
+      }
+      return copy
+    })
+  }
+  return b
 }
 
 const router = express.Router()
@@ -219,7 +238,7 @@ router.get("/invoice/:invoiceNo", verifyToken, async (req, res) => {
       invoiceNo: req.params.invoiceNo,
     })
     if (!booking) return res.status(404).json({ message: "Booking not found" })
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
@@ -232,7 +251,7 @@ router.get("/", verifyToken, async (req, res) => {
       userId: req.user.id,
       $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
     }).sort({ createdAt: -1 })
-    res.json(bookings)
+    res.json(bookings.map(maskBookingPaxAadhaar))
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
@@ -388,7 +407,14 @@ router.post("/", verifyToken, async (req, res) => {
       taxAmount: pricing.taxAmount,
       isTaxInclusive: pricing.isTaxInclusive,
       payments: initialPayments,
-      passengers,
+      passengers: passengers.map((p) => {
+        const paxObj = { ...p }
+        if (paxObj.aadhar) {
+          paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
+          paxObj.aadharEncrypted = true
+        }
+        return paxObj
+      }),
       userId: req.user.id,
     })
 
@@ -437,7 +463,7 @@ router.post("/", verifyToken, async (req, res) => {
       }
     }
 
-    res.status(201).json(savedBooking)
+    res.status(201).json(maskBookingPaxAadhaar(savedBooking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -873,6 +899,45 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
     booking.deletedAt = null
     await booking.save()
     res.json(booking)
+  } catch (error) {
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
+  }
+})
+
+
+// GET /api/bookings/:id/passengers/:paxId/reveal-aadhaar (SEC-012)
+router.get("/:id/passengers/:paxId/reveal-aadhaar", verifyToken, async (req, res) => {
+  try {
+    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user.id })
+    if (!booking) return res.status(404).json({ message: "Booking not found" })
+
+    let passenger = booking.passengers.id(req.params.paxId)
+    if (!passenger && /^\d+$/.test(req.params.paxId)) {
+      passenger = booking.passengers[parseInt(req.params.paxId, 10)]
+    }
+
+    if (!passenger) return res.status(404).json({ message: "Passenger not found" })
+
+    const rawAadhaar = passenger.aadharEncrypted ? decryptAadhaar(passenger.aadhar) : passenger.aadhar
+
+    await logAudit({
+      userId: req.user.id,
+      action: "AADHAAR_REVEALED",
+      req,
+      meta: {
+        bookingId: booking._id,
+        invoiceNo: booking.invoiceNo,
+        passengerId: passenger._id,
+        passengerName: passenger.name,
+      },
+    })
+
+    res.json({
+      passengerId: passenger._id,
+      seatId: passenger.seatId,
+      name: passenger.name,
+      aadhar: rawAadhaar,
+    })
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }

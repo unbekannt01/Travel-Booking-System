@@ -8,6 +8,7 @@ const passengerSchema = new mongoose.Schema({
   seatId: { type: String },
   contact: { type: String },
   aadhar: { type: String },
+  aadharEncrypted: { type: Boolean, default: false },
   checkedIn: { type: Boolean, default: false },
 })
 
