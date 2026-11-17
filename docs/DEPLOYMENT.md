@@ -47,20 +47,31 @@ In the `backend/` directory, create a `.env` file (or copy from `backend/.env.ex
 ```env
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/yatrahub
-JWT_SECRET=super_secret_jwt_key_yatrahub_2026_change_in_production
+NODE_ENV=production
 FRONTEND_URL=http://localhost:5173
 
+# Cryptographic Keys (Must be >= 32 characters)
+# Generate via: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=super_secret_jwt_key_yatrahub_2026_change_in_production
+TOTP_ENC_KEY=super_secret_totp_key_yatrahub_2026_change_in_production
+DATA_ENC_KEY=super_secret_data_key_yatrahub_2026_change_in_production
+
 # Email Notifications (Password Reset & 2FA Recovery)
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_SECURE=false
+EMAIL_SERVICE=gmail
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_gmail_app_password
 ```
 
 > [!IMPORTANT]
-> - Ensure `JWT_SECRET` is a secure, random string (minimum 32 characters).
-> - For Gmail SMTP, generate an **App Password** under Google Account Security (requires 2-Step Verification).
+> - Ensure `JWT_SECRET`, `TOTP_ENC_KEY`, and `DATA_ENC_KEY` are cryptographically random strings (minimum 32 characters).
+> - Never commit `.env` files to source control.
+> - If migrating an existing database with unencrypted 2FA or Aadhaar numbers, run the migration scripts:
+>   ```bash
+>   node scripts/migrate-encrypt-totp.js --dry-run
+>   node scripts/migrate-encrypt-totp.js
+>   node scripts/migrate-encrypt-aadhaar.js --dry-run
+>   node scripts/migrate-encrypt-aadhaar.js
+>   ```
 
 ### 3.2 Frontend Configuration (`.env`)
 In the root directory, create a `.env` file:

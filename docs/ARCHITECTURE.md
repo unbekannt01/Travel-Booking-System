@@ -34,7 +34,8 @@ graph TD
 
     subgraph Backend ["Backend API (http://localhost:5000)"]
         ExpressApp["Express 5 App<br/>(backend/index.js)"]
-        AuthMiddleware["Auth Middleware<br/>(verifyToken & activeTokens check)"]
+        SecurityLayer["Security Layer<br/>(Helmet, Strict CORS, MongoSanitize, RateLimit)"]
+        AuthMiddleware["Auth Middleware<br/>(verifyToken, tokenVersion & activeTokens check)"]
         
         subgraph Routes ["API Routes"]
             AuthRoute["/api/auth (auth.js)"]
@@ -43,7 +44,8 @@ graph TD
             PaymentRoute["/api/payments (payments.js)"]
         end
         
-        ExpressApp --> AuthMiddleware
+        ExpressApp --> SecurityLayer
+        SecurityLayer --> AuthMiddleware
         AuthMiddleware --> Routes
     end
 
@@ -177,4 +179,31 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
 - Audit trail (`isVoid`, `voidReason`, `voidedAt`, `voidedBy`).
 
 ### 6.5 `EmailToken`
-- Token storage (`userId`, `token`, `purpose`: password-reset / 2fa-recovery, `expiresAt`).
+- Token storage (`userId`, `token`: SHA-256 hashed, `purpose`: password-reset / 2fa-recovery, `expiresAt`).
+
+### 6.6 `Counter`
+- Atomic sequence generation for invoice and receipt numbers (`userId`, `prefix`, `seq`).
+
+### 6.7 `AuditLog`
+- Security event ledger (`userId`, `action`, `ip`, `userAgent`, `meta`, `createdAt` with 180-day TTL).
+
+---
+
+## 7. Security Hardening Architecture (Phase 2)
+
+- **Strict Output Encoding & CSP**: All user inputs rendered in ticket templates, invoices, and boarding passes are escaped via `escapeHtml()`, and strict Content-Security-Policy headers/meta tags block inline scripts and remote resources.
+- **Server Authority Over Pricing & Seats**: The server recomputes tour rates, discounts, and 5% GST using `calculatePricing()`, rejecting client price tampering. The `Payment` ledger is the sole source of truth for booking financial synchronization (`syncBookingPayments()`).
+- **Cryptographic Protection at Rest**:
+  - TOTP 2FA secrets are encrypted at rest with AES-256-GCM (`TOTP_ENC_KEY`).
+  - Passenger 12-digit Indian Aadhaar numbers are encrypted at rest with AES-256-GCM (`DATA_ENC_KEY`) and validated via the Verhoeff checksum algorithm. Responses return masked values (`XXXX XXXX 1234`) with an authorized reveal endpoint.
+- **Session Hardening & Defense-in-Depth**:
+  - `httpOnly`, `SameSite=Strict` session cookies with custom `X-Requested-With` header verification for CSRF mitigation.
+  - Active session invalidation via per-user `tokenVersion` and `activeTokens` tracking.
+  - Brute-force protection: Rate limiting on auth endpoints (10 req/15min) and 15-minute account lockouts after 5 consecutive failed attempts.
+  - Password complexity policy: Minimum 10 characters, upper, lower, digit, symbol.
+- **API Defense & Auditing**:
+  - `helmet` security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, HSTS).
+  - CORS strictly restricted to configured `FRONTEND_URL`.
+  - Express 5-compatible NoSQL sanitizer (`mongoSanitize`) and Zod schema validation.
+  - Payload limits: Strict 100KB global limit with route-specific 5MB limit for logo uploads.
+  - Immutable audit trail (`AuditLog`) capturing sensitive operational events with PII-masked console logging.
