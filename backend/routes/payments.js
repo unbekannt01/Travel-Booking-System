@@ -2,6 +2,7 @@ import express from "express"
 import Payment from "../models/Payment.js"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
+import Counter from "../models/Counter.js"
 import verifyToken from "../middleware/auth.js"
 import {
   buildReceiptPrefix,
@@ -15,12 +16,31 @@ const router = express.Router()
 export const getNextReceiptNo = async (userId, customPrefix = "REC", date = new Date()) => {
   const prefix = buildReceiptPrefix(customPrefix, date)
 
-  const existingPayments = await Payment.find({
-    userId,
-    receiptNo: { $regex: `^${prefix}` },
-  }).select("receiptNo")
+  let counter = await Counter.findOneAndUpdate(
+    { userId, prefix },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  )
 
-  return calculateNextReceiptNo(prefix, existingPayments.map((p) => p.receiptNo))
+  if (counter.seq === 1) {
+    const existingPayments = await Payment.find({
+      userId,
+      receiptNo: { $regex: `^${prefix}` },
+    }).select("receiptNo")
+
+    const nextReceipt = calculateNextReceiptNo(existingPayments.map((p) => p.receiptNo), prefix)
+    const parts = nextReceipt.split("-")
+    const maxSeq = parseInt(parts[parts.length - 1], 10)
+    if (!isNaN(maxSeq) && maxSeq > 1) {
+      counter = await Counter.findOneAndUpdate(
+        { userId, prefix },
+        { $set: { seq: maxSeq } },
+        { new: true }
+      )
+    }
+  }
+
+  return `${prefix}${String(counter.seq).padStart(3, "0")}`
 }
 
 // Recalculate booking financials from payment ledger

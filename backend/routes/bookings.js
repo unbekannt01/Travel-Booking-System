@@ -2,6 +2,8 @@ import express from "express"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
 import Payment from "../models/Payment.js"
+import Tour from "../models/Tour.js"
+import Counter from "../models/Counter.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
 import {
@@ -13,6 +15,7 @@ import {
   validateIndianPhone,
   validateAadhaar,
   calculateCancellationRefund,
+  calculatePricing,
 } from "../../shared/businessLogic.js"
 
 export {
@@ -25,16 +28,118 @@ export {
 
 const router = express.Router()
 
-// Generates next unique invoice number for user with customizable prefix
+// Generates next unique invoice number for user with customizable prefix using atomic counter
 export const getNextInvoiceNo = async (userId, tourName, journeyDate, customPrefix = "YHB") => {
   const prefix = buildInvoicePrefix(customPrefix, tourName, journeyDate)
-  const existingBookings = await Booking.find({
-    userId,
-    invoiceNo: { $regex: `^${prefix}` },
-  }).select("invoiceNo")
 
-  const existingInvoices = existingBookings.map((b) => b.invoiceNo)
-  return calculateNextInvoiceNo(existingInvoices, prefix)
+  let counter = await Counter.findOneAndUpdate(
+    { userId, prefix },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  )
+
+  if (counter.seq === 1) {
+    const existingBookings = await Booking.find({
+      userId,
+      invoiceNo: { $regex: `^${prefix}` },
+    }).select("invoiceNo")
+
+    const existingInvoices = existingBookings.map((b) => b.invoiceNo)
+    const nextInvoice = calculateNextInvoiceNo(existingInvoices, prefix)
+    const match = nextInvoice.match(/(\d{3,})$/)
+    const maxSeq = match ? parseInt(match[1], 10) : 1
+    if (maxSeq > 1) {
+      counter = await Counter.findOneAndUpdate(
+        { userId, prefix },
+        { $set: { seq: maxSeq } },
+        { new: true }
+      )
+    }
+  }
+
+  return `${prefix}${String(counter.seq).padStart(3, "0")}`
+}
+
+
+// Validates passenger count matches seat count and seat ID row bounds for coach layout
+export const validateSeatLayout = (passengers, busType) => {
+  if (!passengers || !Array.isArray(passengers)) return null
+  const seatIds = passengers.map((p) => p.seatId).filter(Boolean)
+  if (seatIds.length === 0) return null
+
+  // Ensure passenger count matches seat count if seats are assigned
+  if (seatIds.length !== passengers.length) {
+    return {
+      status: 400,
+      message: `Passenger count (${passengers.length}) must match assigned seat count (${seatIds.length}).`,
+    }
+  }
+
+  // Validate each seat ID format and bounds if busType is provided
+  if (busType) {
+    const is2x2 = busType.startsWith("2x2")
+    const maxRow = is2x2 ? 5 : 6
+
+    for (const seatId of seatIds) {
+      const match = seatId.match(/^(lower|upper)-([LR])(\d+)(?:-(\d+))?$/i)
+      if (match) {
+        const row = parseInt(match[3], 10)
+        if (row < 1 || row > maxRow) {
+          return {
+            status: 400,
+            message: `Seat ${seatId} row ${row} is out of bounds for ${busType} (max row ${maxRow}).`,
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+// Server authority over pricing: query Tour, compute base amount, discount, and 5% GST
+export const computeServerPricing = async ({
+  userId,
+  tourName,
+  passengers,
+  discount = 0,
+  discountType = "fixed",
+  gstRate,
+  isTaxInclusive = false,
+  baseAmount: clientBaseAmount,
+}) => {
+  const tour = await Tour.findOne({ name: tourName, userId })
+  let baseAmount = 0
+
+  if (tour) {
+    if (tour.pricingType === "fixed" || (tour.fixedPrice && !tour.pricingType)) {
+      const unitPrice = Number(tour.fixedPrice) || 0
+      baseAmount = unitPrice * (passengers?.length || 1)
+    } else {
+      baseAmount = (passengers || []).reduce((sum, p) => {
+        const isUpper =
+          p.seatId &&
+          (p.seatId.toLowerCase().startsWith("upper") ||
+            p.seatId.toLowerCase().startsWith("u") ||
+            p.seatId.toLowerCase().includes("-u"))
+        const price = isUpper ? Number(tour.upperPrice) || 0 : Number(tour.lowerPrice) || 0
+        return sum + price
+      }, 0)
+    }
+  } else {
+    baseAmount = Math.max(0, Number(clientBaseAmount) || 0)
+  }
+
+  const effectiveGst = gstRate !== undefined ? Number(gstRate) : 5
+  const pricing = calculatePricing({
+    baseAmount,
+    discountType: discountType === "percentage" ? "percentage" : "fixed",
+    discountValue: Math.max(0, Number(discount) || 0),
+    gstRate: Math.max(0, effectiveGst),
+    isTaxInclusive: Boolean(isTaxInclusive),
+  })
+
+  return { pricing, tour }
 }
 
 // Seat conflict validation
@@ -150,7 +255,6 @@ router.post("/", verifyToken, async (req, res) => {
       discount = 0,
       discountType = "fixed",
       gstRate = 0,
-      taxAmount = 0,
       isTaxInclusive = false,
       invoiceNo: clientInvoiceNo,
     } = req.body
@@ -162,21 +266,6 @@ router.post("/", verifyToken, async (req, res) => {
 
     if (!validateIndianPhone(contactPhone)) {
       return res.status(400).json({ message: "Please provide a valid 10-digit Indian mobile number." })
-    }
-
-    const numTotal = Number(totalAmount)
-    const numAdvance = Number(advanceReceived || 0)
-
-    if (isNaN(numTotal) || numTotal < 0) {
-      return res.status(400).json({ message: "Total amount must be 0 or greater." })
-    }
-
-    if (isNaN(numAdvance) || numAdvance < 0) {
-      return res.status(400).json({ message: "Advance payment cannot be negative." })
-    }
-
-    if (numAdvance > numTotal) {
-      return res.status(400).json({ message: "Advance payment cannot exceed total amount." })
     }
 
     if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
@@ -197,6 +286,12 @@ router.post("/", verifyToken, async (req, res) => {
       }
     }
 
+    // Validate seat layout and passenger-seat parity
+    const seatLayoutError = validateSeatLayout(passengers, busType)
+    if (seatLayoutError) {
+      return res.status(seatLayoutError.status).json({ message: seatLayoutError.message })
+    }
+
     // Check seat conflicts
     const seatConflict = await checkSeatConflicts({
       userId: req.user.id,
@@ -209,6 +304,38 @@ router.post("/", verifyToken, async (req, res) => {
         message: seatConflict.message,
         conflictingSeats: seatConflict.conflictingSeats,
       })
+    }
+
+    // Server authority over pricing: query Tour & compute totals, discount, GST
+    const { pricing } = await computeServerPricing({
+      userId: req.user.id,
+      tourName,
+      passengers,
+      discount,
+      discountType,
+      gstRate,
+      isTaxInclusive,
+      baseAmount: req.body.baseAmount || totalAmount,
+    })
+
+    const finalServerTotal = pricing.finalTotal
+    const numAdvance = Number(advanceReceived || 0)
+
+    if (isNaN(numAdvance) || numAdvance < 0) {
+      return res.status(400).json({ message: "Advance payment cannot be negative." })
+    }
+
+    if (totalAmount !== undefined && totalAmount !== null) {
+      const clientTotal = Math.round(Number(totalAmount) * 100) / 100
+      if (Math.abs(clientTotal - finalServerTotal) > 0.05) {
+        return res.status(400).json({
+          message: `Total amount mismatch: client provided ₹${clientTotal}, but server calculated ₹${finalServerTotal}.`,
+        })
+      }
+    }
+
+    if (numAdvance > finalServerTotal) {
+      return res.status(400).json({ message: "Advance payment cannot exceed total amount." })
     }
 
     // Fetch user settings for invoice and receipt prefixes if available
@@ -226,8 +353,6 @@ router.post("/", verifyToken, async (req, res) => {
     }
 
     const { start: normalizedJourneyDate } = getDayBounds(journeyDate)
-
-    const isPaid = numAdvance >= numTotal && numTotal > 0
 
     const initialPayments =
       numAdvance > 0
@@ -252,15 +377,15 @@ router.post("/", verifyToken, async (req, res) => {
       contactPhone,
       contactEmail: contactEmail || "",
       paymentMode: paymentMode || "Cash",
-      totalAmount: numTotal,
+      totalAmount: finalServerTotal,
       advanceReceived: numAdvance,
-      isPaid,
+      isPaid: numAdvance >= finalServerTotal && finalServerTotal > 0,
       status: "Confirmed",
-      discount: Math.max(0, Number(discount) || 0),
-      discountType: discountType === "percentage" ? "percentage" : "fixed",
-      gstRate: Math.max(0, Number(gstRate) || 0),
-      taxAmount: Math.max(0, Number(taxAmount) || 0),
-      isTaxInclusive: Boolean(isTaxInclusive),
+      discount: pricing.discountAmount,
+      discountType: pricing.discountType,
+      gstRate: pricing.gstRate,
+      taxAmount: pricing.taxAmount,
+      isTaxInclusive: pricing.isTaxInclusive,
       payments: initialPayments,
       passengers,
       userId: req.user.id,
@@ -305,6 +430,7 @@ router.post("/", verifyToken, async (req, res) => {
           recordedBy: req.user.userName || req.user.email || "Operator",
         })
         await paymentDoc.save()
+        await syncBookingPayments(savedBooking._id, req.user.id)
       } catch (payErr) {
         console.error("Warning: Could not create initial Payment ledger record:", payErr.message)
       }
@@ -388,7 +514,34 @@ router.put("/:id", verifyToken, async (req, res) => {
       }
     }
 
-    // Whitelist allowed fields to update
+    // Validate seat layout and parity
+    const seatLayoutError = validateSeatLayout(effectivePassengers, req.body.busType || booking.busType)
+    if (seatLayoutError) {
+      return res.status(seatLayoutError.status).json({ message: seatLayoutError.message })
+    }
+
+    // Recompute server pricing
+    const { pricing } = await computeServerPricing({
+      userId: req.user.id,
+      tourName: effectiveTourName,
+      passengers: effectivePassengers,
+      discount: req.body.discount !== undefined ? req.body.discount : booking.discount,
+      discountType: req.body.discountType || booking.discountType,
+      gstRate: req.body.gstRate !== undefined ? req.body.gstRate : booking.gstRate,
+      isTaxInclusive: req.body.isTaxInclusive !== undefined ? req.body.isTaxInclusive : booking.isTaxInclusive,
+      baseAmount: req.body.baseAmount || req.body.totalAmount || booking.totalAmount,
+    })
+
+    if (req.body.totalAmount !== undefined && req.body.totalAmount !== null) {
+      const clientTotal = Math.round(Number(req.body.totalAmount) * 100) / 100
+      if (Math.abs(clientTotal - pricing.finalTotal) > 0.05) {
+        return res.status(400).json({
+          message: `Total amount mismatch: client provided ₹${clientTotal}, but server recomputed ₹${pricing.finalTotal}.`,
+        })
+      }
+    }
+
+    // Whitelist allowed fields to update (advanceReceived & isPaid are strictly controlled by payment ledger)
     const allowedFields = [
       "contactName",
       "contactPhone",
@@ -397,14 +550,10 @@ router.put("/:id", verifyToken, async (req, res) => {
       "duration",
       "busType",
       "paymentMode",
-      "totalAmount",
-      "advanceReceived",
-      "isPaid",
       "status",
       "discount",
       "discountType",
       "gstRate",
-      "taxAmount",
       "isTaxInclusive",
       "cancellationCharge",
       "refundAmount",
@@ -422,12 +571,16 @@ router.put("/:id", verifyToken, async (req, res) => {
       booking.journeyDate = start
     }
 
-    if (booking.advanceReceived >= booking.totalAmount && booking.totalAmount > 0) {
-      booking.isPaid = true
-    }
+    booking.totalAmount = pricing.finalTotal
+    booking.discount = pricing.discountAmount
+    booking.discountType = pricing.discountType
+    booking.gstRate = pricing.gstRate
+    booking.taxAmount = pricing.taxAmount
+    booking.isTaxInclusive = pricing.isTaxInclusive
 
     await booking.save()
-    res.json(booking)
+    const { booking: syncedBooking } = await syncBookingPayments(booking._id, req.user.id)
+    res.json(syncedBooking || booking)
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -607,6 +760,7 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
           recordedBy: req.user.userName || req.user.email || "Operator",
         })
         await refundDoc.save()
+        await syncBookingPayments(booking._id, req.user.id)
 
         // Operator retained 'fee', so final advanceReceived is the retained fee
         booking.advanceReceived = fee
