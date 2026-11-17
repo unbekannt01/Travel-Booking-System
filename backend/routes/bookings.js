@@ -206,7 +206,7 @@ router.post("/generate-invoice", verifyToken, async (req, res) => {
     const invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate, customPrefix)
     res.json({ invoiceNo })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -220,7 +220,7 @@ router.get("/invoice/:invoiceNo", verifyToken, async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     res.json(booking)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -233,7 +233,7 @@ router.get("/", verifyToken, async (req, res) => {
     }).sort({ createdAt: -1 })
     res.json(bookings)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -779,7 +779,7 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
     await booking.save()
     res.json(booking)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -847,7 +847,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
     await booking.save()
     res.json({ message: "Booking moved to trash", id: booking._id, invoiceNo: booking.invoiceNo })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -865,7 +865,7 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
     await booking.save()
     res.json(booking)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 

@@ -84,7 +84,7 @@ router.get("/", verifyToken, async (req, res) => {
 
     res.json(payments)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -197,7 +197,7 @@ router.post("/:id/void", verifyToken, async (req, res) => {
       message: "Payment voided successfully.",
     })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 

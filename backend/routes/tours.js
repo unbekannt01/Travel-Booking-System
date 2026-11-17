@@ -11,7 +11,7 @@ router.get("/", verifyToken, async (req, res) => {
     })
     res.json(tours)
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -85,10 +85,10 @@ router.delete("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to delete this tour" })
     }
 
-    await Tour.findByIdAndDelete(req.params.id)
+    await Tour.findOneAndDelete({ _id: req.params.id, userId: req.user.id })
     res.json({ message: "Tour deleted successfully" })
   } catch (error) {
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 

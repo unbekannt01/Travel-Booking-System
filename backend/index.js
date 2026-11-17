@@ -5,6 +5,7 @@ import cors from "cors"
 import dotenv from "dotenv"
 import path from "path"
 import { fileURLToPath } from "url"
+import { mongoSanitize } from "./middleware/sanitize.js"
 import authRoutes from "./routes/auth.js"
 import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
@@ -45,13 +46,41 @@ app.use(
   }),
 )
 app.use(cookieParser())
-app.use(express.json({ limit: '10mb'}))
-app.use(express.urlencoded({ limit: '10mb', extended: true}))
+
+// Route-specific 5MB payload limit for company logo/profile update (SEC-015)
+app.use("/api/auth/update-company", express.json({ limit: "5mb" }))
+app.use("/api/auth/update-company", express.urlencoded({ limit: "5mb", extended: true }))
+
+// Global strict 100KB payload limit for all other API endpoints (SEC-015)
+app.use(express.json({ limit: "100kb" }))
+app.use(express.urlencoded({ limit: "100kb", extended: true }))
+
+// NoSQL injection sanitizer (SEC-011)
+app.use(mongoSanitize)
 
 app.use("/api/auth", authRoutes)
 app.use("/api/bookings", bookingRoutes)
 app.use("/api/tours", tourRoutes)
 app.use("/api/payments", paymentRoutes)
+
+// 404 handler for unknown API endpoints
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: "API endpoint not found" })
+})
+
+// Centralized error handling middleware (SEC-014)
+app.use((err, req, res, _next) => {
+  void _next
+  console.error("Internal Server Error:", err.message)
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ message: "Payload size exceeds maximum allowed limit" })
+  }
+  const isProduction = process.env.NODE_ENV === "production"
+  const statusCode = err.statusCode || err.status || 500
+  res.status(statusCode).json({
+    message: isProduction ? "An unexpected server error occurred." : (err.message || "An unexpected server error occurred."),
+  })
+})
 
 import Booking from "./models/Booking.js"
 

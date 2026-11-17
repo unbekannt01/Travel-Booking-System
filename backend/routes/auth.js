@@ -113,6 +113,10 @@ router.post("/register", authLimiter, async (req, res) => {
   try {
     const { userName, email, password } = req.body
 
+    if (!userName || typeof userName !== "string" || !email || typeof email !== "string" || !password || typeof password !== "string") {
+      return res.status(400).json({ message: "Username, email, and password are required strings" })
+    }
+
     if (!validatePasswordComplexity(password)) {
       return res.status(400).json({
         message:
@@ -159,7 +163,7 @@ router.post("/register", authLimiter, async (req, res) => {
     })
   } catch (error) {
     console.error("Registration error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -192,7 +196,7 @@ router.post("/setup-2fa", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Setup 2FA error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -233,7 +237,7 @@ router.post("/verify-2fa-setup", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Verify 2FA setup error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -241,7 +245,7 @@ router.post("/login", authLimiter, async (req, res) => {
   try {
     const { loginIdentifier, password } = req.body
 
-    if (!loginIdentifier || !password) {
+    if (!loginIdentifier || typeof loginIdentifier !== "string" || !password || typeof password !== "string") {
       return res.status(400).json({ message: "Email/Username and password are required" })
     }
 
@@ -324,7 +328,7 @@ router.post("/login", authLimiter, async (req, res) => {
     })
   } catch (error) {
     console.error("Login error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -413,7 +417,7 @@ router.post("/verify-2fa-login", authLimiter, async (req, res) => {
     })
   } catch (error) {
     console.error("Verify 2FA login error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -446,7 +450,7 @@ router.post("/logout", async (req, res) => {
     res.json({ message: "Logout successful" })
   } catch (error) {
     console.error("Logout error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -465,7 +469,7 @@ router.put("/update-profile", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Update profile error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -528,7 +532,7 @@ router.put("/update-company", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Update company error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -573,7 +577,7 @@ router.post("/disable-2fa", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Disable 2FA error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -599,7 +603,7 @@ router.get("/active-sessions", verifyToken, async (req, res) => {
     })
   } catch (error) {
     console.error("Error fetching active sessions:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -624,7 +628,7 @@ router.post("/logout-device/:tokenId", verifyToken, async (req, res) => {
     res.json({ message: "Session logged out successfully" })
   } catch (error) {
     console.error("Error logging out device:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -757,7 +761,7 @@ router.post("/reset-password", async (req, res) => {
     res.json({ message: "Password updated successfully" })
   } catch (error) {
     console.error("Reset Password Error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
@@ -865,7 +869,7 @@ router.post("/finalize-2fa-recovery", async (req, res) => {
     })
   } catch (error) {
     console.error("Finalize 2FA Recovery Error:", error.message)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
 
