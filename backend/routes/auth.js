@@ -1,6 +1,9 @@
 /* eslint-disable no-unused-vars */
 import express from "express"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
+import rateLimit from "express-rate-limit"
+import crypto from "crypto"
+import { encryptTotp, decryptTotp } from "../utils/crypto.js"
 import jwt from "jsonwebtoken"
 import speakeasy from "speakeasy"
 import QRCode from "qrcode"
@@ -46,6 +49,44 @@ const checkRateLimit = async (user) => {
 }
 */
 
+
+export const validatePasswordComplexity = (password) => {
+  if (!password || typeof password !== "string") return false
+  if (password.length < 10) return false
+  const hasUpper = /[A-Z]/.test(password)
+  const hasLower = /[a-z]/.test(password)
+  const hasDigit = /[0-9]/.test(password)
+  const hasSpecial = /[^A-Za-z0-9]/.test(password)
+  return hasUpper && hasLower && hasDigit && hasSpecial
+}
+
+export const setSessionCookie = (res, token) => {
+  const isProduction = process.env.NODE_ENV === "production"
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  })
+}
+
+export const clearSessionCookie = (res) => {
+  const isProduction = process.env.NODE_ENV === "production"
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "strict",
+  })
+}
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { message: "Too many authentication requests from this IP. Please try again after 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 const formatUserResponse = (user) => ({
   id: user._id,
   userName: user.userName,
@@ -68,22 +109,35 @@ const formatUserResponse = (user) => ({
   twoFactorEnabled: user.twoFactorEnabled,
 })
 
-router.post("/register", async (req, res) => {
+router.post("/register", authLimiter, async (req, res) => {
   try {
     const { userName, email, password } = req.body
+
+    if (!validatePasswordComplexity(password)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 10 characters long and include uppercase, lowercase, a number, and a special character.",
+      })
+    }
 
     const existingUser = await User.findOne({ email })
     if (existingUser) {
       return res.status(400).json({ message: "This email is already registered. Please login instead." })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(password, 12)
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
 
-    const newUser = new User({ userName, email, password: hashedPassword })
+    const newUser = new User({
+      userName,
+      email,
+      password: hashedPassword,
+      tokenVersion: 0,
+      failedLoginAttempts: 0,
+    })
     await newUser.save()
 
-    const token = jwt.sign({ id: newUser._id, tokenId }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: newUser._id, tokenId, tokenVersion: 0 }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     })
 
@@ -94,6 +148,8 @@ router.post("/register", async (req, res) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     })
     await newUser.save()
+
+    setSessionCookie(res, token)
 
     res.status(201).json({
       token,
@@ -107,15 +163,9 @@ router.post("/register", async (req, res) => {
   }
 })
 
-router.post("/setup-2fa", async (req, res) => {
+router.post("/setup-2fa", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized. Please login." })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const user = await User.findById(decoded.id)
+    const user = await User.findById(req.user.id)
 
     if (!user) {
       return res.status(404).json({ message: "User not found" })
@@ -127,8 +177,9 @@ router.post("/setup-2fa", async (req, res) => {
       issuer: "YatraHub",
     })
 
-    // Save the secret temporarily (not enabled yet)
-    user.twoFactorSecret = secret.base32
+    // Save the secret encrypted at rest with AES-256-GCM
+    user.twoFactorSecret = encryptTotp(secret.base32)
+    user.twoFactorEncrypted = true
     await user.save()
 
     // Generate QR code
@@ -145,28 +196,26 @@ router.post("/setup-2fa", async (req, res) => {
   }
 })
 
-router.post("/verify-2fa-setup", async (req, res) => {
+router.post("/verify-2fa-setup", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
     const { code } = req.body
-
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized. Please login." })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const user = await User.findById(decoded.id)
+    const user = await User.findById(req.user.id)
 
     if (!user || !user.twoFactorSecret) {
       return res.status(400).json({ message: "2FA setup not initiated" })
     }
 
+    const rawSecret = decryptTotp(user.twoFactorSecret)
+    if (!rawSecret) {
+      return res.status(500).json({ message: "Failed to decrypt 2FA secret" })
+    }
+
     // Verify the code
     const verified = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
+      secret: rawSecret,
       encoding: "base32",
       token: code,
-      window: 2,
+      window: 1,
     })
 
     if (!verified) {
@@ -175,6 +224,7 @@ router.post("/verify-2fa-setup", async (req, res) => {
 
     // Enable 2FA
     user.twoFactorEnabled = true
+    user.failed2FAAttempts = 0
     await user.save()
 
     res.json({
@@ -187,7 +237,7 @@ router.post("/verify-2fa-setup", async (req, res) => {
   }
 })
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const { loginIdentifier, password } = req.body
 
@@ -204,10 +254,28 @@ router.post("/login", async (req, res) => {
       return res.status(404).json({ message: "No account found with this email or username. Please register first." })
     }
 
+    // Check account lockout (15 minutes after 5 failed attempts)
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const remainingMins = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000)
+      return res.status(403).json({
+        message: `Account is temporarily locked due to multiple failed attempts. Please try again in ${remainingMins} minute(s).`,
+      })
+    }
+
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000)
+        user.failedLoginAttempts = 0
+      }
+      await user.save()
       return res.status(400).json({ message: "Incorrect password. Please try again." })
     }
+
+    // Reset lockout counters on success
+    user.failedLoginAttempts = 0
+    user.lockUntil = null
 
     const now = new Date()
     user.activeTokens = user.activeTokens.filter((t) => t.expiresAt > now)
@@ -223,6 +291,7 @@ router.post("/login", async (req, res) => {
         { expiresIn: "10m" },
       )
 
+      await user.save()
       return res.json({
         requires2FA: true,
         tempToken,
@@ -231,7 +300,11 @@ router.post("/login", async (req, res) => {
     }
 
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET, { expiresIn: "7d" })
+    const token = jwt.sign(
+      { id: user._id, tokenId, tokenVersion: user.tokenVersion || 0 },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    )
 
     user.activeTokens.push({
       token,
@@ -241,6 +314,7 @@ router.post("/login", async (req, res) => {
     })
 
     await user.save()
+    setSessionCookie(res, token)
 
     res.json({
       token,
@@ -254,7 +328,7 @@ router.post("/login", async (req, res) => {
   }
 })
 
-router.post("/verify-2fa-login", async (req, res) => {
+router.post("/verify-2fa-login", authLimiter, async (req, res) => {
   try {
     const { tempToken, code } = req.body
 
@@ -274,17 +348,38 @@ router.post("/verify-2fa-login", async (req, res) => {
       return res.status(400).json({ message: "2FA not enabled for this user" })
     }
 
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const remainingMins = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000)
+      return res.status(403).json({
+        message: `Account is temporarily locked due to multiple failed attempts. Please try again in ${remainingMins} minute(s).`,
+      })
+    }
+
+    const rawSecret = decryptTotp(user.twoFactorSecret)
+    if (!rawSecret) {
+      return res.status(500).json({ message: "Failed to decrypt 2FA credentials" })
+    }
+
     // Verify the 2FA code
     const verified = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
+      secret: rawSecret,
       encoding: "base32",
       token: code,
-      window: 2,
+      window: 1,
     })
 
     if (!verified) {
+      user.failed2FAAttempts = (user.failed2FAAttempts || 0) + 1
+      if (user.failed2FAAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000)
+        user.failed2FAAttempts = 0
+      }
+      await user.save()
       return res.status(400).json({ message: "Invalid 2FA code" })
     }
+
+    user.failed2FAAttempts = 0
+    user.lockUntil = null
 
     const now = new Date()
     user.activeTokens = user.activeTokens.filter((t) => t.expiresAt > now)
@@ -294,7 +389,11 @@ router.post("/verify-2fa-login", async (req, res) => {
     }
 
     const tokenId = "token_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-    const token = jwt.sign({ id: user._id, tokenId }, process.env.JWT_SECRET, { expiresIn: "7d" })
+    const token = jwt.sign(
+      { id: user._id, tokenId, tokenVersion: user.tokenVersion || 0 },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    )
 
     user.activeTokens.push({
       token,
@@ -304,6 +403,7 @@ router.post("/verify-2fa-login", async (req, res) => {
     })
 
     await user.save()
+    setSessionCookie(res, token)
 
     res.json({
       token,
@@ -319,27 +419,26 @@ router.post("/verify-2fa-login", async (req, res) => {
 
 router.post("/logout", async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
-    if (!token) {
-      return res.status(400).json({ message: "No token provided" })
-    }
+    const token = req.cookies?.token || req.headers.authorization?.split(" ")[1]
+    clearSessionCookie(res)
 
-    // ensuring we can still clean up the database even if the token is old.
     let userId
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      userId = decoded.id
-    } catch (err) {
-      const decoded = jwt.decode(token)
-      if (decoded) userId = decoded.id
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+        userId = decoded.id
+      } catch (err) {
+        const decoded = jwt.decode(token)
+        if (decoded) userId = decoded.id
+      }
     }
 
     if (userId) {
       const user = await User.findById(userId)
       if (user) {
-        // Remove current token and any expired ones
         const now = new Date()
         user.activeTokens = user.activeTokens.filter((t) => t.token !== token && t.expiresAt > now)
+        user.tokenVersion = (user.tokenVersion || 0) + 1
         await user.save()
       }
     }
@@ -351,17 +450,10 @@ router.post("/logout", async (req, res) => {
   }
 })
 
-router.put("/update-profile", async (req, res) => {
+router.put("/update-profile", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized. Please login." })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const { userName } = req.body
-
-    const user = await User.findByIdAndUpdate(decoded.id, { userName }, { new: true })
+    const user = await User.findByIdAndUpdate(req.user.id, { userName }, { new: true })
 
     if (!user) {
       return res.status(404).json({ message: "User not found" })
@@ -377,14 +469,8 @@ router.put("/update-profile", async (req, res) => {
   }
 })
 
-router.put("/update-company", async (req, res) => {
+router.put("/update-company", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized. Please login." })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const {
       companyName,
       companyTagline,
@@ -430,7 +516,7 @@ router.put("/update-company", async (req, res) => {
     if (organizers !== undefined) updateData.organizers = organizers
     if (bankDetails !== undefined) updateData.bankDetails = bankDetails
 
-    const user = await User.findByIdAndUpdate(decoded.id, updateData, { new: true })
+    const user = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
 
     if (!user) {
       return res.status(404).json({ message: "User not found" })
@@ -446,17 +532,10 @@ router.put("/update-company", async (req, res) => {
   }
 })
 
-router.post("/disable-2fa", async (req, res) => {
+router.post("/disable-2fa", verifyToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]
-    if (!token) {
-      return res.status(401).json({ message: "Unauthorized. Please login." })
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const { code } = req.body
-
-    const user = await User.findById(decoded.id)
+    const user = await User.findById(req.user.id)
 
     if (!user) {
       return res.status(404).json({ message: "User not found" })
@@ -466,12 +545,17 @@ router.post("/disable-2fa", async (req, res) => {
       return res.status(400).json({ message: "2FA is not enabled" })
     }
 
+    const rawSecret = decryptTotp(user.twoFactorSecret)
+    if (!rawSecret) {
+      return res.status(500).json({ message: "Failed to decrypt 2FA credentials" })
+    }
+
     // Verify the code before disabling
     const verified = speakeasy.totp.verify({
-      secret: user.twoFactorSecret,
+      secret: rawSecret,
       encoding: "base32",
       token: code,
-      window: 2,
+      window: 1,
     })
 
     if (!verified) {
@@ -480,6 +564,7 @@ router.post("/disable-2fa", async (req, res) => {
 
     user.twoFactorEnabled = false
     user.twoFactorSecret = null
+    user.twoFactorEncrypted = false
     await user.save()
 
     res.json({
@@ -569,8 +654,12 @@ router.get("/validate-reset-token/:token", async (req, res) => {
 router.get("/validate-2fa-token/:token", async (req, res) => {
   try {
     const { token } = req.params
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
 
-    const emailToken = await EmailToken.findOne({ token, purpose: "2fa-recovery" })
+    const emailToken = await EmailToken.findOne({
+      $or: [{ token: hashedToken }, { token }],
+      purpose: "2fa-recovery",
+    })
     if (!emailToken) {
       return res.status(400).json({ valid: false, message: "Invalid or expired recovery token" })
     }
@@ -587,7 +676,7 @@ router.get("/validate-2fa-token/:token", async (req, res) => {
   }
 })
 
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", authLimiter, async (req, res) => {
   try {
     const { email } = req.body
     const user = await User.findOne({ email })
@@ -652,7 +741,15 @@ router.post("/reset-password", async (req, res) => {
     const user = await User.findById(emailToken.userId)
     if (!user) return res.status(404).json({ message: "User no longer exists" })
 
-    user.password = await bcrypt.hash(newPassword, 10)
+    if (!validatePasswordComplexity(newPassword)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 10 characters long and include uppercase, lowercase, a number, and a special character.",
+      })
+    }
+
+    user.password = await bcrypt.hash(newPassword, 12)
+    user.tokenVersion = (user.tokenVersion || 0) + 1
     await user.save()
 
     await EmailToken.deleteOne({ _id: emailToken._id })
@@ -664,23 +761,23 @@ router.post("/reset-password", async (req, res) => {
   }
 })
 
-router.post("/request-2fa-recovery", async (req, res) => {
+router.post("/request-2fa-recovery", authLimiter, async (req, res) => {
   try {
     const { email } = req.body
     const user = await User.findOne({ email })
     if (!user) return res.status(404).json({ message: "No account found with this email" })
 
-    // const allowed = await checkRateLimit(user)
-    // if (!allowed) return res.status(429).json({ message: "Daily limit reached. Try again tomorrow." })
-
+    // 15-minute single-use token
     const recoveryToken = jwt.sign({ id: user._id, purpose: "2fa-recovery" }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
+      expiresIn: "15m",
     })
+
+    const hashedToken = crypto.createHash("sha256").update(recoveryToken).digest("hex")
 
     await EmailToken.deleteMany({ userId: user._id, purpose: "2fa-recovery" })
     const newToken = new EmailToken({
       userId: user._id,
-      token: recoveryToken,
+      token: hashedToken,
       purpose: "2fa-recovery",
     })
     await newToken.save()
@@ -718,20 +815,35 @@ router.post("/request-2fa-recovery", async (req, res) => {
 
 router.post("/finalize-2fa-recovery", async (req, res) => {
   try {
-    const { token } = req.body
+    const { token, password } = req.body
+    if (!token) return res.status(400).json({ message: "Recovery token is required" })
 
-    const emailToken = await EmailToken.findOne({ token, purpose: "2fa-recovery" })
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
+    const emailToken = await EmailToken.findOne({
+      $or: [{ token: hashedToken }, { token }],
+      purpose: "2fa-recovery",
+    })
     if (!emailToken) return res.status(400).json({ message: "Invalid or expired recovery token" })
 
     const user = await User.findById(emailToken.userId)
     if (!user) return res.status(404).json({ message: "User not found" })
 
-    // Disable 2FA
+    // If password provided, verify it
+    if (password) {
+      const isMatch = await bcrypt.compare(password, user.password)
+      if (!isMatch) {
+        return res.status(401).json({ message: "Invalid account password." })
+      }
+    }
+
+    // Disable 2FA & revoke past sessions
     user.twoFactorEnabled = false
     user.twoFactorSecret = null
+    user.twoFactorEncrypted = false
+    user.tokenVersion = (user.tokenVersion || 0) + 1
     await user.save()
 
-    // Delete token
+    // Delete single-use token immediately
     await EmailToken.deleteOne({ _id: emailToken._id })
 
     // Create a temp token for 2FA setup

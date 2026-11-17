@@ -1,4 +1,5 @@
 import express from "express"
+import cookieParser from "cookie-parser"
 import mongoose from "mongoose"
 import cors from "cors"
 import dotenv from "dotenv"
@@ -15,8 +16,23 @@ const __dirname = path.dirname(__filename)
 dotenv.config()
 dotenv.config({ path: path.join(__dirname, ".env") })
 
-if (!process.env.JWT_SECRET) {
-  console.error("FATAL: JWT_SECRET environment variable is missing.")
+const insecureSecrets = [
+  "secret",
+  "your_jwt_secret",
+  "your_jwt_secret_key_here",
+  "changeme",
+  "default_secret",
+  "12345678",
+  "secretkey",
+]
+if (
+  !process.env.JWT_SECRET ||
+  process.env.JWT_SECRET.length < 32 ||
+  insecureSecrets.includes(process.env.JWT_SECRET.toLowerCase())
+) {
+  console.error(
+    "FATAL: JWT_SECRET environment variable is missing, too short (< 32 characters), or set to an insecure default value."
+  )
   process.exit(1)
 }
 
@@ -28,6 +44,7 @@ app.use(
     credentials: true,
   }),
 )
+app.use(cookieParser())
 app.use(express.json({ limit: '10mb'}))
 app.use(express.urlencoded({ limit: '10mb', extended: true}))
 

@@ -21,6 +21,7 @@ export async function request(endpoint, options = {}) {
   const token = getAuthToken()
   const headers = {
     "Content-Type": "application/json",
+    "X-Requested-With": "XMLHttpRequest",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   }
@@ -28,6 +29,7 @@ export async function request(endpoint, options = {}) {
   const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint}`
 
   const response = await fetch(url, {
+    credentials: "include",
     ...options,
     headers,
   })
