@@ -3,7 +3,6 @@
  * Plain JavaScript ESM module with zero external dependencies.
  * Shared across:
  * - Express 5 Backend (backend/routes/)
- * - Electron SQLite Data Layer (electron/db/queries/)
  * - Frontend Utilities & Tests
  */
 

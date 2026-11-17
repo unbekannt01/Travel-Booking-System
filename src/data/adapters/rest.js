@@ -336,10 +336,10 @@ export async function getBackupStats() {
 }
 
 export async function exportDatabaseBackup() {
-  throw new Error("Manual database file export is only available in offline desktop mode.")
+  throw new Error("Database backup is managed via MongoDB tools (mongodump). Direct database export is not supported from the browser.")
 }
 
 export async function restoreDatabaseBackup() {
-  throw new Error("Manual database file restore is only available in offline desktop mode.")
+  throw new Error("Database restore is managed via MongoDB tools (mongorestore). Direct database restore is not supported from the browser.")
 }
 
