@@ -1,9 +1,31 @@
 import { useState } from "react"
-import { AlertCircle, Clock, CheckCircle2, MessageCircle, X, History, Landmark, Receipt, Ban, Printer } from "lucide-react"
+import {
+  AlertCircle,
+  Clock,
+  CalendarClock,
+  CheckCircle2,
+  MessageCircle,
+  X,
+  History,
+  Receipt,
+  Ban,
+  Printer,
+  IndianRupee,
+} from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { formatDisplayDate } from "../utils/date"
+import { formatINR } from "../utils/formatters"
+import { cn } from "../utils/cn"
+import { getPaymentUrgencyMeta } from "../utils/dashboardOverview"
 import { listPayments } from "../data/payments"
 import ReceiptModal from "./common/ReceiptModal"
+import { Card, Badge, Button, StatCard, EmptyState } from "./ui"
+
+const URGENCY_ICONS = {
+  AlertCircle,
+  Clock,
+  CalendarClock,
+}
 
 export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, user }) {
   const { toast } = useToast()
@@ -50,38 +72,28 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
       const journeyDate = new Date(b.journeyDate)
       const today = new Date()
       const daysUntilJourney = Math.ceil((journeyDate - today) / (1000 * 60 * 60 * 24))
-
-      let urgency = "green"
-      if (daysUntilJourney < 3) urgency = "red"
-      else if (daysUntilJourney < 10) urgency = "yellow"
+      const urgencyMeta = getPaymentUrgencyMeta(daysUntilJourney)
 
       return {
         ...b,
         balance: b.totalAmount - (b.advanceReceived || 0),
         daysUntilJourney,
-        urgency,
+        urgency: urgencyMeta.bucket,
+        urgencyMeta,
       }
     })
     .sort((a, b) => a.daysUntilJourney - b.daysUntilJourney)
 
   const totalDue = pendingPayments.reduce((sum, b) => sum + b.balance, 0)
+  const urgentPayments = pendingPayments.filter((b) => b.urgency === "red")
+  const urgentAmount = urgentPayments.reduce((sum, b) => sum + b.balance, 0)
+  const followupPayments = pendingPayments.filter((b) => b.urgency === "yellow")
+  const followupAmount = followupPayments.reduce((sum, b) => sum + b.balance, 0)
 
-  const getUrgencyColor = (urgency) => {
-    if (urgency === "red") return "bg-red-50 border-red-200"
-    if (urgency === "yellow") return "bg-yellow-50 border-yellow-200"
-    return "bg-green-50 border-green-200"
-  }
-
-  const getUrgencyIcon = (urgency) => {
-    if (urgency === "red") return <AlertCircle className="text-red-600" size={18} />
-    if (urgency === "yellow") return <Clock className="text-yellow-600" size={18} />
-    return <CheckCircle2 className="text-green-600" size={18} />
-  }
-
-  const getUrgencyText = (urgency) => {
-    if (urgency === "red") return "URGENT"
-    if (urgency === "yellow") return "FOLLOW-UP NEEDED"
-    return "PAID / CONFIRMED"
+  const getUrgencyCardAccent = (bucket) => {
+    if (bucket === "red") return "border-l-4 border-l-danger bg-surface"
+    if (bucket === "yellow") return "border-l-4 border-l-warning bg-surface"
+    return "border-l-4 border-l-info bg-surface"
   }
 
   const handleSendReminder = (booking) => {
@@ -145,146 +157,143 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
   }
 
   return (
-    <div className="space-y-8">
+    <section aria-labelledby="payment-tracker-heading" className="space-y-4">
       <div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Payment Tracking & Ledger</h2>
-        <p className="text-slate-500 font-bold text-sm">Monitor pending customer payments and track receipts</p>
+        <h2 id="payment-tracker-heading" className="text-base sm:text-lg font-semibold text-ink">
+          Payment Tracking &amp; Ledger
+        </h2>
+        <p className="text-xs sm:text-sm text-ink-muted">
+          Monitor pending customer balances, send WhatsApp reminders, and inspect receipts
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Total Due</p>
-          <h3 className="text-3xl font-black text-slate-900">₹{totalDue.toLocaleString()}</h3>
-          <p className="text-xs text-slate-400 font-bold mt-2">{pendingPayments.length} pending payments</p>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-sm border border-red-200 p-6">
-          <p className="text-red-600 font-bold text-xs uppercase tracking-widest mb-2">Urgent (&lt; 3 days)</p>
-          <h3 className="text-3xl font-black text-red-600">
-            {pendingPayments.filter((b) => b.urgency === "red").length}
-          </h3>
-          <p className="text-xs text-red-500 font-bold mt-2">
-            ₹
-            {pendingPayments
-              .filter((b) => b.urgency === "red")
-              .reduce((sum, b) => sum + b.balance, 0)
-              .toLocaleString()}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-sm border border-yellow-200 p-6">
-          <p className="text-yellow-600 font-bold text-xs uppercase tracking-widest mb-2">Follow-up (3-10 days)</p>
-          <h3 className="text-3xl font-black text-yellow-600">
-            {pendingPayments.filter((b) => b.urgency === "yellow").length}
-          </h3>
-          <p className="text-xs text-yellow-600 font-bold mt-2">
-            ₹
-            {pendingPayments
-              .filter((b) => b.urgency === "yellow")
-              .reduce((sum, b) => sum + b.balance, 0)
-              .toLocaleString()}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          label="Total Due"
+          value={formatINR(totalDue, 0)}
+          hint={`${pendingPayments.length} pending ${pendingPayments.length === 1 ? "payment" : "payments"}`}
+          icon={<IndianRupee size={20} />}
+          tone="brand"
+        />
+        <StatCard
+          label="Urgent (< 3 days)"
+          value={urgentPayments.length}
+          hint={formatINR(urgentAmount, 0)}
+          icon={<AlertCircle size={20} />}
+          tone="danger"
+        />
+        <StatCard
+          label="Follow-up (3–10 days)"
+          value={followupPayments.length}
+          hint={formatINR(followupAmount, 0)}
+          icon={<Clock size={20} />}
+          tone="warning"
+        />
       </div>
 
       {pendingPayments.length === 0 ? (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-12 text-center">
-          <CheckCircle2 size={48} className="text-green-600 mx-auto mb-4" />
-          <h3 className="text-xl font-black text-slate-900 mb-2">All Payments Received!</h3>
-          <p className="text-slate-500 font-bold">No pending balances at this moment.</p>
-        </div>
+        <EmptyState
+          icon={<CheckCircle2 size={24} />}
+          title="All payments received"
+          description="No pending balances at this moment."
+        />
       ) : (
-        <div className="space-y-4">
-          {pendingPayments.map((booking) => (
-            <div
-              key={booking.id || booking._id}
-              className={`rounded-3xl border p-6 transition-all ${getUrgencyColor(booking.urgency)}`}
-            >
-              <div className="flex items-start gap-4">
-                <div className="mt-1">{getUrgencyIcon(booking.urgency)}</div>
+        <div className="space-y-3">
+          {pendingPayments.map((booking) => {
+            const meta = booking.urgencyMeta
+            const UrgencyIcon = URGENCY_ICONS[meta.iconName] || AlertCircle
 
-                <div className="flex-1">
-                  <div className="flex items-start justify-between gap-4 mb-3">
-                    <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <h4 className="font-black text-slate-900">{booking.invoiceNo}</h4>
-                        <span
-                          className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                            booking.urgency === "red"
-                              ? "bg-red-600 text-white"
-                              : booking.urgency === "yellow"
-                                ? "bg-yellow-600 text-white"
-                                : "bg-green-600 text-white"
-                          }`}
+            return (
+              <Card
+                key={booking.id || booking._id}
+                elevation="sm"
+                padding="md"
+                className={cn("transition-colors", getUrgencyCardAccent(booking.urgency))}
+              >
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm sm:text-base font-semibold text-ink tabular-nums">
+                          #{booking.invoiceNo}
+                        </h3>
+                        <Badge
+                          variant={meta.variant}
+                          size="sm"
+                          icon={<UrgencyIcon size={12} strokeWidth={2.25} />}
                         >
-                          {getUrgencyText(booking.urgency)}
-                        </span>
+                          {meta.label}
+                        </Badge>
                       </div>
-                      <p className="text-sm font-bold text-slate-600">{booking.contactName}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Phone: <span className="font-bold">+91 {booking.contactPhone}</span>
+                      <p className="text-sm font-semibold text-ink truncate">
+                        {booking.contactName}
+                      </p>
+                      <p className="text-xs text-ink-muted tabular-nums">
+                        Phone: <span className="font-medium text-ink-secondary">+91 {booking.contactPhone}</span>
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-black text-slate-900">₹{booking.balance.toLocaleString()}</p>
-                      <p className="text-xs text-slate-500 font-bold mt-1">Balance Due</p>
+
+                    <div className="sm:text-right shrink-0">
+                      <p className="text-xl font-bold text-ink tabular-nums">
+                        {formatINR(booking.balance, 0)}
+                      </p>
+                      <p className="text-xs text-ink-muted mt-0.5">Balance due</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4 pb-4 border-b border-slate-200 border-opacity-50">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-y border-border-subtle text-xs sm:text-sm">
                     <div>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Journey</p>
-                      <p className="font-black text-slate-900">
-                        {booking.daysUntilJourney > 0 ? `${booking.daysUntilJourney} days` : "Today"}
+                      <p className="text-xs text-ink-muted">Journey</p>
+                      <p className="font-semibold text-ink mt-0.5">{meta.countdownLabel}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-ink-muted">Tour</p>
+                      <p className="font-semibold text-ink truncate mt-0.5">{booking.tourName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-ink-muted">Advance</p>
+                      <p className="font-semibold text-success-text tabular-nums mt-0.5">
+                        {formatINR(booking.advanceReceived || 0, 0)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Tour</p>
-                      <p className="font-bold text-slate-900">{booking.tourName}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Advance</p>
-                      <p className="font-bold text-slate-900">₹{(booking.advanceReceived || 0).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total</p>
-                      <p className="font-bold text-slate-900">₹{booking.totalAmount.toLocaleString()}</p>
+                      <p className="text-xs text-ink-muted">Total</p>
+                      <p className="font-semibold text-ink tabular-nums mt-0.5">
+                        {formatINR(booking.totalAmount, 0)}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Button
+                      variant={booking.urgency === "red" ? "danger" : booking.urgency === "yellow" ? "accent" : "secondary"}
+                      size="sm"
+                      leftIcon={<MessageCircle size={15} />}
                       onClick={() => handleSendReminder(booking)}
-                      className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                        booking.urgency === "red"
-                          ? "bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200"
-                          : booking.urgency === "yellow"
-                            ? "bg-yellow-600 hover:bg-yellow-700 text-white shadow-lg shadow-yellow-200"
-                            : "bg-slate-200 hover:bg-slate-300 text-slate-900"
-                      }`}
                     >
-                      <MessageCircle size={16} />
                       Send Reminder
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="success"
+                      size="sm"
+                      leftIcon={<CheckCircle2 size={15} />}
                       onClick={() => handleMarkPaid(booking)}
-                      className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200"
                     >
-                      <CheckCircle2 size={16} />
                       Record Payment
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon={<History size={15} />}
                       onClick={() => handleOpenLedger(booking)}
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
                     >
-                      <History size={16} />
                       Payment History
-                    </button>
+                    </Button>
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -588,6 +597,6 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
           onClose={() => setViewReceiptPayment(null)}
         />
       )}
-    </div>
+    </section>
   )
 }

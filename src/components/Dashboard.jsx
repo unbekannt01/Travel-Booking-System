@@ -491,6 +491,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 bookings={bookings}
                 tours={tours}
                 filteredBookings={filteredBookings}
+                loading={_loading}
                 setShowAllInvoices={setShowAllInvoices}
                 setSelectedBooking={setSelectedBooking}
                 setEditingBooking={setEditingBooking}

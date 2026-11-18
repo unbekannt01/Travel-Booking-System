@@ -164,7 +164,7 @@ export function AppShell({
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
-          className="flex-1 overflow-y-auto bg-canvas focus:outline-none pb-24 lg:pb-8"
+          className="flex-1 overflow-y-auto bg-canvas focus:outline-none pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-8"
         >
           <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
             {!pageMeta.hasOwnHeading ? (

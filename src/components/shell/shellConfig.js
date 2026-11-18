@@ -21,7 +21,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Overview",
     description: "Daily bookings, collections, and upcoming departures.",
     iconName: "LayoutDashboard",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: true,
   },
   {
