@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, lazy, Suspense } from "react"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
 import TwoFactorSetup from "./components/TwoFactorSetup"
@@ -8,7 +8,20 @@ import Recover2FA from "./components/Recover2FA"
 import { logout } from "./data/auth"
 import { getAuthToken } from "./data/client"
 
+const DevUiKitPage = import.meta.env.DEV ? lazy(() => import("./dev/UiKitPage")) : null
+
 export default function App() {
+  const [hashRoute, setHashRoute] = useState(() =>
+    import.meta.env.DEV ? window.location.hash : "",
+  )
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const onHashChange = () => setHashRoute(window.location.hash)
+    window.addEventListener("hashchange", onHashChange)
+    return () => window.removeEventListener("hashchange", onHashChange)
+  }, [])
+
   const [user, setUser] = useState(() => {
     const token = getAuthToken()
     if (!token) return null
@@ -45,6 +58,20 @@ export default function App() {
     setTwoFactorToken(null)
     setShow2FASetup(false)
     setTemp2FAToken(null)
+  }
+
+  if (import.meta.env.DEV && DevUiKitPage && hashRoute === "#/ui-kit") {
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center bg-canvas text-ink-muted text-sm font-semibold">
+            Loading UI Kit...
+          </div>
+        }
+      >
+        <DevUiKitPage />
+      </Suspense>
+    )
   }
 
   if (isLoading) {
