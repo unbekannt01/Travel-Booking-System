@@ -17,10 +17,11 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (127 Tests / 18 Suites)
+## 2. Test Suites & Coverage Map (135 Tests / 19 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === false`; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
 | **`tests/ui-foundation.test.js`** | 12 | **UI Foundation (Part 3.1)**: `formatINR` Indian digit grouping (lakhs/crores, 0 & 2 decimals, negatives, null/NaN safety); theme preference resolution (`system`/`light`/`dark`) and resilient `localStorage` fallback when storage throws; `applyThemeToDocument`; `STATUS_META` 6-status icon/tone coverage; `getInitials`/`getAvatarTone`; CVA variant classes (tokens, 44px mobile touch targets, focus rings); `cn()` conflict merging. |
 | **`tests/xss-escaping.test.js`** | 6 | **XSS Neutralization & CSP (SEC-001)**: Escapes HTML chars (`&`, `<`, `>`, `"`, `'`); handles null/undefined/primitives; sanitizes hex colors and image URLs; strictly neutralizes hostile scripts across all 6 ticket templates; verifies CSP meta tag embedding. |
 | **`tests/server-pricing.test.js`** | 10 | **Server Authority Over Pricing & Seats (SEC-002, SEC-013)**: Recalculates fixed & berth pricing; computes 5% GST; detects client price tampering; validates 2x2 coach row bounds; rejects duplicate seat IDs; verifies double-booking conflict detection. |
@@ -46,15 +47,34 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ```
 TAP version 13
-1..42
-# tests 127
-# suites 29
-# pass 127
+1..43
+# tests 135
+# suites 33
+# pass 135
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
 ```
+
+---
+
+## 3.1 Shell and Navigation Manual Verification Checklist (Part 3.2)
+
+Verify the following manually in a desktop & mobile browser (`npm run dev` on `http://localhost:5173`):
+
+- [ ] **Desktop Expanded & Collapsed (`1440px` & `1024px`)**: Left sidebar expands/collapses cleanly; collapsed items show tooltips on hover/focus; collapsed preference survives a full page reload.
+- [ ] **Tablet (`768px`)**: Sidebar hides; top bar menu icon opens the left navigation `Drawer`; bottom bar displays Overview, Travelers, Book, Journeys, and More.
+- [ ] **Small Mobile (`360px`)**: Top bar, mobile search input (on Overview), and 5-slot bottom bar fit cleanly without horizontal overflow; all interactive buttons have ≥44px touch targets.
+- [ ] **Keyboard-Only Flow**:
+  - Press `Tab` on load: "Skip to main content" link becomes visible and jumps focus to `#main-content`.
+  - Navigate sidebar/top-bar controls with `Tab` / `Shift+Tab` and confirm visible focus rings.
+  - Open mobile `Drawer`, press `Tab` repeatedly to verify focus stays trapped inside the drawer, press `Escape` to close, and verify focus returns to the menu button.
+  - Open top-bar user menu, press `Escape` to dismiss.
+- [ ] **Every Destination Reachable**: Navigate to Overview (`dashboard`), Travelers (`passengers`), Journeys (`journey`), Destinations (`tours`), Analytics (`analytics`), and Settings (`settings`); verify top-bar title updates and active state shows both left accent bar and bold text (`aria-current="page"`).
+- [ ] **New Booking CTA From Every Screen**: Click "New Booking" in the top bar (or center "Book" button on mobile) from each screen; confirm it opens `BookingForm` in create mode (`Edit Booking` when editing an existing record).
+- [ ] **Logout**: Trigger Sign Out from both sidebar footer and top-bar user menu (and mobile drawer footer); verify clean return to `Auth`.
+- [ ] **Lazy-Load Fallback & Error Recovery**: Throttle network in DevTools (Slow 3G) and switch to Analytics / Journeys to observe `PageSkeleton`; go Offline before loading an unvisited tab to trigger `ChunkErrorBoundary` ("Could not load this page"), restore network, click **Retry**, and verify the screen loads cleanly without losing the shell.
 
 ---
 
