@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { useToast } from "./common/ToastContext"
 import { useConfirm } from "./common/ConfirmModalContext"
 import {
@@ -20,20 +20,44 @@ import { disable2FA } from "../data/auth"
 import { updateCompanySettings } from "../data/settings"
 import { getAuthToken } from "../data/client"
 
-import { AppShell } from "./shell"
-import DashboardHome from "./dashboard/DashboardHome"
-import SettingsPanel from "./dashboard/SettingsPanel"
-import Disable2FAModal from "./dashboard/Disable2FAModal"
-import InvoicesModal from "./dashboard/InvoicesModal"
-import CancelBookingModal from "./dashboard/CancelBookingModal"
+import { AppShell, PageSkeleton, ChunkErrorBoundary, getSkeletonVariant } from "./shell"
 
-import BookingForm from "./BookingForm"
-import InvoiceView from "./InvoiceView"
-import TourInventory from "./TourInventory"
-import PassengerManagement from "./PassengerManagement"
-import TwoFactorSetup from "./TwoFactorSetup"
-import JourneyManager from "./JourneyManager"
-import TourAnalytics from "./TourAnalytics"
+const SCREEN_LOADERS = {
+  dashboard: () => import("./dashboard/DashboardHome"),
+  form: () => import("./BookingForm"),
+  passengers: () => import("./PassengerManagement"),
+  tours: () => import("./TourInventory"),
+  journey: () => import("./JourneyManager"),
+  analytics: () => import("./TourAnalytics"),
+  settings: () => import("./dashboard/SettingsPanel"),
+}
+
+const DashboardHome = lazy(SCREEN_LOADERS.dashboard)
+const BookingForm = lazy(SCREEN_LOADERS.form)
+const PassengerManagement = lazy(SCREEN_LOADERS.passengers)
+const TourInventory = lazy(SCREEN_LOADERS.tours)
+const JourneyManager = lazy(SCREEN_LOADERS.journey)
+const TourAnalytics = lazy(SCREEN_LOADERS.analytics)
+const SettingsPanel = lazy(SCREEN_LOADERS.settings)
+
+const InvoiceView = lazy(() => import("./InvoiceView"))
+const TwoFactorSetup = lazy(() => import("./TwoFactorSetup"))
+const Disable2FAModal = lazy(() => import("./dashboard/Disable2FAModal"))
+const InvoicesModal = lazy(() => import("./dashboard/InvoicesModal"))
+const CancelBookingModal = lazy(() => import("./dashboard/CancelBookingModal"))
+
+const prefetchedTabs = new Set()
+
+function prefetchTabChunk(tabId) {
+  if (prefetchedTabs.has(tabId)) return
+  const loader = SCREEN_LOADERS[tabId]
+  if (loader) {
+    prefetchedTabs.add(tabId)
+    loader().catch(() => {
+      prefetchedTabs.delete(tabId)
+    })
+  }
+}
 
 export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const { toast } = useToast()
@@ -406,23 +430,35 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     }
   }
 
+  const handlePrefetchTab = useCallback((tabId) => {
+    prefetchTabChunk(tabId)
+  }, [])
+
   if (selectedBooking) {
     return (
-      <InvoiceView
-        booking={selectedBooking}
-        onBack={() => setSelectedBooking(null)}
-        user={user}
-      />
+      <ChunkErrorBoundary resetKey={selectedBooking._id || selectedBooking.id || "invoice"}>
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <InvoiceView
+            booking={selectedBooking}
+            onBack={() => setSelectedBooking(null)}
+            user={user}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 
   if (show2FASetup) {
     return (
-      <TwoFactorSetup
-        token={getAuthToken()}
-        onSetupComplete={handle2FASetupComplete}
-        onSkip={() => setShow2FASetup(false)}
-      />
+      <ChunkErrorBoundary resetKey="2fa-setup">
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <TwoFactorSetup
+            token={getAuthToken()}
+            onSetupComplete={handle2FASetupComplete}
+            onSkip={() => setShow2FASetup(false)}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 
@@ -438,6 +474,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       <AppShell
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        onPrefetchTab={handlePrefetchTab}
         isEditingBooking={Boolean(editingBooking)}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -447,110 +484,130 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
         totalRevenue={totalRevenue}
         onLogout={onLogout}
       >
-          {activeTab === "dashboard" && (
-            <DashboardHome
-              bookings={bookings}
-              tours={tours}
-              filteredBookings={filteredBookings}
-              setShowAllInvoices={setShowAllInvoices}
+        <ChunkErrorBoundary resetKey={activeTab}>
+          <Suspense fallback={<PageSkeleton variant={getSkeletonVariant(activeTab)} />}>
+            {activeTab === "dashboard" && (
+              <DashboardHome
+                bookings={bookings}
+                tours={tours}
+                filteredBookings={filteredBookings}
+                setShowAllInvoices={setShowAllInvoices}
+                setSelectedBooking={setSelectedBooking}
+                setEditingBooking={setEditingBooking}
+                setActiveTab={setActiveTab}
+                handleDeleteBooking={handleDeleteBooking}
+                handleCancelBooking={handleCancelBooking}
+                handleMarkPaymentPaid={handleMarkPaymentPaid}
+                handleVoidPayment={handleVoidPayment}
+                user={user}
+              />
+            )}
+
+            {activeTab === "form" && (
+              <BookingForm
+                onSave={handleSaveBooking}
+                tours={tours}
+                editData={editingBooking}
+                bookings={bookings}
+                onCancel={() => {
+                  setActiveTab("dashboard")
+                  setEditingBooking(null)
+                }}
+              />
+            )}
+
+            {activeTab === "passengers" && (
+              <PassengerManagement
+                bookings={bookings}
+                onUpdateBooking={handleSaveBooking}
+                onDeleteBooking={handleDeleteBooking}
+                onEditBooking={(booking) => {
+                  setEditingBooking(booking)
+                  setActiveTab("form")
+                }}
+                user={user}
+              />
+            )}
+
+            {activeTab === "tours" && (
+              <TourInventory
+                tours={tours}
+                onAdd={handleSaveTour}
+                onDelete={handleDeleteTour}
+              />
+            )}
+
+            {activeTab === "journey" && (
+              <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} user={user} />
+            )}
+
+            {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}
+
+            {activeTab === "settings" && (
+              <SettingsPanel
+                user={user}
+                companySettings={companySettings}
+                setCompanySettings={setCompanySettings}
+                isEditingCompany={isEditingCompany}
+                setIsEditingCompany={setIsEditingCompany}
+                handleUpdateCompany={handleUpdateCompany}
+                setShow2FASetup={setShow2FASetup}
+                setShow2FADisable={setShow2FADisable}
+                formatIndianPhone={formatIndianPhone}
+                showToast={(msg, type) => toast[type] ? toast[type](msg) : toast.info(msg)}
+              />
+            )}
+          </Suspense>
+        </ChunkErrorBoundary>
+      </AppShell>
+
+      {show2FADisable && (
+        <ChunkErrorBoundary resetKey="disable-2fa">
+          <Suspense fallback={<PageSkeleton variant="modal" />}>
+            <Disable2FAModal
+              isOpen={show2FADisable}
+              onClose={() => {
+                setShow2FADisable(false)
+                setDisable2FACode("")
+              }}
+              disable2FACode={disable2FACode}
+              setDisable2FACode={setDisable2FACode}
+              handleDisable2FA={handleDisable2FA}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
+      )}
+
+      {showAllInvoices && (
+        <ChunkErrorBoundary resetKey="all-invoices">
+          <Suspense fallback={<PageSkeleton variant="modal" />}>
+            <InvoicesModal
+              isOpen={showAllInvoices}
+              onClose={() => setShowAllInvoices(false)}
+              filteredInvoices={filteredInvoices}
+              invoiceTourFilter={invoiceTourFilter}
+              setInvoiceTourFilter={setInvoiceTourFilter}
+              uniqueTours={uniqueTours}
               setSelectedBooking={setSelectedBooking}
               setEditingBooking={setEditingBooking}
               setActiveTab={setActiveTab}
               handleDeleteBooking={handleDeleteBooking}
               handleCancelBooking={handleCancelBooking}
-              handleMarkPaymentPaid={handleMarkPaymentPaid}
-              handleVoidPayment={handleVoidPayment}
-              user={user}
             />
-          )}
-
-          {activeTab === "form" && (
-            <BookingForm
-              onSave={handleSaveBooking}
-              tours={tours}
-              editData={editingBooking}
-              bookings={bookings}
-              onCancel={() => {
-                setActiveTab("dashboard")
-                setEditingBooking(null)
-              }}
-            />
-          )}
-
-          {activeTab === "passengers" && (
-            <PassengerManagement
-              bookings={bookings}
-              onUpdateBooking={handleSaveBooking}
-              onDeleteBooking={handleDeleteBooking}
-              onEditBooking={(booking) => {
-                setEditingBooking(booking)
-                setActiveTab("form")
-              }}
-              user={user}
-            />
-          )}
-
-          {activeTab === "tours" && (
-            <TourInventory
-              tours={tours}
-              onAdd={handleSaveTour}
-              onDelete={handleDeleteTour}
-            />
-          )}
-
-          {activeTab === "journey" && (
-            <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} user={user} />
-          )}
-
-          {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}
-
-          {activeTab === "settings" && (
-            <SettingsPanel
-              user={user}
-              companySettings={companySettings}
-              setCompanySettings={setCompanySettings}
-              isEditingCompany={isEditingCompany}
-              setIsEditingCompany={setIsEditingCompany}
-              handleUpdateCompany={handleUpdateCompany}
-              setShow2FASetup={setShow2FASetup}
-              setShow2FADisable={setShow2FADisable}
-              formatIndianPhone={formatIndianPhone}
-              showToast={(msg, type) => toast[type] ? toast[type](msg) : toast.info(msg)}
-            />
-          )}
-      </AppShell>
-
-      <Disable2FAModal
-        isOpen={show2FADisable}
-        onClose={() => {
-          setShow2FADisable(false)
-          setDisable2FACode("")
-        }}
-        disable2FACode={disable2FACode}
-        setDisable2FACode={setDisable2FACode}
-        handleDisable2FA={handleDisable2FA}
-      />
-
-      <InvoicesModal
-        isOpen={showAllInvoices}
-        onClose={() => setShowAllInvoices(false)}
-        filteredInvoices={filteredInvoices}
-        invoiceTourFilter={invoiceTourFilter}
-        setInvoiceTourFilter={setInvoiceTourFilter}
-        uniqueTours={uniqueTours}
-        setSelectedBooking={setSelectedBooking}
-        setEditingBooking={setEditingBooking}
-        setActiveTab={setActiveTab}
-        handleDeleteBooking={handleDeleteBooking}
-        handleCancelBooking={handleCancelBooking}
-      />
+          </Suspense>
+        </ChunkErrorBoundary>
+      )}
 
       {cancellingBooking && (
-        <CancelBookingModal
-          booking={cancellingBooking}
-          onClose={() => setCancellingBooking(null)}
-          onConfirm={handleConfirmCancel}
-        />
+        <ChunkErrorBoundary resetKey="cancel-booking">
+          <Suspense fallback={<PageSkeleton variant="modal" />}>
+            <CancelBookingModal
+              booking={cancellingBooking}
+              onClose={() => setCancellingBooking(null)}
+              onConfirm={handleConfirmCancel}
+            />
+          </Suspense>
+        </ChunkErrorBoundary>
       )}
     </>
   )

@@ -1,13 +1,14 @@
 import { useState, useEffect, lazy, Suspense } from "react"
 import Auth from "./components/Auth"
 import Dashboard from "./components/Dashboard"
-import TwoFactorSetup from "./components/TwoFactorSetup"
-import TwoFactorVerify from "./components/TwoFactorVerify"
-import ResetPassword from "./components/ResetPassword"
-import Recover2FA from "./components/Recover2FA"
+import { ChunkErrorBoundary, PageSkeleton } from "./components/shell"
 import { logout } from "./data/auth"
 import { getAuthToken } from "./data/client"
 
+const TwoFactorSetup = lazy(() => import("./components/TwoFactorSetup"))
+const TwoFactorVerify = lazy(() => import("./components/TwoFactorVerify"))
+const ResetPassword = lazy(() => import("./components/ResetPassword"))
+const Recover2FA = lazy(() => import("./components/Recover2FA"))
 const DevUiKitPage = import.meta.env.DEV ? lazy(() => import("./dev/UiKitPage")) : null
 
 export default function App() {
@@ -87,59 +88,75 @@ export default function App() {
 
   if (resetPasswordToken) {
     return (
-      <ResetPassword
-        token={resetPasswordToken}
-        onComplete={() => {
-          setResetPasswordToken(null)
-          window.history.pushState({}, "", "/")
-        }}
-      />
+      <ChunkErrorBoundary resetKey="reset-password">
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <ResetPassword
+            token={resetPasswordToken}
+            onComplete={() => {
+              setResetPasswordToken(null)
+              window.history.pushState({}, "", "/")
+            }}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 
   if (recover2FAToken) {
     return (
-      <Recover2FA
-        token={recover2FAToken}
-        onShow2FASetup={(token) => {
-          setRecover2FAToken(null)
-          setTwoFactorToken(token)
-          setShow2FASetup(true)
-          window.history.pushState({}, "", "/")
-        }}
-      />
+      <ChunkErrorBoundary resetKey="recover-2fa">
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <Recover2FA
+            token={recover2FAToken}
+            onShow2FASetup={(token) => {
+              setRecover2FAToken(null)
+              setTwoFactorToken(token)
+              setShow2FASetup(true)
+              window.history.pushState({}, "", "/")
+            }}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 
   if (temp2FAToken) {
     return (
-      <TwoFactorVerify
-        tempToken={temp2FAToken}
-        onVerifySuccess={(verifiedUser) => {
-          setTemp2FAToken(null)
-          setUser(verifiedUser)
-        }}
-      />
+      <ChunkErrorBoundary resetKey="2fa-verify">
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <TwoFactorVerify
+            tempToken={temp2FAToken}
+            onVerifySuccess={(verifiedUser) => {
+              setTemp2FAToken(null)
+              setUser(verifiedUser)
+            }}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 
   if (show2FASetup && twoFactorToken) {
     return (
-      <TwoFactorSetup
-        token={twoFactorToken}
-        onSetupComplete={() => {
-          setShow2FASetup(false)
-          setTwoFactorToken(null)
-          const savedUser = JSON.parse(localStorage.getItem("user"))
-          setUser(savedUser)
-        }}
-        onSkip={() => {
-          setShow2FASetup(false)
-          setTwoFactorToken(null)
-          const savedUser = JSON.parse(localStorage.getItem("user"))
-          setUser(savedUser)
-        }}
-      />
+      <ChunkErrorBoundary resetKey="2fa-setup">
+        <Suspense fallback={<div className="min-h-screen bg-canvas p-6"><PageSkeleton variant="form" /></div>}>
+          <TwoFactorSetup
+            token={twoFactorToken}
+            onSetupComplete={() => {
+              setShow2FASetup(false)
+              setTwoFactorToken(null)
+              const savedUser = JSON.parse(localStorage.getItem("user"))
+              setUser(savedUser)
+            }}
+            onSkip={() => {
+              setShow2FASetup(false)
+              setTwoFactorToken(null)
+              const savedUser = JSON.parse(localStorage.getItem("user"))
+              setUser(savedUser)
+            }}
+          />
+        </Suspense>
+      </ChunkErrorBoundary>
     )
   }
 

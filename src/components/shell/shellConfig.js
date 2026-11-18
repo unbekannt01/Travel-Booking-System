@@ -164,6 +164,29 @@ export function writeSidebarCollapsed(collapsed, storage) {
   }
 }
 
+/**
+ * Maps a Dashboard tab ID to the most appropriate PageSkeleton shape.
+ * @param {string} activeTab
+ * @returns {"dashboard" | "table" | "form" | "analytics" | "settings"}
+ */
+export function getSkeletonVariant(activeTab) {
+  switch (activeTab) {
+    case "form":
+      return "form"
+    case "settings":
+      return "settings"
+    case "analytics":
+      return "analytics"
+    case "passengers":
+    case "tours":
+    case "journey":
+      return "table"
+    case "dashboard":
+    default:
+      return "dashboard"
+  }
+}
+
 function getDefaultStorage() {
   if (typeof window === "undefined") return null
   try {

@@ -3,6 +3,8 @@ export { AppSidebar } from "./AppSidebar"
 export { AppTopBar } from "./AppTopBar"
 export { MobileBottomNav } from "./MobileBottomNav"
 export { ThemeSwitcher } from "./ThemeSwitcher"
+export { PageSkeleton } from "./PageSkeleton"
+export { ChunkErrorBoundary } from "./ChunkErrorBoundary"
 export {
   SHOW_THEME_TOGGLE,
   SIDEBAR_STORAGE_KEY,
@@ -11,6 +13,7 @@ export {
   resolvePageMeta,
   isNavItemActive,
   isMoreDestinationActive,
+  getSkeletonVariant,
   readSidebarCollapsed,
   writeSidebarCollapsed,
 } from "./shellConfig"
