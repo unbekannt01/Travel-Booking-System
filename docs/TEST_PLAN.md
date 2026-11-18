@@ -17,10 +17,11 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (135 Tests / 19 Suites)
+## 2. Test Suites & Coverage Map (145 Tests / 20 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/overview-and-booking-form.test.js`** | 10 | **Overview & Stepped Booking Form (Part 3.3)**: Bus capacity (`2x1`=36, `2x2`=40) and clamped occupancy %; `getBookingPaymentStatus` (`Cancelled`/`Paid`/`Partial`/`Pending`); KPI & Today's Operations metrics + 7-day departure grouping; recent booking status & search filtering; payment urgency classification (`Overdue`, `Due on boarding`, `Due soon`, `Scheduled`); 4-step booking validation (Steps 0–2 & cross-step `validateAllBookingSteps`, duplicate/conflicting seats, Aadhaar, advance bounds), step click navigation rules, sticky summary composition via `calculatePricing`, server 400/409 error formatting, and `hasOwnHeading: false` shell verification. |
 | **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === false`; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
 | **`tests/ui-foundation.test.js`** | 12 | **UI Foundation (Part 3.1)**: `formatINR` Indian digit grouping (lakhs/crores, 0 & 2 decimals, negatives, null/NaN safety); theme preference resolution (`system`/`light`/`dark`) and resilient `localStorage` fallback when storage throws; `applyThemeToDocument`; `STATUS_META` 6-status icon/tone coverage; `getInitials`/`getAvatarTone`; CVA variant classes (tokens, 44px mobile touch targets, focus rings); `cn()` conflict merging. |
 | **`tests/xss-escaping.test.js`** | 6 | **XSS Neutralization & CSP (SEC-001)**: Escapes HTML chars (`&`, `<`, `>`, `"`, `'`); handles null/undefined/primitives; sanitizes hex colors and image URLs; strictly neutralizes hostile scripts across all 6 ticket templates; verifies CSP meta tag embedding. |
@@ -47,10 +48,10 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ```
 TAP version 13
-1..43
-# tests 135
-# suites 33
-# pass 135
+1..45
+# tests 145
+# suites 35
+# pass 145
 # fail 0
 # cancelled 0
 # skipped 0
@@ -75,6 +76,29 @@ Verify the following manually in a desktop & mobile browser (`npm run dev` on `h
 - [ ] **New Booking CTA From Every Screen**: Click "New Booking" in the top bar (or center "Book" button on mobile) from each screen; confirm it opens `BookingForm` in create mode (`Edit Booking` when editing an existing record).
 - [ ] **Logout**: Trigger Sign Out from both sidebar footer and top-bar user menu (and mobile drawer footer); verify clean return to `Auth`.
 - [ ] **Lazy-Load Fallback & Error Recovery**: Throttle network in DevTools (Slow 3G) and switch to Analytics / Journeys to observe `PageSkeleton`; go Offline before loading an unvisited tab to trigger `ChunkErrorBoundary` ("Could not load this page"), restore network, click **Retry**, and verify the screen loads cleanly without losing the shell.
+
+---
+
+## 3.2 Dashboard Overview & Stepped Booking Form Manual Verification Checklist (Part 3.3)
+
+Verify the following manually in desktop & mobile viewports (`360px`, `768px`, `1024px`, `1440px`) after running `npm run dev` (frontend) and `cd backend; npm start` (backend + local MongoDB):
+
+- [ ] **Single Page Header**: Confirm Overview shows a single `Overview` `<h1>` (via shell `PageHeader`) and Booking Form shows `New Booking` / `Edit Booking` with no duplicate `<h2>` heading below it.
+- [ ] **Create a Booking End-to-End**:
+  - Step 1 (Tour & Date): Select a saved tour (verify bus type, date, and pricing prefill) or choose `+ Manual Entry`; fill Primary Traveler name and 10-digit Indian mobile; click **Next**.
+  - Step 2 (Passengers & Seats): Add a second passenger, open **Select seat from coach layout**, pick berths, test **Auto-assign Seats**, enter optional 12-digit Aadhaar; click **Next**.
+  - Step 3 (Pricing & Payment): Test flat & `%` discount, GST (0% and 5% exclusive/inclusive), payment mode, and advance payment; confirm sticky summary updates live in `formatINR` tabular numerals; click **Next**.
+  - Step 4 (Review): Confirm all entered details appear read-only, passenger Aadhaar displays masked (`XXXX XXXX 1234`), click an **Edit** link to jump back without losing any entered data, return to Review, and click **Confirm Booking**.
+- [ ] **Edit Mode**: Open an existing booking from Overview → Edit icon; confirm `Edit Booking` title, invoice badge, prefilled values across all 4 steps, clickable step indicator, and **Update Booking** save behaviour.
+- [ ] **Per-Step Validation & Focus Management**: Click **Next** on empty Step 1, invalid age/Aadhaar/duplicate seat on Step 2, or advance > total on Step 3; confirm inline `<Field>` errors, top error summary box, and focus moving to the first invalid field.
+- [ ] **Server Validation Errors (`role="alert"`)**:
+  - **Seat conflict (HTTP 409)**: Attempt to save a seat already booked in another tab for the same tour and date; verify the top `role="alert"` banner shows the server conflict message and retains all entered form data.
+  - **Tampered total rejected (HTTP 400)**: Verify server total-mismatch or invalid-pricing responses render cleanly in the `role="alert"` banner without wiping entered form data.
+- [ ] **Overview KPIs, Operations & Departures**: Verify Today's Operations card (no dark gradient mismatch), 4 `StatCard`s with Indian rupee formatting, Upcoming 7-Day Departure cards with accessible berth occupancy bars (`"X of Y berths booked, Z%"`), and Payment Tracking & Ledger urgency badges (`Overdue` / `Due on boarding` / `Due soon` / `Scheduled`) + WhatsApp reminder link.
+- [ ] **Search Filtering & Status Chips**: Type in the shell top-bar search input AND local Recent Bookings search + click `All` / `Paid` / `Pending` / `Cancelled`; verify table/card list updates accurately.
+- [ ] **Every Row Action**: Test View Invoice (`Eye`), Edit (`Edit3`), Cancel (`Ban`), and Delete + Undo (`Trash2`) from Recent Bookings, plus `View All Invoices`, `Open Manifests`, `Filter` pending dues, and `Assign Seats`.
+- [ ] **Empty State**: With 0 bookings (or a non-matching filter), verify `EmptyState` renders without overflow and `"Create your first booking"` opens the form.
+- [ ] **Mobile (`360px`) & Keyboard-Only Flow**: Confirm Recent Bookings switches to stacked cards with zero horizontal page scroll, filter chips wrap cleanly, sticky mobile summary expands/collapses above the Back/Next/Save footer without overlapping `MobileBottomNav`, and the entire 4-step form can be completed with keyboard alone.
 
 ---
 
