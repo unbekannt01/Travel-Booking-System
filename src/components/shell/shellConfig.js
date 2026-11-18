@@ -77,7 +77,7 @@ export const FORM_ROUTE_META = Object.freeze({
   title: "New Booking",
   editTitle: "Edit Booking",
   description: "Create or update a passenger reservation and allocate seats.",
-  hasOwnHeading: true,
+  hasOwnHeading: false,
 })
 
 /**

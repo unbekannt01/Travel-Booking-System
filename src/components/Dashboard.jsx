@@ -241,9 +241,17 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       setActiveTab("dashboard")
       setEditingBooking(null)
       toast.success("Booking saved successfully")
+      return { ok: true, booking: savedBooking }
     } catch (error) {
       console.error("Error saving booking:", error)
-      toast.error(error.message || "Failed to save booking")
+      const message = error.message || "Failed to save booking"
+      toast.error(message)
+      return {
+        ok: false,
+        error: message,
+        status: error.status,
+        data: error.data,
+      }
     }
   }
 
