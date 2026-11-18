@@ -65,11 +65,11 @@ EMAIL_PASS=your_gmail_app_password
 > [!IMPORTANT]
 > - Ensure `JWT_SECRET`, `TOTP_ENC_KEY`, and `DATA_ENC_KEY` are cryptographically random strings (minimum 32 characters).
 > - Never commit `.env` files to source control.
-> - If migrating an existing database with unencrypted 2FA or Aadhaar numbers, run the migration scripts:
->   ```bash
+> - If migrating an existing database with unencrypted 2FA or Aadhaar numbers, first take a `mongodump` backup (see Section 6.1), then run the migration scripts from the project root — first as a dry run, then without the `--dry-run` flag:
+>   ```powershell
 >   node scripts/migrate-encrypt-totp.js --dry-run
->   node scripts/migrate-encrypt-totp.js
 >   node scripts/migrate-encrypt-aadhaar.js --dry-run
+>   node scripts/migrate-encrypt-totp.js
 >   node scripts/migrate-encrypt-aadhaar.js
 >   ```
 

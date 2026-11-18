@@ -19,6 +19,7 @@
     "@mui/material": "^7.3.6",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "dotenv": "^18.0.10",
     "lucide-react": "^0.562.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
