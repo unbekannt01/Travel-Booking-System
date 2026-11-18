@@ -9,7 +9,7 @@
 
 ### Prerequisites
 - **Node.js**: v20+ (LTS recommended)
-- **MongoDB**: Local MongoDB instance running on port 27017 (`mongodb://localhost:27017/yatrahub`)
+- **MongoDB**: Local MongoDB instance running on port 27017 (`mongodb://127.0.0.1:27017/yatrahub`)
 - **npm**: v10+
 
 ### 1. Clone & Setup
@@ -22,7 +22,7 @@ cd Travel-Booking-System
 Create `backend/.env` (or copy from `backend/.env.example`):
 ```env
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/yatrahub
+MONGODB_URI=mongodb://127.0.0.1:27017/yatrahub
 JWT_SECRET=super_secret_jwt_key_yatrahub_2026
 FRONTEND_URL=http://localhost:5173
 EMAIL_HOST=smtp.gmail.com
@@ -261,7 +261,7 @@ YatraHub is built as a clean, local web application:
                                  ▼  Mongoose
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Local MongoDB Database                       │
-│  mongodb://localhost:27017/yatrahub                             │
+│  mongodb://127.0.0.1:27017/yatrahub                             │
 │  (Users, Bookings, Tours, Payments, Settings)                   │
 └─────────────────────────────────────────────────────────────────┘
 ```

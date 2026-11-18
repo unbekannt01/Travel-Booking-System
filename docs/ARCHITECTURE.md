@@ -6,7 +6,7 @@ YatraHub is an on-premise local web application designed specifically for small 
 The application runs strictly in a **local web mode**:
 - **Frontend**: React 19 SPA bundled with Vite, styled with Tailwind CSS.
 - **Backend API**: Node.js with Express 5 REST API.
-- **Database**: Local MongoDB instance (`mongodb://localhost:27017/yatrahub`) using Mongoose 8 ODM.
+- **Database**: Local MongoDB instance (`mongodb://127.0.0.1:27017/yatrahub`) using Mongoose 8 ODM.
 - **Shared Core**: Pure JavaScript ESM module (`shared/businessLogic.js`) shared between frontend and backend.
 
 ---
@@ -119,7 +119,7 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
 ### 5.1 Server Configuration (`backend/index.js`)
 - Initializes Express application with JSON body parser.
 - Enables CORS for local frontend ports (`http://localhost:5173`).
-- Connects to local MongoDB database (`mongodb://localhost:27017/yatrahub`).
+- Connects to local MongoDB database (`mongodb://127.0.0.1:27017/yatrahub`).
 - Manages startup index synchronization for the `Booking` collection.
 
 ### 5.2 Middleware (`backend/middleware/auth.js`)

@@ -18,7 +18,7 @@ const envSchema = z.object({
   MONGODB_URI: z
     .string()
     .min(1, "MONGODB_URI is required")
-    .default("mongodb://localhost:27017/sb_tourism"),
+    .default("mongodb://127.0.0.1:27017/yatrahub"),
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET must be at least 32 characters long"),

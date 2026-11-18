@@ -46,7 +46,7 @@ In the `backend/` directory, create a `.env` file (or copy from `backend/.env.ex
 
 ```env
 PORT=5000
-MONGODB_URI=mongodb://localhost:27017/yatrahub
+MONGODB_URI=mongodb://127.0.0.1:27017/yatrahub
 NODE_ENV=production
 FRONTEND_URL=http://localhost:5173
 
@@ -63,6 +63,7 @@ EMAIL_PASS=your_gmail_app_password
 ```
 
 > [!IMPORTANT]
+> - Use `127.0.0.1` instead of `localhost` in `MONGODB_URI` because Node resolves `localhost` to IPv6 `::1` first while a default local MongoDB listens on IPv4 only, which gives `ECONNREFUSED ::1:27017`.
 > - Ensure `JWT_SECRET`, `TOTP_ENC_KEY`, and `DATA_ENC_KEY` are cryptographically random strings (minimum 32 characters).
 > - Never commit `.env` files to source control.
 > - If migrating an existing database with unencrypted 2FA or Aadhaar numbers, first take a `mongodump` backup (see Section 6.1), then run the migration scripts from the project root — first as a dry run, then without the `--dry-run` flag:
@@ -159,7 +160,7 @@ $backupDate = Get-Date -Format "yyyy-MM-dd_HHmm"
 $backupDir = "D:\Travel-Booking-System\backups\$backupDate"
 New-Item -ItemType Directory -Force -Path $backupDir
 
-mongodump --uri="mongodb://localhost:27017/yatrahub" --out="$backupDir"
+mongodump --uri="mongodb://127.0.0.1:27017/yatrahub" --out="$backupDir"
 Write-Host "Backup created successfully at $backupDir"
 ```
 
@@ -169,7 +170,7 @@ To restore the database from a backup snapshot (warning: replaces existing recor
 ```powershell
 $backupPath = "D:\Travel-Booking-System\backups\2026-11-17_1740\yatrahub"
 
-mongorestore --uri="mongodb://localhost:27017/yatrahub" --drop "$backupPath"
+mongorestore --uri="mongodb://127.0.0.1:27017/yatrahub" --drop "$backupPath"
 Write-Host "Database restored successfully."
 ```
 
@@ -181,6 +182,6 @@ Create a batch script `D:\Travel-Booking-System\scripts\auto-backup.bat`:
 set DATE_STR=%date:~10,4%-%date:~4,2%-%date:~7,2%
 set BACKUP_DIR=D:\Travel-Booking-System\backups\%DATE_STR%
 mkdir "%BACKUP_DIR%"
-mongodump --uri="mongodb://localhost:27017/yatrahub" --out="%BACKUP_DIR%"
+mongodump --uri="mongodb://127.0.0.1:27017/yatrahub" --out="%BACKUP_DIR%"
 ```
 Schedule this script in **Windows Task Scheduler** to run daily at 11:59 PM.
