@@ -1,62 +1,195 @@
 @import "tailwindcss";
 
-/* Simplified @theme directive to resolve "Unknown at rule" diagnostic */
-@theme {
-  --font-sans: "Inter", "Geist", "system-ui", "sans-serif";
-  --font-mono: "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New",
-    "monospace";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
+/* YatraHub Design System v2 Tokens (Tailwind CSS 4 @theme) */
+@theme {
+  /* Typography */
+  --font-sans: "Inter Variable", "Noto Sans Devanagari", "Noto Sans Gujarati", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Radii (preserving legacy radius tokens + v2 scale) */
+  --radius-xs: var(--yh-radius-xs);
   --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
   --radius-4xl: 2rem;
 
+  /* Shadows */
+  --shadow-yh-xs: var(--yh-shadow-xs);
+  --shadow-yh-sm: var(--yh-shadow-sm);
+  --shadow-yh-md: var(--yh-shadow-md);
+  --shadow-yh-lg: var(--yh-shadow-lg);
+  --shadow-yh-overlay: var(--yh-shadow-overlay);
+
+  /* Design System v2 Semantic Color Tokens (auto-switch with Light/Dark) */
+  --color-canvas: var(--yh-canvas);
+  --color-surface: var(--yh-surface);
+  --color-surface-muted: var(--yh-surface-muted);
+  --color-surface-hover: var(--yh-surface-hover);
+  --color-surface-elevated: var(--yh-surface-elevated);
+
+  --color-border-subtle: var(--yh-border-subtle);
+  --color-border-strong: var(--yh-border-strong);
+
+  --color-ink: var(--yh-ink);
+  --color-ink-secondary: var(--yh-ink-secondary);
+  --color-ink-muted: var(--yh-ink-muted);
+
+  --color-brand: var(--yh-brand);
+  --color-brand-hover: var(--yh-brand-hover);
+  --color-brand-soft: var(--yh-brand-soft);
+  --color-brand-fg: var(--yh-brand-fg);
+
+  --color-accent-warm: var(--yh-accent);
+  --color-accent-warm-hover: var(--yh-accent-hover);
+  --color-accent-warm-soft: var(--yh-accent-soft);
+  --color-accent-warm-text: var(--yh-accent-text);
+  --color-accent-warm-fg: var(--yh-accent-fg);
+
+  --color-success: var(--yh-success);
+  --color-success-fg: var(--yh-success-fg);
+  --color-success-soft: var(--yh-success-soft);
+  --color-success-text: var(--yh-success-text);
+  --color-success-border: var(--yh-success-border);
+
+  --color-warning: var(--yh-warning);
+  --color-warning-fg: var(--yh-warning-fg);
+  --color-warning-soft: var(--yh-warning-soft);
+  --color-warning-text: var(--yh-warning-text);
+  --color-warning-border: var(--yh-warning-border);
+
+  --color-danger: var(--yh-danger);
+  --color-danger-fg: var(--yh-danger-fg);
+  --color-danger-soft: var(--yh-danger-soft);
+  --color-danger-text: var(--yh-danger-text);
+  --color-danger-border: var(--yh-danger-border);
+
+  --color-info: var(--yh-info);
+  --color-info-fg: var(--yh-info-fg);
+  --color-info-soft: var(--yh-info-soft);
+  --color-info-text: var(--yh-info-text);
+  --color-info-border: var(--yh-info-border);
+
+  --color-focus-ring: var(--yh-focus-ring);
+
+  /* Legacy tokens preserved so existing screens render identically until migrated in 3.2-3.5 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-
-  /* Converting OKLCH to HSL for theme variables */
-  --color-primary: hsl(221 83% 53%); /* Deep reliable blue */
+  --color-primary: hsl(221 83% 53%);
   --color-primary-foreground: hsl(210 40% 98%);
-
-  --color-secondary: hsl(174 60% 51%); /* Fresh travel teal */
+  --color-secondary: hsl(174 60% 51%);
   --color-secondary-foreground: hsl(174 60% 15%);
-
-  --color-accent: hsl(45 93% 47%); /* Sunny accent yellow */
-
+  --color-accent: hsl(45 93% 47%);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 2rem;
 }
 
 @layer base {
   :root {
-    /* Converting base variables to HSL */
+    /* === YatraHub Design System v2 — Light Theme (Warm Indian Travel Palette) === */
+    --yh-canvas: #FAF8F5;
+    --yh-surface: #FFFFFF;
+    --yh-surface-muted: #F3EFE8;
+    --yh-surface-hover: #EBE5DB;
+    --yh-surface-elevated: #FFFFFF;
+
+    --yh-border-subtle: #DDD6CA;
+    --yh-border-strong: #8A8175;
+
+    --yh-ink: #1C1917;
+    --yh-ink-secondary: #44403C;
+    --yh-ink-muted: #635C54;
+
+    /* Primary: Deep Royal Indigo */
+    --yh-brand: #3730A3;
+    --yh-brand-hover: #312E81;
+    --yh-brand-soft: #EEF2FF;
+    --yh-brand-fg: #FFFFFF;
+
+    /* Accent: Warm Saffron / Amber */
+    --yh-accent: #B45309;
+    --yh-accent-hover: #92400E;
+    --yh-accent-soft: #FEF3C7;
+    --yh-accent-text: #92400E;
+    --yh-accent-fg: #FFFFFF;
+
+    /* Semantic Colors */
+    --yh-success: #047857;
+    --yh-success-fg: #FFFFFF;
+    --yh-success-soft: #ECFDF5;
+    --yh-success-text: #065F46;
+    --yh-success-border: #A7F3D0;
+
+    --yh-warning: #B45309;
+    --yh-warning-fg: #FFFFFF;
+    --yh-warning-soft: #FFFBEB;
+    --yh-warning-text: #92400E;
+    --yh-warning-border: #FDE68A;
+
+    --yh-danger: #BE123C;
+    --yh-danger-fg: #FFFFFF;
+    --yh-danger-soft: #FFF1F2;
+    --yh-danger-text: #9F1239;
+    --yh-danger-border: #FECDD3;
+
+    --yh-info: #0369A1;
+    --yh-info-fg: #FFFFFF;
+    --yh-info-soft: #F0F9FF;
+    --yh-info-text: #075985;
+    --yh-info-border: #BAE6FD;
+
+    --yh-focus-ring: #3730A3;
+
+    /* Radii, Shadows, Z-index & Motion */
+    --yh-radius-xs: 0.25rem;
+    --yh-radius-sm: 0.375rem;
+    --yh-radius-md: 0.625rem;
+    --yh-radius-lg: 0.875rem;
+    --yh-radius-xl: 1.25rem;
+    --yh-radius-full: 9999px;
+
+    --yh-shadow-xs: 0 1px 2px 0 rgb(28 25 23 / 0.05);
+    --yh-shadow-sm: 0 1px 3px 0 rgb(28 25 23 / 0.08), 0 1px 2px -1px rgb(28 25 23 / 0.05);
+    --yh-shadow-md: 0 4px 12px -2px rgb(28 25 23 / 0.08), 0 2px 4px -2px rgb(28 25 23 / 0.05);
+    --yh-shadow-lg: 0 12px 28px -4px rgb(28 25 23 / 0.12), 0 4px 10px -4px rgb(28 25 23 / 0.06);
+    --yh-shadow-overlay: 0 24px 48px -12px rgb(28 25 23 / 0.22);
+
+    --yh-z-base: 0;
+    --yh-z-sticky: 20;
+    --yh-z-dropdown: 30;
+    --yh-z-overlay: 40;
+    --yh-z-modal: 50;
+    --yh-z-toast: 60;
+    --yh-z-tooltip: 70;
+
+    --yh-duration-fast: 150ms;
+    --yh-duration-normal: 200ms;
+    --yh-duration-slow: 250ms;
+    --yh-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+    /* === Legacy base variables preserved for existing screens === */
     --background: hsl(210 40% 99%);
     --foreground: hsl(222 47% 11%);
     --card: hsl(0 0% 100%);
     --card-foreground: hsl(222 47% 11%);
     --popover: hsl(0 0% 100%);
     --popover-foreground: hsl(222 47% 11%);
-    /* Removed old primary, secondary, muted, accent, destructive colors */
     --destructive: hsl(0 84% 60%);
     --destructive-foreground: hsl(210 40% 98%);
     --border: hsl(214 32% 91%);
@@ -70,17 +203,90 @@
     --radius: 0.5rem;
   }
 
+  [data-theme="dark"] {
+    /* === YatraHub Design System v2 — Dark Theme === */
+    --yh-canvas: #111014;
+    --yh-surface: #19181F;
+    --yh-surface-muted: #23222B;
+    --yh-surface-hover: #2C2A36;
+    --yh-surface-elevated: #21202A;
+
+    --yh-border-subtle: #353240;
+    --yh-border-strong: #7E788E;
+
+    --yh-ink: #F7F5F0;
+    --yh-ink-secondary: #D6D1C7;
+    --yh-ink-muted: #A8A196;
+
+    /* Primary: Luminous Indigo */
+    --yh-brand: #818CF8;
+    --yh-brand-hover: #A5B4FC;
+    --yh-brand-soft: #222042;
+    --yh-brand-fg: #111014;
+
+    /* Accent: Warm Saffron Gold */
+    --yh-accent: #F59E0B;
+    --yh-accent-hover: #FBBF24;
+    --yh-accent-soft: #33240C;
+    --yh-accent-text: #FCD34D;
+    --yh-accent-fg: #1C1304;
+
+    /* Semantic Colors */
+    --yh-success: #34D399;
+    --yh-success-fg: #041F16;
+    --yh-success-soft: #0D2B22;
+    --yh-success-text: #6EE7B7;
+    --yh-success-border: #174E3E;
+
+    --yh-warning: #FBBF24;
+    --yh-warning-fg: #1C1304;
+    --yh-warning-soft: #33240C;
+    --yh-warning-text: #FCD34D;
+    --yh-warning-border: #5C4012;
+
+    --yh-danger: #FB7185;
+    --yh-danger-fg: #1A050A;
+    --yh-danger-soft: #36131D;
+    --yh-danger-text: #FDA4AF;
+    --yh-danger-border: #662033;
+
+    --yh-info: #38BDF8;
+    --yh-info-fg: #061A26;
+    --yh-info-soft: #0E2538;
+    --yh-info-text: #7DD3FC;
+    --yh-info-border: #184466;
+
+    --yh-focus-ring: #A5B4FC;
+
+    --yh-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.35);
+    --yh-shadow-sm: 0 2px 6px 0 rgb(0 0 0 / 0.4);
+    --yh-shadow-md: 0 6px 16px -2px rgb(0 0 0 / 0.45);
+    --yh-shadow-lg: 0 16px 32px -4px rgb(0 0 0 / 0.55);
+    --yh-shadow-overlay: 0 24px 56px -12px rgb(0 0 0 / 0.72);
+  }
+
   * {
-    /* Use standard CSS property for border color in v4 base layer */
     border-color: var(--border);
   }
 
   body {
+    font-family: var(--font-sans);
     background-color: var(--background);
     color: var(--foreground);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Replaced @apply with standard CSS for body defaults to avoid linting errors in some environments */
+  }
+}
+
+/* Motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -115,7 +321,6 @@
   animation: entrance 0.4s ease-out forwards;
 }
 
-/* Animation classes */
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -137,7 +342,7 @@
 }
 
 .animate-in {
-  animation: fade-in 0.3s ease-out, slide-in-from-bottom 0.3s ease-out;
+  animation: fade-in 0.2s var(--yh-ease-standard), slide-in-from-bottom 0.2s var(--yh-ease-standard);
 }
 
 /* Custom scrollbar */
