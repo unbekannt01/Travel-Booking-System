@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react"
-import { Compass, Menu, X } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { useConfirm } from "./common/ConfirmModalContext"
 import {
@@ -17,12 +16,11 @@ import {
   deleteTour,
 } from "../data/tours"
 import { recordPayment, voidPayment } from "../data/payments"
-import { updateProfile, disable2FA } from "../data/auth"
+import { disable2FA } from "../data/auth"
 import { updateCompanySettings } from "../data/settings"
 import { getAuthToken } from "../data/client"
 
-import Sidebar from "./dashboard/Sidebar"
-import DashboardHeader from "./dashboard/DashboardHeader"
+import { AppShell } from "./shell"
 import DashboardHome from "./dashboard/DashboardHome"
 import SettingsPanel from "./dashboard/SettingsPanel"
 import Disable2FAModal from "./dashboard/Disable2FAModal"
@@ -47,11 +45,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [editingBooking, setEditingBooking] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [tours, setTours] = useState([])
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showAllInvoices, setShowAllInvoices] = useState(false)
   const [invoiceTourFilter, setInvoiceTourFilter] = useState("all")
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [newUserName, setNewUserName] = useState(user?.userName || "")
   const [_loading, setLoading] = useState(false)
   const [cancellingBooking, setCancellingBooking] = useState(null)
 
@@ -156,27 +151,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
       fetchData()
     }
   }, [user, onLogout])
-
-  useEffect(() => {
-    const mainContent = document.getElementById("main-content")
-    if (mainContent) {
-      mainContent.scrollTo({ top: 0, behavior: "smooth" })
-    }
-  }, [activeTab])
-
-  const handleUpdateName = async () => {
-    if (!newUserName.trim()) return
-
-    try {
-      const data = await updateProfile(newUserName)
-      onUserUpdate(data.user)
-      setIsEditingName(false)
-      toast.success("Name updated successfully")
-    } catch (err) {
-      console.error("Error updating username:", err.message)
-      toast.error("Failed to update username: " + err.message)
-    }
-  }
 
   const handleUpdateCompany = async () => {
     try {
@@ -452,57 +426,27 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     )
   }
 
+  const totalRevenue = bookings.reduce((acc, b) => acc + (b.totalAmount || 0), 0)
+
+  const handleNewBooking = () => {
+    setEditingBooking(null)
+    setActiveTab("form")
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      {/* Mobile Header */}
-      <header className="lg:hidden h-16 bg-white/80 backdrop-blur-md border-b border-slate-200/60 flex items-center justify-between px-6 sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary p-1.5 rounded-lg text-white shadow-lg shadow-primary/20">
-            <Compass size={18} strokeWidth={2.5} />
-          </div>
-          <h1 className="font-black text-sm tracking-tight text-slate-900">
-            {user?.companyName || user?.userName || "YatraHub"}
-          </h1>
-        </div>
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-        >
-          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </header>
-
-      {/* Sidebar Navigation */}
-      <Sidebar
-        user={user}
-        isMobileMenuOpen={isMobileMenuOpen}
-        setIsMobileMenuOpen={setIsMobileMenuOpen}
-        isEditingName={isEditingName}
-        setIsEditingName={setIsEditingName}
-        newUserName={newUserName}
-        setNewUserName={setNewUserName}
-        handleUpdateName={handleUpdateName}
+    <>
+      <AppShell
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        onSelectTab={setActiveTab}
+        isEditingBooking={Boolean(editingBooking)}
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        onNewBooking={handleNewBooking}
+        user={user}
+        companySettings={companySettings}
+        totalRevenue={totalRevenue}
         onLogout={onLogout}
-        bookings={bookings}
-      />
-
-      {/* Main Content Area */}
-      <main
-        id="main-content"
-        className="flex-1 flex flex-col min-w-0 overflow-y-auto scroll-smooth"
       >
-        <DashboardHeader
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          onNewReservation={() => {
-            setEditingBooking(null)
-            setActiveTab("form")
-          }}
-        />
-
-        <div className="p-6 lg:p-10 space-y-8 max-w-7xl mx-auto w-full">
           {activeTab === "dashboard" && (
             <DashboardHome
               bookings={bookings}
@@ -574,8 +518,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               showToast={(msg, type) => toast[type] ? toast[type](msg) : toast.info(msg)}
             />
           )}
-        </div>
-      </main>
+      </AppShell>
 
       <Disable2FAModal
         isOpen={show2FADisable}
@@ -609,6 +552,6 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
           onConfirm={handleConfirmCancel}
         />
       )}
-    </div>
+    </>
   )
 }
