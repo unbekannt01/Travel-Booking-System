@@ -64,7 +64,7 @@ describe("Operational Modals & Journeys Screen (Part 3.4)", () => {
       assert.equal(resolvePageMeta("dashboard").hasOwnHeading, false)
       assert.equal(resolvePageMeta("journey").hasOwnHeading, false)
       assert.equal(resolvePageMeta("passengers").hasOwnHeading, false)
-      assert.equal(resolvePageMeta("tours").hasOwnHeading, true)
+      assert.equal(resolvePageMeta("tours").hasOwnHeading, false)
     })
 
     it("calculates occupancy percentage and progress bar values accurately", () => {

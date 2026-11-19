@@ -48,7 +48,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Destinations",
     description: "Configure tour routes, bus layouts, and berth pricing.",
     iconName: "Bus",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: false,
   },
   {
