@@ -132,7 +132,7 @@ export default function SeatLayoutModal({
             <span
               className={cn(
                 "w-2.5 h-2.5 rounded-full shrink-0",
-                isLower ? "bg-emerald-500" : "bg-indigo-500",
+                isLower ? "bg-[var(--yh-success)]" : "bg-[var(--yh-brand)]",
               )}
             />
             <h4 className="text-sm font-bold text-ink">

@@ -293,4 +293,55 @@ test("Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)", async (t) => {
     assert.equal(updatedPax[0].aadhar, "", "New passenger must not inherit Aadhaar from existing passenger")
     assert.equal(updatedPax[0].aadharEncrypted, false)
   })
+
+  await t.test("single passenger update reconciles both aadhar and aadhaar and encrypts", () => {
+    function reconcileSinglePax(existingPax, incomingBody) {
+      const passenger = { ...existingPax }
+      const incomingAadhar = incomingBody.aadhar !== undefined ? incomingBody.aadhar : incomingBody.aadhaar
+      if (incomingAadhar !== undefined) {
+        if (isMaskedOrUnchangedAadhaar(incomingAadhar)) {
+          // retain existing
+        } else if (typeof incomingAadhar === "string" && incomingAadhar.trim().length > 0) {
+          if (!validateVerhoeff(incomingAadhar)) {
+            throw new Error("Invalid Aadhaar")
+          }
+          passenger.aadhar = encryptAadhaar(incomingAadhar.trim())
+          passenger.aadharEncrypted = true
+        } else {
+          passenger.aadhar = ""
+          passenger.aadharEncrypted = false
+        }
+        delete passenger.aadhaar
+        delete passenger.aadhaarEncrypted
+      }
+      return passenger
+    }
+
+    const existing = {
+      name: "Ramesh",
+      aadhar: encryptAadhaar("999999990019"),
+      aadharEncrypted: true,
+    }
+
+    // 1. Preserves existing when masked
+    const maskedUpdate = reconcileSinglePax(existing, { aadhar: "XXXX XXXX 0019" })
+    assert.equal(maskedUpdate.aadhar, existing.aadhar)
+    assert.equal(maskedUpdate.aadharEncrypted, true)
+
+    // 2. Preserves existing when using legacy aadhaar spelling with [UNCHANGED]
+    const unchangedUpdate = reconcileSinglePax(existing, { aadhaar: "[UNCHANGED]" })
+    assert.equal(unchangedUpdate.aadhar, existing.aadhar)
+    assert.equal(unchangedUpdate.aadharEncrypted, true)
+
+    // 3. Encrypts new valid Aadhaar using legacy aadhaar key
+    const newLegacyUpdate = reconcileSinglePax(existing, { aadhaar: "555555550017" })
+    assert.equal(decryptAadhaar(newLegacyUpdate.aadhar), "555555550017")
+    assert.equal(newLegacyUpdate.aadharEncrypted, true)
+    assert.equal(newLegacyUpdate.aadhaar, undefined)
+
+    // 4. Clears Aadhaar when empty
+    const clearedUpdate = reconcileSinglePax(existing, { aadhar: "" })
+    assert.equal(clearedUpdate.aadhar, "")
+    assert.equal(clearedUpdate.aadharEncrypted, false)
+  })
 })

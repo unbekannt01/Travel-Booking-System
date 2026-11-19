@@ -77,10 +77,10 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--yh-bg-app)]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-slate-200 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500 font-bold">Loading...</p>
+          <div className="w-12 h-12 border-4 border-[var(--yh-border-default)] border-t-[var(--yh-brand)] rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-[var(--yh-text-secondary)] font-bold">Loading...</p>
         </div>
       </div>
     )

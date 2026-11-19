@@ -686,7 +686,7 @@ router.put("/:bookingId/passengers/:passengerIdentifier/checkin", verifyToken, a
     passenger.checkedIn = !passenger.checkedIn
     await booking.save()
 
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -708,7 +708,7 @@ router.put("/:bookingId/passengers/batch-checkin", verifyToken, async (req, res)
     }
 
     await booking.save()
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -739,11 +739,23 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
     if (gender !== undefined) passenger.gender = gender
     if (city !== undefined) passenger.city = city
     if (contact !== undefined) passenger.contact = contact
-    if (aadhar !== undefined) {
-      if (!validateAadhaar(aadhar)) {
-        return res.status(400).json({ message: "Aadhaar must be a 12-digit number" })
+
+    const incomingAadhar = aadhar !== undefined ? aadhar : req.body.aadhaar
+    if (incomingAadhar !== undefined) {
+      if (isMaskedOrUnchangedAadhaar(incomingAadhar)) {
+        // Retain existing encrypted Aadhaar if present
+      } else if (typeof incomingAadhar === "string" && incomingAadhar.trim().length > 0) {
+        if (!validateAadhaar(incomingAadhar)) {
+          return res.status(400).json({ message: "Aadhaar must be a 12-digit number" })
+        }
+        passenger.aadhar = encryptAadhaar(incomingAadhar.trim())
+        passenger.aadharEncrypted = true
+      } else {
+        passenger.aadhar = ""
+        passenger.aadharEncrypted = false
       }
-      passenger.aadhar = aadhar
+      delete passenger.aadhaar
+      delete passenger.aadhaarEncrypted
     }
     if (checkedIn !== undefined) passenger.checkedIn = Boolean(checkedIn)
 
@@ -766,7 +778,7 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
     }
 
     await booking.save()
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -786,7 +798,7 @@ router.put("/:bookingId/toggle-payment", verifyToken, async (req, res) => {
     }
 
     await booking.save()
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }
@@ -863,7 +875,7 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
       meta: { bookingId: booking._id, invoiceNo: booking.invoiceNo, refundAmount },
     })
 
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
@@ -949,7 +961,7 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
 
     booking.deletedAt = null
     await booking.save()
-    res.json(booking)
+    res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
@@ -986,10 +998,14 @@ router.get("/:id/passengers/:paxId/reveal-aadhaar", verifyToken, async (req, res
     })
 
     res.json({
+      success: true,
       passengerId: passenger._id,
       seatId: passenger.seatId,
       name: passenger.name,
       aadhar: rawAadhaar,
+      aadhaar: rawAadhaar,
+      maskedAadhaar: maskAadhaar(rawAadhaar),
+      maskedAadhar: maskAadhaar(rawAadhaar),
     })
   } catch (error) {
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })

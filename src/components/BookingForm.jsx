@@ -69,32 +69,36 @@ const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
       disabled={isBookedByOther}
       className={`relative h-14 md:h-16 rounded-lg border-2 transition-all flex flex-col items-center justify-center p-1 group ${
         isBookedByOther
-          ? "border-red-300 bg-red-50 cursor-not-allowed opacity-75"
+          ? "border-[var(--yh-danger)]/40 bg-[var(--yh-danger-subtle)] cursor-not-allowed opacity-75"
           : isSelectedInCurrentBooking
-            ? "border-indigo-600 bg-indigo-50 cursor-pointer"
-            : "border-slate-200 bg-white hover:border-indigo-300 cursor-pointer"
+            ? "border-[var(--yh-brand)] bg-[var(--yh-brand-subtle)] cursor-pointer"
+            : "border-[var(--yh-border-default)] bg-[var(--yh-bg-surface)] hover:border-[var(--yh-brand)] cursor-pointer"
       }`}
     >
       <span
         className={`text-[8px] md:text-[9px] font-black mb-0.5 ${
-          isBookedByOther ? "text-red-600" : isSelectedInCurrentBooking ? "text-indigo-600" : "text-slate-400"
+          isBookedByOther
+            ? "text-[var(--yh-danger)]"
+            : isSelectedInCurrentBooking
+              ? "text-[var(--yh-brand)]"
+              : "text-[var(--yh-text-muted)]"
         }`}
       >
         {label}
       </span>
       {isBookedByOther ? (
         <div className="flex flex-col items-center">
-          <LockKeyhole size={10} className="text-red-500 mb-0.5" />
-          <div className="text-[7px] font-bold text-red-700 leading-tight text-center truncate w-full px-1">
+          <LockKeyhole size={10} className="text-[var(--yh-danger)] mb-0.5" />
+          <div className="text-[7px] font-bold text-[var(--yh-danger)] leading-tight text-center truncate w-full px-1">
             {bookedBy.passengerName?.split(" ")[0] || "Booked"}
           </div>
         </div>
       ) : isSelectedInCurrentBooking ? (
-        <div className="text-[8px] font-bold text-indigo-900 leading-tight text-center truncate w-full px-1">
+        <div className="text-[8px] font-bold text-[var(--yh-brand)] leading-tight text-center truncate w-full px-1">
           {occupant.name?.split(" ")[0] || "USER"}
         </div>
       ) : (
-        <div className="w-1 h-1 rounded-full bg-slate-200 group-hover:bg-indigo-300" />
+        <div className="w-1 h-1 rounded-full bg-[var(--yh-border-default)] group-hover:bg-[var(--yh-brand)]" />
       )}
     </button>
   )
@@ -102,11 +106,11 @@ const Seat = ({ id, label, passengers, onSeatSelect, bookedSeats }) => {
 
 const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
   <div className="flex flex-col items-center space-y-4">
-    <div className="px-4 py-1.5 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 mb-2">
+    <div className="px-4 py-1.5 bg-[var(--yh-brand)] text-[var(--yh-brand-fg)] rounded-full text-[10px] font-black uppercase tracking-widest shadow-xs mb-2">
       {deck} DECK
     </div>
-    <div className="relative bg-slate-100 p-4 rounded-2xl border-4 border-slate-200 shadow-inner">
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-300 px-3 py-1 rounded-full text-[8px] font-black text-slate-600 uppercase tracking-widest z-10">
+    <div className="relative bg-[var(--yh-bg-surface-muted)] p-4 rounded-2xl border-2 border-[var(--yh-border-default)] shadow-xs">
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[var(--yh-bg-surface)] px-3 py-1 rounded-full text-[8px] font-black text-[var(--yh-text-secondary)] uppercase tracking-widest z-10 border border-[var(--yh-border-default)]">
         FRONT
       </div>
 
@@ -124,8 +128,8 @@ const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
           ))}
         </div>
 
-        <div className="w-8 md:w-10 bg-slate-200/50 rounded-lg flex items-center justify-center relative overflow-hidden">
-          <div className="rotate-90 whitespace-nowrap text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-[0.5em] flex items-center gap-2">
+        <div className="w-8 md:w-10 bg-[var(--yh-bg-surface)] border border-[var(--yh-border-subtle)] rounded-lg flex items-center justify-center relative overflow-hidden">
+          <div className="rotate-90 whitespace-nowrap text-[10px] md:text-xs font-black text-[var(--yh-text-muted)] uppercase tracking-[0.5em] flex items-center gap-2">
             <span className="opacity-20">----------</span>
             GALLARY
             <span className="opacity-20">----------</span>
@@ -159,11 +163,11 @@ const DeckGrid = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
 
 const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
   <div className="flex flex-col items-center space-y-4">
-    <div className="px-4 py-1.5 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 mb-2">
+    <div className="px-4 py-1.5 bg-[var(--yh-brand)] text-[var(--yh-brand-fg)] rounded-full text-[10px] font-black uppercase tracking-widest shadow-xs mb-2">
       {deck} DECK
     </div>
-    <div className="relative bg-slate-100 p-4 rounded-2xl border-4 border-slate-200 shadow-inner">
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-300 px-3 py-1 rounded-full text-[8px] font-black text-slate-600 uppercase tracking-widest z-10">
+    <div className="relative bg-[var(--yh-bg-surface-muted)] p-4 rounded-2xl border-2 border-[var(--yh-border-default)] shadow-xs">
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[var(--yh-bg-surface)] px-3 py-1 rounded-full text-[8px] font-black text-[var(--yh-text-secondary)] uppercase tracking-widest z-10 border border-[var(--yh-border-default)]">
         FRONT
       </div>
 
@@ -189,8 +193,8 @@ const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
           ))}
         </div>
 
-        <div className="w-8 md:w-10 bg-slate-200/50 rounded-lg flex items-center justify-center relative overflow-hidden">
-          <div className="rotate-90 whitespace-nowrap text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-[0.5em] flex items-center gap-2">
+        <div className="w-8 md:w-10 bg-[var(--yh-bg-surface)] border border-[var(--yh-border-subtle)] rounded-lg flex items-center justify-center relative overflow-hidden">
+          <div className="rotate-90 whitespace-nowrap text-[10px] md:text-xs font-black text-[var(--yh-text-muted)] uppercase tracking-[0.5em] flex items-center gap-2">
             <span className="opacity-20">----------</span>
             GALLARY
             <span className="opacity-20">----------</span>
@@ -223,26 +227,26 @@ const DeckGrid2x2 = ({ deck, passengers, onSeatSelect, bookedSeats }) => (
 )
 
 const SeatLegend = () => (
-  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 py-2 px-5 bg-slate-50 border border-slate-200/80 rounded-2xl w-full max-w-2xl mx-auto mb-4">
+  <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 py-2 px-5 bg-[var(--yh-bg-surface-muted)] border border-[var(--yh-border-default)] rounded-2xl w-full max-w-2xl mx-auto mb-4">
     <div className="flex items-center gap-2">
-      <div className="w-5 h-5 rounded-md border-2 border-slate-200 bg-white" />
-      <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Available</span>
+      <div className="w-5 h-5 rounded-md border-2 border-[var(--yh-border-default)] bg-[var(--yh-bg-surface)]" />
+      <span className="text-[11px] font-black uppercase tracking-wider text-[var(--yh-text-secondary)]">Available</span>
     </div>
     <div className="flex items-center gap-2">
-      <div className="w-5 h-5 rounded-md border-2 border-indigo-600 bg-indigo-50 flex items-center justify-center text-[9px] font-black text-indigo-600">✓</div>
-      <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700">Selected</span>
+      <div className="w-5 h-5 rounded-md border-2 border-[var(--yh-brand)] bg-[var(--yh-brand-subtle)] flex items-center justify-center text-[9px] font-black text-[var(--yh-brand)]">✓</div>
+      <span className="text-[11px] font-black uppercase tracking-wider text-[var(--yh-brand)]">Selected</span>
     </div>
     <div className="flex items-center gap-2">
-      <div className="w-5 h-5 rounded-md border-2 border-red-300 bg-red-50 flex items-center justify-center">
-        <LockKeyhole size={10} className="text-red-500" />
+      <div className="w-5 h-5 rounded-md border-2 border-[var(--yh-danger)]/40 bg-[var(--yh-danger-subtle)] flex items-center justify-center">
+        <LockKeyhole size={10} className="text-[var(--yh-danger)]" />
       </div>
-      <span className="text-[11px] font-black uppercase tracking-wider text-red-600">Booked</span>
+      <span className="text-[11px] font-black uppercase tracking-wider text-[var(--yh-danger)]">Booked</span>
     </div>
     <div className="flex items-center gap-2">
-      <div className="w-5 h-5 rounded-md border-2 border-amber-300 bg-amber-50 flex items-center justify-center">
-        <ShieldAlert size={10} className="text-amber-600" />
+      <div className="w-5 h-5 rounded-md border-2 border-[var(--yh-warning)]/40 bg-[var(--yh-warning-subtle)] flex items-center justify-center">
+        <ShieldAlert size={10} className="text-[var(--yh-warning)]" />
       </div>
-      <span className="text-[11px] font-black uppercase tracking-wider text-amber-700">Blocked</span>
+      <span className="text-[11px] font-black uppercase tracking-wider text-[var(--yh-warning)]">Blocked</span>
     </div>
   </div>
 )
@@ -1921,65 +1925,51 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
         </div>
       </div>
 
-      {/* ── Existing Interactive Seat Layout Modal (unchanged, restyled in Part 3.4) ── */}
-      {showSeatMap && (
-        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-white/95 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-5xl rounded-[2rem] shadow-2xl animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 md:p-8 border-b border-slate-100">
-              <div>
-                <h3 className="text-2xl md:text-3xl font-black text-slate-900">Choose Seat</h3>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1.5">
-                  Assigning seat for:{" "}
-                  <span className="text-indigo-600">
-                    {formData.passengers[activePassengerIndex]?.name ||
-                      "Passenger " + (activePassengerIndex + 1)}
-                  </span>
-                </p>
-                {bookedSeats.length > 0 && (
-                  <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide mt-2 flex items-center gap-1.5 bg-red-50 px-3 py-1.5 rounded-full">
-                    <LockKeyhole size={12} /> {bookedSeats.length} seats already booked
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleOpenAutoAssign}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs"
-                >
-                  <Wand2 size={15} /> Auto-assign Seats
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSeatMap(false)}
-                  className="p-3 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all active:scale-95"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-y-auto custom-scrollbar flex-1 p-6 md:p-8">
-              <SeatLayout
-                passengers={formData.passengers}
-                bookedSeats={bookedSeats}
-                onSeatSelect={handleSeatSelection}
-                seatLayout={formData.seatLayout || "2x1"}
-              />
-            </div>
-
-            <div className="p-6 md:p-8 border-t border-slate-100 bg-slate-50/50">
-              <button
-                type="button"
-                onClick={() => setShowSeatMap(false)}
-                className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-12 py-4 rounded-2xl font-black text-sm shadow-xl shadow-indigo-200 transition-all active:scale-[0.98] float-right"
-              >
-                Confirm Selection
-              </button>
-            </div>
+      {/* ── Coach Seat Picker Modal (Migrated to Modal primitive) ── */}
+      <Modal
+        open={showSeatMap}
+        onClose={() => setShowSeatMap(false)}
+        size="5xl"
+        title="Choose Seat"
+        description={`Assigning seat for: ${
+          formData.passengers[activePassengerIndex]?.name ||
+          "Passenger " + (activePassengerIndex + 1)
+        }`}
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <button
+              type="button"
+              onClick={handleOpenAutoAssign}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[var(--yh-brand-subtle)] text-[var(--yh-brand)] hover:bg-[var(--yh-brand)]/15 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+            >
+              <Wand2 size={15} /> Auto-assign Seats
+            </button>
+            <Button
+              type="button"
+              onClick={() => setShowSeatMap(false)}
+              variant="primary"
+            >
+              Confirm Selection
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {bookedSeats.length > 0 && (
+            <p className="text-[11px] font-bold text-[var(--yh-danger)] uppercase tracking-wide flex items-center gap-1.5 bg-[var(--yh-danger-subtle)] px-3 py-1.5 rounded-full w-fit">
+              <LockKeyhole size={12} /> {bookedSeats.length} seats already booked
+            </p>
+          )}
+          <div className="overflow-y-auto custom-scrollbar p-2">
+            <SeatLayout
+              passengers={formData.passengers}
+              bookedSeats={bookedSeats}
+              onSeatSelect={handleSeatSelection}
+              seatLayout={formData.seatLayout || "2x1"}
+            />
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* ── Accessible Auto-Assign Seats Modal (Part 3.4) ── */}
       <Modal
