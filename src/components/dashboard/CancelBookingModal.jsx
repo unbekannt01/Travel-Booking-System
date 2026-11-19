@@ -3,6 +3,7 @@ import { AlertTriangle, ShieldAlert } from "lucide-react"
 import { formatDisplayDate } from "../../utils/date"
 import { formatINR } from "../../utils/formatters"
 import { formatSeatLabel } from "../../utils/seatFormatting"
+import { calculateCancellationRefund } from "../../../shared/businessLogic.js"
 import { Modal, Button, Field, Input, Select, Badge, FOCUS_RING_CLASS } from "../ui"
 import { cn } from "../../utils/cn"
 
@@ -17,8 +18,16 @@ export default function CancelBookingModal({ booking, onClose, onConfirm, isOpen
   if (!booking) return null
 
   const fee = Math.max(0, Number(cancellationCharge) || 0)
-  const refundAmount = Math.max(0, Math.round((totalPaid - fee) * 100) / 100)
   const isFeeTooHigh = fee > totalPaid
+  let refundAmount = 0
+  if (!isFeeTooHigh) {
+    try {
+      const calc = calculateCancellationRefund({ totalPaid, cancellationCharge: fee })
+      refundAmount = calc.refundAmount
+    } catch {
+      refundAmount = 0
+    }
+  }
 
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault()

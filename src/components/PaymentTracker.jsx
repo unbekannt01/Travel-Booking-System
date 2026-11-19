@@ -154,12 +154,14 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
 
   const handleConfirmVoid = async (paymentId) => {
     if (!onVoidPayment) return
+    const reason = voidReason.trim()
+    if (!reason) return
     try {
-      const res = await onVoidPayment(paymentId, voidReason || "Voided by operator")
+      const res = await onVoidPayment(paymentId, reason)
       setLedgerPayments((prev) =>
         prev.map((p) =>
           (p._id || p.id) === paymentId
-            ? { ...p, isVoid: true, voidReason: voidReason || "Voided by operator" }
+            ? { ...p, isVoid: true, voidReason: reason }
             : p
         )
       )
@@ -480,6 +482,7 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                       type="button"
                       variant="destructive"
                       size="sm"
+                      disabled={!voidReason.trim()}
                       onClick={() => handleConfirmVoid(voidingPaymentId)}
                     >
                       Confirm Void

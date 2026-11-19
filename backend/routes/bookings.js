@@ -36,8 +36,10 @@ export const maskBookingPaxAadhaar = (booking) => {
   if (Array.isArray(b.passengers)) {
     b.passengers = b.passengers.map((p) => {
       const copy = { ...p }
-      if (copy.aadhar) {
-        const raw = copy.aadharEncrypted ? decryptAadhaar(copy.aadhar) : copy.aadhar
+      const aadharVal = copy.aadhar !== undefined ? copy.aadhar : copy.aadhaar
+      const aadharEnc = copy.aadharEncrypted !== undefined ? copy.aadharEncrypted : copy.aadhaarEncrypted
+      if (aadharVal) {
+        const raw = aadharEnc ? decryptAadhaar(aadharVal) : aadharVal
         copy.aadhar = maskAadhaar(raw)
       }
       return copy
@@ -610,28 +612,33 @@ router.put("/:id", verifyToken, async (req, res) => {
 
       booking.passengers = req.body.passengers.map((p) => {
         const paxObj = { ...p }
+        const inputAadhaar = paxObj.aadhar !== undefined ? paxObj.aadhar : paxObj.aadhaar
         const matched =
           (p._id && existingPaxById.get(String(p._id))) ||
           (p.id && existingPaxById.get(String(p.id))) ||
           (p.seatId && existingPaxBySeat.get(p.seatId)) ||
           null
 
-        if (isMaskedOrUnchangedAadhaar(paxObj.aadhar)) {
+        if (isMaskedOrUnchangedAadhaar(inputAadhaar)) {
           // Preserve existing encrypted Aadhaar if matched passenger already had one
-          if (matched && matched.aadhar) {
-            paxObj.aadhar = matched.aadhar
-            paxObj.aadharEncrypted = matched.aadharEncrypted !== undefined ? matched.aadharEncrypted : true
+          const matchedAadhaar = matched && (matched.aadhar !== undefined ? matched.aadhar : matched.aadhaar)
+          const matchedEnc = matched && (matched.aadharEncrypted !== undefined ? matched.aadharEncrypted : matched.aadhaarEncrypted)
+          if (matched && matchedAadhaar) {
+            paxObj.aadhar = matchedAadhaar
+            paxObj.aadharEncrypted = matchedEnc !== undefined ? matchedEnc : true
           } else {
             paxObj.aadhar = ""
             paxObj.aadharEncrypted = false
           }
-        } else if (paxObj.aadhar && typeof paxObj.aadhar === "string" && paxObj.aadhar.trim().length > 0) {
-          paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
+        } else if (inputAadhaar && typeof inputAadhaar === "string" && inputAadhaar.trim().length > 0) {
+          paxObj.aadhar = encryptAadhaar(inputAadhaar.trim())
           paxObj.aadharEncrypted = true
         } else {
           paxObj.aadhar = ""
           paxObj.aadharEncrypted = false
         }
+        delete paxObj.aadhaar
+        delete paxObj.aadhaarEncrypted
 
         return paxObj
       })
@@ -962,7 +969,9 @@ router.get("/:id/passengers/:paxId/reveal-aadhaar", verifyToken, async (req, res
 
     if (!passenger) return res.status(404).json({ message: "Passenger not found" })
 
-    const rawAadhaar = passenger.aadharEncrypted ? decryptAadhaar(passenger.aadhar) : passenger.aadhar
+    const aadharVal = passenger.aadhar !== undefined ? passenger.aadhar : passenger.aadhaar
+    const aadharEnc = passenger.aadharEncrypted !== undefined ? passenger.aadharEncrypted : passenger.aadhaarEncrypted
+    const rawAadhaar = aadharEnc ? decryptAadhaar(aadharVal) : aadharVal
 
     await logAudit({
       userId: req.user.id,

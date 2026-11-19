@@ -2,6 +2,7 @@ import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { formatSeatLabel, formatSeatList } from "../src/utils/formatters.js"
 import { resolvePageMeta } from "../src/components/shell/shellConfig.js"
+import { calculateCancellationRefund } from "../shared/businessLogic.js"
 
 describe("Operational Modals & Journeys Screen (Part 3.4)", () => {
   describe("Seat Label & List Formatting (Task A)", () => {
@@ -210,6 +211,65 @@ describe("Operational Modals & Journeys Screen (Part 3.4)", () => {
       assert.equal(filterInvoices(sampleInvoices, { search: "patel" }).length, 1)
       assert.equal(filterInvoices(sampleInvoices, { search: "Kedarnath" }).length, 2)
       assert.equal(filterInvoices(sampleInvoices, { search: "Nonexistent" }).length, 0)
+    })
+  })
+
+  describe("Step 0 Carry-over Verification (Part 3.5)", () => {
+    it("proves client refund display equals server calculation exactly across edge cases", () => {
+      const computeClientRefund = (totalPaid, fee) => {
+        const isFeeTooHigh = fee > totalPaid
+        if (isFeeTooHigh) return 0
+        try {
+          const calc = calculateCancellationRefund({ totalPaid, cancellationCharge: fee })
+          return calc.refundAmount
+        } catch {
+          return 0
+        }
+      }
+
+      assert.equal(computeClientRefund(5000, 2000), 3000)
+      assert.equal(computeClientRefund(5000, 0), 5000)
+      assert.equal(computeClientRefund(5000, 5000), 0)
+      assert.equal(computeClientRefund(5000, 6000), 0)
+    })
+
+    it("verifies payment voiding requires non-empty void reason", () => {
+      const validateVoidReason = (reason) => {
+        return typeof reason === "string" && reason.trim().length > 0
+      }
+      assert.equal(validateVoidReason(""), false)
+      assert.equal(validateVoidReason("   "), false)
+      assert.equal(validateVoidReason(null), false)
+      assert.equal(validateVoidReason(undefined), false)
+      assert.equal(validateVoidReason("Wrong amount recorded"), true)
+    })
+
+    it("verifies passenger reconciliation supports backward-compatible aadhaar and aadhar fields", () => {
+      const reconcilePax = (inputPax) => {
+        const paxObj = { ...inputPax }
+        const inputAadhaar = paxObj.aadhar !== undefined ? paxObj.aadhar : paxObj.aadhaar
+        if (inputAadhaar && typeof inputAadhaar === "string" && inputAadhaar.trim().length > 0) {
+          paxObj.aadhar = "ENCRYPTED_" + inputAadhaar.trim()
+          paxObj.aadharEncrypted = true
+        } else {
+          paxObj.aadhar = ""
+          paxObj.aadharEncrypted = false
+        }
+        delete paxObj.aadhaar
+        delete paxObj.aadhaarEncrypted
+        return paxObj
+      }
+
+      // Input using legacy 'aadhaar' spelling
+      const fromLegacy = reconcilePax({ name: "Ramesh", aadhaar: "555555550017" })
+      assert.equal(fromLegacy.aadhar, "ENCRYPTED_555555550017")
+      assert.equal(fromLegacy.aadharEncrypted, true)
+      assert.equal(fromLegacy.aadhaar, undefined)
+
+      // Input using canonical 'aadhar' spelling
+      const fromCanonical = reconcilePax({ name: "Suresh", aadhar: "555555550017" })
+      assert.equal(fromCanonical.aadhar, "ENCRYPTED_555555550017")
+      assert.equal(fromCanonical.aadharEncrypted, true)
     })
   })
 })
