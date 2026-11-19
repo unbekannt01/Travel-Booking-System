@@ -5,7 +5,7 @@ import Payment from "../models/Payment.js"
 import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
 import { logAudit } from "../models/AuditLog.js"
-import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff } from "../utils/aadhaar.js"
+import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff, isMaskedOrUnchangedAadhaar } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
 import verifyToken from "../middleware/auth.js"
 import {
@@ -518,8 +518,10 @@ router.put("/:id", verifyToken, async (req, res) => {
         if (isNaN(age) || age < 1 || age > 120) {
           return res.status(400).json({ message: `Passenger ${p.name || i + 1} must have a valid age.` })
         }
-        if (p.aadhar && !validateAadhaar(p.aadhar)) {
-          return res.status(400).json({ message: `Aadhaar for ${p.name} must be a valid 12-digit number.` })
+        if (p.aadhar && !isMaskedOrUnchangedAadhaar(p.aadhar)) {
+          if (!validateAadhaar(p.aadhar)) {
+            return res.status(400).json({ message: `Aadhaar for ${p.name || i + 1} must be a valid 12-digit number.` })
+          }
         }
       }
     }
@@ -584,13 +586,55 @@ router.put("/:id", verifyToken, async (req, res) => {
       "isTaxInclusive",
       "cancellationCharge",
       "refundAmount",
-      "passengers",
     ]
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         booking[field] = req.body[field]
       }
+    }
+
+    if (Array.isArray(req.body.passengers)) {
+      const existingPax = Array.isArray(booking.passengers) ? booking.passengers : []
+      const existingPaxById = new Map()
+      const existingPaxBySeat = new Map()
+
+      for (const ep of existingPax) {
+        if (ep._id) {
+          existingPaxById.set(String(ep._id), ep)
+        }
+        if (ep.seatId) {
+          existingPaxBySeat.set(ep.seatId, ep)
+        }
+      }
+
+      booking.passengers = req.body.passengers.map((p) => {
+        const paxObj = { ...p }
+        const matched =
+          (p._id && existingPaxById.get(String(p._id))) ||
+          (p.id && existingPaxById.get(String(p.id))) ||
+          (p.seatId && existingPaxBySeat.get(p.seatId)) ||
+          null
+
+        if (isMaskedOrUnchangedAadhaar(paxObj.aadhar)) {
+          // Preserve existing encrypted Aadhaar if matched passenger already had one
+          if (matched && matched.aadhar) {
+            paxObj.aadhar = matched.aadhar
+            paxObj.aadharEncrypted = matched.aadharEncrypted !== undefined ? matched.aadharEncrypted : true
+          } else {
+            paxObj.aadhar = ""
+            paxObj.aadharEncrypted = false
+          }
+        } else if (paxObj.aadhar && typeof paxObj.aadhar === "string" && paxObj.aadhar.trim().length > 0) {
+          paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
+          paxObj.aadharEncrypted = true
+        } else {
+          paxObj.aadhar = ""
+          paxObj.aadharEncrypted = false
+        }
+
+        return paxObj
+      })
     }
 
     if (req.body.journeyDate !== undefined) {
@@ -607,7 +651,7 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     await booking.save()
     const { booking: syncedBooking } = await syncBookingPayments(booking._id, req.user.id)
-    res.json(syncedBooking || booking)
+    res.json(maskBookingPaxAadhaar(syncedBooking || booking))
   } catch (error) {
     res.status(400).json({ message: error.message })
   }

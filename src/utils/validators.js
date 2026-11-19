@@ -15,11 +15,23 @@ export function isValidIndianPhone(phone) {
 }
 
 /**
- * Validates 12-digit Aadhaar number
- * Optional (returns true if empty/falsy). If provided, must have exactly 12 digits.
+ * Checks if a value is a masked Aadhaar (e.g. XXXX XXXX 1234) or unchanged placeholder.
  */
-export function isValidAadhaar(aadhar) {
+export function isMaskedAadhaar(aadhar) {
+  if (!aadhar || typeof aadhar !== "string") return false
+  const trimmed = aadhar.trim()
+  if (trimmed === "[UNCHANGED]" || trimmed === "[unchanged]") return true
+  return /^X{4}[\s-]?X{4}[\s-]?\d{4}$/i.test(trimmed)
+}
+
+/**
+ * Validates 12-digit Aadhaar number
+ * Optional (returns true if empty/falsy). If provided, must have exactly 12 digits,
+ * or match masked format when allowMasked is true.
+ */
+export function isValidAadhaar(aadhar, { allowMasked = false } = {}) {
   if (!aadhar) return true
   const clean = aadhar.toString().replace(/\s+/g, "")
+  if (allowMasked && isMaskedAadhaar(aadhar)) return true
   return /^\d{12}$/.test(clean)
 }

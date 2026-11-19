@@ -27,6 +27,7 @@ import { toDateInputValue, formatDisplayDate } from "../utils/date"
 import { calculatePricing } from "../utils/pricing"
 import { autoAssignSeats } from "../utils/seatAssignment"
 import { formatINR, maskAadhaar } from "../utils/formatters"
+import { isMaskedAadhaar } from "../utils/validators"
 import { cn } from "../utils/cn"
 import {
   BOOKING_STEPS,
@@ -787,6 +788,12 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       gstRate: pricingBreakdown.gstRate,
       taxAmount: pricingBreakdown.taxAmount,
       isTaxInclusive: pricingBreakdown.isTaxInclusive,
+      passengers: (formData.passengers || []).map((p) => {
+        if (isMaskedAadhaar(p.aadhar)) {
+          return { ...p, aadhar: "[UNCHANGED]" }
+        }
+        return p
+      }),
     }
 
     setServerError("")
@@ -1365,25 +1372,54 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         id={`passenger-${i}-aadhar`}
                         label="Aadhaar number (optional, encrypted at rest)"
                         error={stepErrors[`passenger-${i}-aadhar`]}
-                        hint="12-digit number; displayed masked after saving"
+                        hint={
+                          isMaskedAadhaar(p.aadhar)
+                            ? "Aadhaar encrypted on file. Click 'Change' to enter a new 12-digit number."
+                            : "12-digit number; displayed masked after saving"
+                        }
                       >
-                        {({ id, describedBy, invalid }) => (
-                          <Input
-                            id={id}
-                            type="text"
-                            inputMode="numeric"
-                            tabular
-                            placeholder="XXXX XXXX XXXX"
-                            maxLength={14}
-                            invalid={invalid}
-                            aria-describedby={describedBy}
-                            value={p.aadhar ? p.aadhar.replace(/(\d{4})(?=\d)/g, "$1 ") : ""}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/\D/g, "").slice(0, 12)
-                              updatePassenger(i, "aadhar", raw)
-                            }}
-                          />
-                        )}
+                        {({ id, describedBy, invalid }) =>
+                          isMaskedAadhaar(p.aadhar) ? (
+                            <div className="flex items-center gap-2">
+                              <div
+                                id={id}
+                                aria-describedby={describedBy}
+                                className="flex-1 flex items-center gap-2 px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle bg-surface-muted text-ink font-mono text-sm select-none"
+                              >
+                                <LockKeyhole size={14} className="text-ink-muted shrink-0" aria-hidden="true" />
+                                <span>{p.aadhar}</span>
+                                <Badge variant="neutral" size="sm" className="ml-auto">
+                                  Saved
+                                </Badge>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => updatePassenger(i, "aadhar", "")}
+                                aria-label={`Change Aadhaar for passenger ${i + 1}`}
+                              >
+                                Change
+                              </Button>
+                            </div>
+                          ) : (
+                            <Input
+                              id={id}
+                              type="text"
+                              inputMode="numeric"
+                              tabular
+                              placeholder="XXXX XXXX XXXX"
+                              maxLength={14}
+                              invalid={invalid}
+                              aria-describedby={describedBy}
+                              value={p.aadhar ? p.aadhar.replace(/(\d{4})(?=\d)/g, "$1 ") : ""}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/\D/g, "").slice(0, 12)
+                                updatePassenger(i, "aadhar", raw)
+                              }}
+                            />
+                          )
+                        }
                       </Field>
                     </div>
                   </div>
@@ -1684,7 +1720,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         </p>
                         <p className="text-xs text-ink-muted">
                           {p.gender} · {p.age} yrs · {p.city}
-                          {p.aadhar ? ` · Aadhaar: ${maskAadhaar(p.aadhar)}` : ""}
+                          {p.aadhar && p.aadhar !== "[UNCHANGED]" ? ` · Aadhaar: ${maskAadhaar(p.aadhar)}` : p.aadhar === "[UNCHANGED]" ? " · Aadhaar: (on file)" : ""}
                         </p>
                       </div>
                       <Badge variant={p.seatId ? "success" : "neutral"} size="sm" className="self-start sm:self-center">

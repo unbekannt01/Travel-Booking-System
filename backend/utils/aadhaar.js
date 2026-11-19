@@ -124,3 +124,14 @@ export function maskAadhaar(rawOrDecrypted) {
   const last4 = clean.slice(-4)
   return `XXXX XXXX ${last4}`
 }
+
+/**
+ * Checks if a value represents a masked Aadhaar (e.g. XXXX XXXX 1234)
+ * or the explicit unchanged sentinel token ("[UNCHANGED]").
+ */
+export function isMaskedOrUnchangedAadhaar(val) {
+  if (!val || typeof val !== "string") return false
+  const trimmed = val.trim()
+  if (trimmed === "[UNCHANGED]" || trimmed === "[unchanged]") return true
+  return /^X{4}[\s-]?X{4}[\s-]?\d{4}$/i.test(trimmed)
+}

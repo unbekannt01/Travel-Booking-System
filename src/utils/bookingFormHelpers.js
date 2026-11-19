@@ -75,7 +75,7 @@ export function validateBookingStep(stepIndex, formData, context = {}) {
       if (ageRaw === "" || ageRaw === null || ageRaw === undefined || isNaN(age) || age < 1 || age > 120) {
         addError(`passenger-${i}-age`, `Passenger ${label}: Please enter a valid age (1–120)`)
       }
-      if (p?.aadhar && !isValidAadhaar(p.aadhar)) {
+      if (p?.aadhar && !isValidAadhaar(p.aadhar, { allowMasked: true })) {
         addError(`passenger-${i}-aadhar`, `Passenger ${label}: Aadhaar must be a 12-digit number`)
       }
       if (p?.seatId) {
