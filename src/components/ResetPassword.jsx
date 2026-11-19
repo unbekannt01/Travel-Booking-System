@@ -166,7 +166,6 @@ export default function ResetPassword({ token, onComplete }) {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     disabled={loading}
-                    autoFocus
                   />
                   <button
                     type="button"

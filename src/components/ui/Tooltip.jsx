@@ -1,4 +1,4 @@
-import { useState, useId } from "react"
+import { useState, useId, useEffect } from "react"
 import { cn } from "../../utils/cn"
 
 const SIDE_CLASSES = {
@@ -21,13 +21,18 @@ export function Tooltip({ content, side = "top", className, children }) {
   const [open, setOpen] = useState(false)
   const tooltipId = useId()
 
-  if (!content) return children
-
-  const handleKeyDown = (event) => {
-    if (event.key === "Escape" && open) {
-      setOpen(false)
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+      }
     }
-  }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [open])
+
+  if (!content) return children
 
   return (
     <span
@@ -36,7 +41,6 @@ export function Tooltip({ content, side = "top", className, children }) {
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
       onBlur={() => setOpen(false)}
-      onKeyDown={handleKeyDown}
       aria-describedby={open ? tooltipId : undefined}
     >
       {children}

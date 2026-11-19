@@ -50,14 +50,13 @@ export function Modal({
   if (!isOpen || typeof document === "undefined") return null
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[var(--yh-z-modal)] flex items-center justify-center p-4 bg-ink/50 backdrop-blur-[2px]"
-      onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget && onClose) {
-          onClose()
-        }
-      }}
-    >
+    <div className="fixed inset-0 z-[var(--yh-z-modal)] flex items-center justify-center p-4">
+      {/* Backdrop overlay */}
+      <div
+        className="fixed inset-0 bg-ink/50 backdrop-blur-[2px]"
+        aria-hidden="true"
+        onMouseDown={closeOnBackdrop && onClose ? onClose : undefined}
+      />
       <div
         ref={panelRef}
         role="dialog"
@@ -66,7 +65,7 @@ export function Modal({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={cn(
-          "w-full rounded-[var(--yh-radius-xl)] bg-surface-elevated text-ink border border-border-subtle shadow-[var(--yh-shadow-overlay)]",
+          "relative z-10 w-full rounded-[var(--yh-radius-xl)] bg-surface-elevated text-ink border border-border-subtle shadow-[var(--yh-shadow-overlay)]",
           "max-h-[90vh] flex flex-col overflow-hidden focus:outline-none",
           SIZE_CLASSES[size] || SIZE_CLASSES.md,
           className,

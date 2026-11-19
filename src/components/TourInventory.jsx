@@ -337,7 +337,6 @@ export default function TourInventory({ tours = [], onAdd, onDelete }) {
               }}
               placeholder="e.g. Nepal Special Tour"
               required
-              autoFocus
             />
           </Field>
 
@@ -397,9 +396,9 @@ export default function TourInventory({ tours = [], onAdd, onDelete }) {
 
           {/* Pricing Model Segmented Controls */}
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-(--yh-text-primary)">
+            <span className="block text-xs font-semibold text-(--yh-text-primary)">
               Pricing Model
-            </label>
+            </span>
             <div className="flex rounded-xl p-1 bg-(--yh-surface-muted) border border-(--yh-border-subtle)">
               <button
                 type="button"

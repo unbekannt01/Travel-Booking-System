@@ -35,7 +35,6 @@ export default function Disable2FAModal({
             className="text-center text-2xl font-mono font-bold tracking-[0.4em] py-3.5"
             value={disable2FACode}
             onChange={(e) => setDisable2FACode(e.target.value.replace(/\D/g, ""))}
-            autoFocus
           />
         </Field>
 

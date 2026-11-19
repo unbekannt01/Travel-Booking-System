@@ -2012,9 +2012,9 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-ink-secondary">
+            <span className="block text-xs font-semibold text-ink-secondary">
               Deck Preference
-            </label>
+            </span>
             <div role="group" aria-label="Deck preference" className="grid grid-cols-3 gap-2">
               {[
                 { id: "any", label: "Any Deck" },

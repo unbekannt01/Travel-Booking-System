@@ -156,7 +156,6 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                   disabled={loading}
-                  autoFocus
                 />
               </Field>
 

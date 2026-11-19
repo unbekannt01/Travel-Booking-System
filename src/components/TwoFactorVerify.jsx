@@ -61,7 +61,6 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                 disabled={loading}
-                autoFocus
               />
             </Field>
 

@@ -141,7 +141,6 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
-                autoFocus
                 disabled={loading}
               />
             </Field>
@@ -203,7 +202,6 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
-                autoFocus
                 disabled={loading}
               />
             </Field>
@@ -317,7 +315,6 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
                     value={formData.userName}
                     onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
                     disabled={loading}
-                    autoFocus
                   />
                 </div>
               </Field>
@@ -336,7 +333,6 @@ export default function Auth({ onAuthSuccess, onRequire2FA, onShow2FASetup }) {
                     value={formData.loginIdentifier}
                     onChange={(e) => setFormData({ ...formData, loginIdentifier: e.target.value })}
                     disabled={loading}
-                    autoFocus
                   />
                 </div>
               </Field>

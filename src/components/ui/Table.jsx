@@ -13,6 +13,7 @@ export function Table({ containerClassName, ariaLabel, stickyHeader = true, clas
     <div
       role="region"
       aria-label={ariaLabel || "Data table"}
+      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be focusable for keyboard arrow scrolling */
       tabIndex={0}
       className={cn(
         "w-full overflow-x-auto rounded-[var(--yh-radius-lg)] border border-border-subtle bg-surface",

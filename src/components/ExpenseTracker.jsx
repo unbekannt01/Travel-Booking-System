@@ -1,8 +1,10 @@
 import { useState, useMemo } from "react"
 import { Trash2, Plus, TrendingDown, DollarSign, PieChartIcon } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { useToast } from "./common/useToast"
 
 export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
+  const toast = useToast()
   const [expenseList, setExpenseList] = useState(expenses || [])
   const [showAddForm, setShowAddForm] = useState(false)
   const [formData, setFormData] = useState({
@@ -17,7 +19,7 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
 
   const handleAddExpense = () => {
     if (!formData.amount || !formData.description) {
-      alert("Please fill in all required fields")
+      toast.error("Please fill in all required fields")
       return
     }
 
@@ -121,8 +123,9 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">Date</label>
+              <label htmlFor="expense-date" className="text-xs font-black uppercase tracking-widest text-slate-400">Date</label>
               <input
+                id="expense-date"
                 type="date"
                 value={formData.date}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
@@ -130,8 +133,9 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">Category</label>
+              <label htmlFor="expense-category" className="text-xs font-black uppercase tracking-widest text-slate-400">Category</label>
               <select
+                id="expense-category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none appearance-none cursor-pointer"
@@ -146,8 +150,9 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
           </div>
 
           <div className="space-y-2 mb-6">
-            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Description</label>
+            <label htmlFor="expense-desc" className="text-xs font-black uppercase tracking-widest text-slate-400">Description</label>
             <input
+              id="expense-desc"
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -158,8 +163,9 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">Amount (₹)</label>
+              <label htmlFor="expense-amount" className="text-xs font-black uppercase tracking-widest text-slate-400">Amount (₹)</label>
               <input
+                id="expense-amount"
                 type="number"
                 value={formData.amount}
                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
@@ -168,10 +174,11 @@ export default function ExpenseTracker({ bookings, onSave, expenses = [] }) {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-widest text-slate-400">
+              <label htmlFor="expense-tour" className="text-xs font-black uppercase tracking-widest text-slate-400">
                 Related Tour (Optional)
               </label>
               <select
+                id="expense-tour"
                 value={formData.tourId}
                 onChange={(e) => setFormData({ ...formData, tourId: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none appearance-none cursor-pointer"

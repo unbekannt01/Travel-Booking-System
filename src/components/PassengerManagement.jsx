@@ -16,6 +16,8 @@ import { isMaskedAadhaar } from "../utils/validators"
 import { formatDisplayDate } from "../utils/date"
 import { downloadCsv } from "../utils/csv"
 import { request } from "../data/client"
+import { useConfirm } from "./common/useConfirm"
+import { useToast } from "./common/useToast"
 import BoardingPassModal from "./common/BoardingPassModal"
 import {
   Card,
@@ -55,6 +57,8 @@ export default function PassengerManagement({
   onEditBooking,
   user,
 }) {
+  const confirm = useConfirm()
+  const toast = useToast()
   const [selectedTour, setSelectedTour] = useState("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -128,9 +132,12 @@ export default function PassengerManagement({
       return
     }
 
-    const confirmed = window.confirm(
-      `Authorized action: Reveal full Aadhaar number for ${pax.name}?\n\nThis action is logged in the operational audit trail.`,
-    )
+    const confirmed = await confirm({
+      title: "Reveal Aadhaar Number",
+      message: `Authorized action: Reveal full Aadhaar number for ${pax.name}?\n\nThis action is logged in the operational audit trail.`,
+      confirmText: "Reveal Aadhaar",
+      confirmVariant: "accent",
+    })
     if (!confirmed) return
 
     try {
@@ -142,6 +149,7 @@ export default function PassengerManagement({
           ...prev,
           [key]: res.aadhar,
         }))
+        toast.info("Aadhaar revealed. Auto-hiding in 15 seconds.")
         // Auto-hide after 15 seconds to minimize exposure
         setTimeout(() => {
           setUnmaskedAadhaar((prev) => {
@@ -152,6 +160,7 @@ export default function PassengerManagement({
         }, 15000)
       }
     } catch {
+      toast.error("Could not reveal Aadhaar")
       // Fallback: if already unmasked locally
       if (pax.aadhar && !isMaskedAadhaar(pax.aadhar)) {
         setUnmaskedAadhaar((prev) => ({ ...prev, [key]: pax.aadhar }))

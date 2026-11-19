@@ -333,9 +333,9 @@ export default function SettingsPanel({
 
           {/* Logo Upload & Preview */}
           <div className="space-y-3">
-            <label className="text-xs font-semibold text-(--yh-text-primary)">
+            <span className="block text-xs font-semibold text-(--yh-text-primary)">
               Company Logo
-            </label>
+            </span>
             <div className="flex items-center gap-5">
               {companySettings.companyLogo ? (
                 <div className="relative group/logo">
@@ -409,9 +409,9 @@ export default function SettingsPanel({
 
           {/* Document Layout Theme */}
           <div className="space-y-3 pt-5 border-t border-(--yh-border-subtle)">
-            <label className="text-xs font-semibold text-(--yh-text-primary)">
+            <span className="block text-xs font-semibold text-(--yh-text-primary)">
               Invoice Layout Structure
-            </label>
+            </span>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { id: "classic", label: "Classic", desc: "Formal boxed layout with clean borders" },
@@ -446,9 +446,9 @@ export default function SettingsPanel({
 
           {/* Accent Color Picker */}
           <div className="space-y-3 pt-5 border-t border-(--yh-border-subtle)">
-            <label className="text-xs font-semibold text-(--yh-text-primary)">
+            <span className="block text-xs font-semibold text-(--yh-text-primary)">
               Document Brand Accent Color
-            </label>
+            </span>
             <div className="flex flex-wrap items-center gap-2.5">
               {[
                 { name: "Indigo", hex: "#4f46e5" },
@@ -626,9 +626,9 @@ export default function SettingsPanel({
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-6 space-y-4">
-              <label className="text-xs font-semibold text-(--yh-text-primary)">
+              <span className="block text-xs font-semibold text-(--yh-text-primary)">
                 Default Document Language
-              </label>
+              </span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {DOCUMENT_LANGUAGES.map((lang) => {
                   const isSelected = (companySettings.documentLanguage || "en") === lang.code

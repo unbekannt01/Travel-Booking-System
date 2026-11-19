@@ -59,15 +59,16 @@ export function Drawer({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[var(--yh-z-modal)] flex bg-ink/50 backdrop-blur-[2px]",
+        "fixed inset-0 z-[var(--yh-z-modal)] flex",
         layout.backdrop,
       )}
-      onMouseDown={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget && onClose) {
-          onClose()
-        }
-      }}
     >
+      {/* Backdrop overlay */}
+      <div
+        className="fixed inset-0 bg-ink/50 backdrop-blur-[2px]"
+        aria-hidden="true"
+        onMouseDown={closeOnBackdrop && onClose ? onClose : undefined}
+      />
       <div
         ref={panelRef}
         role="dialog"
