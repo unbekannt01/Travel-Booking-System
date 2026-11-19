@@ -19,7 +19,24 @@ import { cn } from "../utils/cn"
 import { getPaymentUrgencyMeta } from "../utils/dashboardOverview"
 import { listPayments } from "../data/payments"
 import ReceiptModal from "./common/ReceiptModal"
-import { Card, Badge, Button, StatCard, EmptyState } from "./ui"
+import {
+  Card,
+  Badge,
+  Button,
+  StatCard,
+  EmptyState,
+  Modal,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  Field,
+  Input,
+  Select,
+  FOCUS_RING_CLASS,
+} from "./ui"
 
 const URGENCY_ICONS = {
   AlertCircle,
@@ -298,261 +315,288 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
       )}
 
       {/* Record Payment Modal */}
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-black text-slate-900">Record Payment</h3>
-              <button
-                onClick={() => setSelectedBooking(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
-              >
-                <X size={20} />
-              </button>
+      <Modal
+        isOpen={Boolean(selectedBooking)}
+        onClose={() => setSelectedBooking(null)}
+        size="md"
+        title="Record Payment"
+        description={
+          selectedBooking ? (
+            <span>
+              Invoice #{selectedBooking.invoiceNo} • {selectedBooking.contactName}
+            </span>
+          ) : null
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedBooking(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={submitPayment}
+            >
+              Confirm Payment
+            </Button>
+          </div>
+        }
+      >
+        {selectedBooking && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 p-3 rounded-[var(--yh-radius-md)] bg-surface-muted/60 border border-border-subtle text-xs">
+              <div>
+                <span className="text-ink-muted block font-medium">Customer</span>
+                <span className="font-semibold text-ink block truncate">{selectedBooking.contactName}</span>
+                <span className="text-ink-muted text-[11px]">+91 {selectedBooking.contactPhone}</span>
+              </div>
+              <div>
+                <span className="text-ink-muted block font-medium">Balance Due</span>
+                <span className="font-bold text-danger-text text-base tabular-nums">
+                  {formatINR(selectedBooking.balance, 0)}
+                </span>
+              </div>
             </div>
 
-            <div className="space-y-4 mb-8">
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Invoice</p>
-                <p className="font-black text-slate-900">{selectedBooking.invoiceNo}</p>
-              </div>
-
-              <div className="bg-slate-50 rounded-2xl p-4">
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Customer</p>
-                <p className="font-bold text-slate-900">{selectedBooking.contactName}</p>
-                <p className="text-sm text-slate-500 mt-1">+91 {selectedBooking.contactPhone}</p>
-              </div>
-
-              <div className="bg-red-50 rounded-2xl p-4 border border-red-200">
-                <p className="text-xs text-red-600 font-bold uppercase tracking-wider mb-1">Balance Due</p>
-                <p className="text-3xl font-black text-red-600">₹{selectedBooking.balance.toLocaleString()}</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">
-                  Payment Amount (₹)
-                </label>
-                <input
+            <Field id="record-payment-amount" label="Payment Amount (₹)">
+              {({ id }) => (
+                <Input
+                  id={id}
                   type="number"
+                  min="1"
+                  tabular
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-green-100 focus:border-green-600 transition-all outline-none"
                 />
-              </div>
+              )}
+            </Field>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">
-                  Payment Mode
-                </label>
-                <select
+            <Field id="record-payment-mode" label="Payment Mode">
+              {({ id }) => (
+                <Select
+                  id={id}
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-green-100 focus:border-green-600 transition-all outline-none cursor-pointer"
                 >
                   <option value="Cash">Cash</option>
                   <option value="UPI">UPI</option>
                   <option value="Bank Transfer">Bank Transfer / NEFT</option>
                   <option value="Cheque">Cheque</option>
                   <option value="Card">Card</option>
-                </select>
-              </div>
+                </Select>
+              )}
+            </Field>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Notes (Optional)</label>
-                <textarea
+            <Field id="record-payment-notes" label="Notes (Optional)">
+              {({ id }) => (
+                <Input
+                  id={id}
+                  type="text"
+                  placeholder="e.g. UPI ref no, receipt voucher #, etc."
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  placeholder="e.g., UPI ref no, receipt voucher #, etc."
-                  rows={2}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-green-100 focus:border-green-600 transition-all outline-none resize-none"
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setSelectedBooking(null)}
-                className="py-3 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitPayment}
-                className="py-3 rounded-2xl font-black text-sm bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200 transition-all"
-              >
-                Confirm Payment
-              </button>
-            </div>
+              )}
+            </Field>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Payment History / Ledger Modal */}
-      {viewLedgerBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-6 border-b border-slate-100 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                  <Receipt size={24} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">Payment Ledger</h3>
-                  <p className="text-xs font-bold text-slate-400">
-                    Invoice #{viewLedgerBooking.invoiceNo} — {viewLedgerBooking.contactName}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={closeLedgerModal}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
-              >
-                <X size={20} />
-              </button>
+      <Modal
+        isOpen={Boolean(viewLedgerBooking)}
+        onClose={closeLedgerModal}
+        size="xl"
+        className="max-w-3xl max-h-[90vh]"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand-soft text-brand shrink-0">
+              <Receipt size={20} />
             </div>
-
+            <div>
+              <span className="text-base sm:text-lg font-bold text-ink">Payment Ledger</span>
+              {viewLedgerBooking ? (
+                <p className="text-xs text-ink-muted font-normal mt-0.5">
+                  Invoice #{viewLedgerBooking.invoiceNo} — {viewLedgerBooking.contactName}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        }
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <Button type="button" variant="ghost" size="sm" onClick={closeLedgerModal}>
+              Close
+            </Button>
+          </div>
+        }
+      >
+        {viewLedgerBooking && (
+          <div className="space-y-5">
             {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-slate-50 p-4 rounded-2xl">
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Package</p>
-                <p className="text-lg font-black text-slate-900">₹{viewLedgerBooking.totalAmount.toLocaleString()}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-md)] border border-border-subtle">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted mb-0.5">Total Package</p>
+                <p className="text-base font-bold text-ink tabular-nums">{formatINR(viewLedgerBooking.totalAmount, 0)}</p>
               </div>
-              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                <p className="text-[10px] font-black uppercase text-emerald-600 mb-1">Total Received</p>
-                <p className="text-lg font-black text-emerald-700">₹{(viewLedgerBooking.advanceReceived || 0).toLocaleString()}</p>
+              <div className="p-3 bg-success-soft rounded-[var(--yh-radius-md)] text-success-text">
+                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80 mb-0.5">Total Received</p>
+                <p className="text-base font-bold tabular-nums">{formatINR(viewLedgerBooking.advanceReceived || 0, 0)}</p>
               </div>
-              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
-                <p className="text-[10px] font-black uppercase text-amber-600 mb-1">Balance Remaining</p>
-                <p className="text-lg font-black text-amber-700">
-                  ₹{Math.max(0, viewLedgerBooking.totalAmount - (viewLedgerBooking.advanceReceived || 0)).toLocaleString()}
+              <div className="p-3 bg-warning-soft rounded-[var(--yh-radius-md)] text-warning-text">
+                <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80 mb-0.5">Balance Remaining</p>
+                <p className="text-base font-bold tabular-nums">
+                  {formatINR(Math.max(0, viewLedgerBooking.totalAmount - (viewLedgerBooking.advanceReceived || 0)), 0)}
                 </p>
               </div>
             </div>
 
             {/* Voiding Reason Prompt Sub-modal */}
             {voidingPaymentId && (
-              <div className="mb-4 p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-3 animate-in fade-in duration-150">
-                <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                  <Ban size={15} className="text-amber-600" />
+              <div role="alert" className="p-3.5 bg-warning-soft border border-border-subtle rounded-[var(--yh-radius-md)] space-y-2.5">
+                <div className="flex items-center gap-2 text-warning-text font-semibold text-xs">
+                  <Ban size={15} />
                   <span>Void Transaction — Reason for Audit Log:</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
                     value={voidReason}
                     onChange={(e) => setVoidReason(e.target.value)}
                     placeholder="e.g. Entered wrong payment amount"
-                    className="flex-1 px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                    className={cn(
+                      "flex-1 px-3 py-1.5 bg-surface border border-border-strong rounded-[var(--yh-radius-sm)] text-xs text-ink outline-none",
+                      FOCUS_RING_CLASS,
+                    )}
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmVoid(voidingPaymentId)}
-                    className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-all"
-                  >
-                    Confirm Void
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVoidingPaymentId(null)}
-                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all"
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleConfirmVoid(voidingPaymentId)}
+                    >
+                      Confirm Void
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setVoidingPaymentId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Ledger Table */}
-            <div className="border border-slate-100 rounded-2xl overflow-hidden mb-6">
-              <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <div className="border border-border-subtle rounded-[var(--yh-radius-md)] overflow-hidden">
+              <div className="bg-surface-muted/60 px-4 py-2.5 border-b border-border-subtle flex justify-between items-center text-xs">
+                <span className="font-semibold text-ink-muted uppercase tracking-wider text-[11px]">
                   Official Receipts & Audit Ledger
-                </p>
-                {loadingLedger && <span className="text-[10px] font-bold text-indigo-600">Loading ledger...</span>}
+                </span>
+                {loadingLedger && <span className="font-semibold text-brand text-[11px]">Loading ledger...</span>}
               </div>
               {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).length > 0 ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase text-slate-400">
-                      <th className="px-6 py-3">Receipt #</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Mode & Type</th>
-                      <th className="px-4 py-3 text-right">Amount</th>
-                      <th className="px-4 py-3">Notes</th>
-                      <th className="px-4 py-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).map((p, idx) => {
-                      const isRefund = p.type === "refund" || Number(p.amount) < 0
-                      const isVoid = Boolean(p.isVoid)
-                      return (
-                        <tr key={p._id || idx} className={`hover:bg-slate-50/50 ${isVoid ? "opacity-50 bg-slate-50/70" : ""}`}>
-                          <td className="px-6 py-3.5 font-mono text-xs font-black text-slate-700">
-                            {p.receiptNo || `#REC-${idx + 1}`}
-                          </td>
-                          <td className="px-4 py-3.5 font-bold text-slate-600 text-xs">
-                            {formatDisplayDate(p.paymentDate || p.date)}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-black text-indigo-600 text-xs uppercase">{p.paymentMode || p.mode || "Cash"}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                isRefund ? "bg-red-100 text-red-700" : "bg-indigo-50 text-indigo-700"
-                              }`}>
-                                {p.type || (isRefund ? "refund" : "payment")}
-                              </span>
-                            </div>
-                          </td>
-                          <td className={`px-4 py-3.5 text-right font-black ${
-                            isVoid ? "line-through text-slate-400" : isRefund ? "text-red-600" : "text-emerald-600"
-                          }`}>
-                            {isRefund ? "-" : "+"}₹{Math.abs(Number(p.amount)).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3.5 text-xs text-slate-500 font-medium max-w-xs truncate">
-                            {isVoid ? (
-                              <span className="text-red-600 font-bold">[VOIDED: {p.voidReason || "Operator"}]</span>
-                            ) : (
-                              p.notes || "—"
-                            )}
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setViewReceiptPayment(p)}
-                                className="px-2 py-1 text-[10px] font-black text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1"
-                                title="View & Print Official Receipt"
-                              >
-                                <Printer size={11} />
-                                <span>Receipt</span>
-                              </button>
-                              {!isVoid && onVoidPayment && p._id ? (
-                                <button
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Receipt #</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Mode & Type</TableHead>
+                        <TableHead align="right">Amount</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead align="center">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).map((p, idx) => {
+                        const isRefund = p.type === "refund" || Number(p.amount) < 0
+                        const isVoid = Boolean(p.isVoid)
+                        return (
+                          <TableRow key={p._id || idx} className={isVoid ? "opacity-50 line-through bg-surface-muted/40" : undefined}>
+                            <TableCell className="font-mono text-xs font-semibold text-ink">
+                              {p.receiptNo || `#REC-${idx + 1}`}
+                            </TableCell>
+                            <TableCell className="text-xs text-ink-secondary">
+                              {formatDisplayDate(p.paymentDate || p.date)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-semibold text-ink">{p.paymentMode || p.mode || "Cash"}</span>
+                                <Badge variant={isRefund ? "danger" : "brand"} size="sm">
+                                  {p.type || (isRefund ? "refund" : "payment")}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell align="right" tabular className={cn(
+                              "font-bold text-xs",
+                              isVoid ? "text-ink-muted line-through" : isRefund ? "text-danger-text" : "text-success-text",
+                            )}>
+                              {isRefund ? "-" : "+"}{formatINR(Math.abs(Number(p.amount)), 0)}
+                            </TableCell>
+                            <TableCell className="text-xs text-ink-muted max-w-xs truncate">
+                              {isVoid ? (
+                                <span className="text-danger-text font-semibold">[VOIDED: {p.voidReason || "Operator"}]</span>
+                              ) : (
+                                p.notes || "—"
+                              )}
+                            </TableCell>
+                            <TableCell align="center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <Button
                                   type="button"
-                                  onClick={() => setVoidingPaymentId(p._id)}
-                                  className="px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setViewReceiptPayment(p)}
+                                  title="View & Print Official Receipt"
+                                  className="text-xs h-7 px-2"
                                 >
-                                  Void
-                                </button>
-                              ) : isVoid ? (
-                                <span className="text-[10px] font-black text-slate-400 uppercase">Voided</span>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                                  <Printer size={11} className="mr-1" />
+                                  <span>Receipt</span>
+                                </Button>
+                                {!isVoid && onVoidPayment && p._id ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setVoidingPaymentId(p._id)}
+                                    className="text-xs h-7 px-2 text-danger-text hover:bg-danger-soft"
+                                  >
+                                    Void
+                                  </Button>
+                                ) : isVoid ? (
+                                  <span className="text-[10px] font-semibold text-ink-muted uppercase">Voided</span>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <div className="p-8 text-center text-slate-400 font-bold text-sm">
+                <div className="p-6 text-center text-ink-muted text-xs">
                   {(viewLedgerBooking.advanceReceived || 0) > 0 ? (
                     <div>
-                      <p className="font-black text-slate-700">Initial Advance Recorded: ₹{(viewLedgerBooking.advanceReceived || 0).toLocaleString()}</p>
-                      <p className="text-xs text-slate-400 mt-1">Payment mode: {viewLedgerBooking.paymentMode || "Cash"}</p>
-                      <button
+                      <p className="font-semibold text-ink">
+                        Initial Advance Recorded: {formatINR(viewLedgerBooking.advanceReceived, 0)}
+                      </p>
+                      <p className="text-xs text-ink-muted mt-1">Payment mode: {viewLedgerBooking.paymentMode || "Cash"}</p>
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() =>
                           setViewReceiptPayment({
                             receiptNo: `#${user?.receiptPrefix || "REC"}-001`,
@@ -562,11 +606,11 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                             notes: "Initial advance received upon booking",
                           })
                         }
-                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black rounded-xl transition-colors"
+                        className="mt-3"
                       >
-                        <Printer size={13} />
+                        <Printer size={13} className="mr-1.5" />
                         <span>Print Advance Receipt</span>
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     "No payment records found for this booking."
@@ -574,19 +618,9 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                 </div>
               )}
             </div>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={closeLedgerModal}
-                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all"
-              >
-                Close
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Official Payment Receipt Modal */}
       {viewReceiptPayment && viewLedgerBooking && (

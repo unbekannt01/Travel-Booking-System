@@ -1,14 +1,9 @@
 import { useState, useMemo } from "react"
 import {
-  X,
   Printer,
   Download,
   Bus,
   Layers,
-  CheckCircle2,
-  Calendar,
-  Building,
-  Phone,
 } from "lucide-react"
 import {
   mapCoachSeatManifest,
@@ -16,16 +11,19 @@ import {
 } from "../../utils/seatLayout"
 import { downloadCsv } from "../../utils/csv"
 import { formatDisplayDate } from "../../utils/date"
+import { formatSeatLabel } from "../../utils/seatFormatting"
+import { Modal, Button, Badge } from "../ui"
+import { cn } from "../../utils/cn"
 
 export default function SeatLayoutModal({
   departure,
   bookings = [],
   user,
   onClose,
+  isOpen = true,
 }) {
   const [deckFilter, setDeckFilter] = useState("both") // 'both' | 'lower' | 'upper'
 
-  const accentColor = user?.invoiceColor || "#4f46e5"
   const companyName = user?.companyName || "Yatra Tours"
   const companyPhone = user?.companyPhone || ""
   const companyHQ = user?.companyHeadquarters || ""
@@ -90,7 +88,7 @@ export default function SeatLayoutModal({
       const p = seat.passenger
       return [
         seat.deckName,
-        seat.label,
+        formatSeatLabel(seat.id),
         isBooked ? "BOOKED" : "AVAILABLE",
         isBooked ? p.name : "Available",
         isBooked && p.age ? p.age : "",
@@ -127,43 +125,44 @@ export default function SeatLayoutModal({
       .sort((a, b) => a - b)
 
     return (
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+      <div className="rounded-[var(--yh-radius-xl)] border border-border-subtle bg-surface shadow-xs overflow-hidden flex flex-col">
         {/* Deck Header */}
-        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="px-4 py-3 bg-surface-muted border-b border-border-subtle flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <span
-              className={`w-3 h-3 rounded-full ${
-                isLower ? "bg-emerald-400" : "bg-indigo-400"
-              }`}
+              className={cn(
+                "w-2.5 h-2.5 rounded-full shrink-0",
+                isLower ? "bg-emerald-500" : "bg-indigo-500",
+              )}
             />
-            <h4 className="text-sm font-black tracking-wide uppercase">
+            <h4 className="text-sm font-bold text-ink">
               {isLower ? "Lower Deck" : "Upper Deck"}
             </h4>
-            <span className="text-[10px] font-bold text-slate-400">
-              ({deckObj.bookedCount}/{deckObj.capacity} Booked)
-            </span>
+            <Badge variant="neutral" size="sm">
+              {deckObj.bookedCount}/{deckObj.capacity} Booked
+            </Badge>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handlePrint(isLower ? "lower" : "upper")}
-              className="text-[11px] font-bold bg-white/10 hover:bg-white/20 px-3 py-1 rounded-xl text-white flex items-center gap-1 transition-colors"
-              title="Print just this deck"
-            >
-              <Printer size={12} />
-              <span>Print Deck</span>
-            </button>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => handlePrint(isLower ? "lower" : "upper")}
+            title="Print just this deck"
+            aria-label={`Print ${isLower ? "Lower" : "Upper"} Deck`}
+          >
+            <Printer size={13} className="mr-1" />
+            <span>Print Deck</span>
+          </Button>
         </div>
 
         {/* Coach Diagram Body */}
-        <div className="p-4 sm:p-5 flex-1 bg-slate-50/50">
-          <div className="max-w-md mx-auto bg-white rounded-2xl border-2 border-slate-200 p-3 shadow-xs">
+        <div className="p-3 sm:p-4 flex-1 bg-canvas/60">
+          <div className="max-w-md mx-auto bg-surface rounded-[var(--yh-radius-lg)] border border-border-subtle p-3 shadow-xs">
             {/* Driver cabin indicator */}
-            <div className="bg-slate-100 rounded-xl py-1.5 px-3 mb-3 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
+            <div className="bg-surface-muted rounded-[var(--yh-radius-md)] py-1.5 px-3 mb-3 flex items-center justify-between text-[11px] font-semibold text-ink-muted uppercase tracking-wider">
               <span>☸ Driver Cabin (Front)</span>
-              <span className="bg-slate-200 px-2 py-0.5 rounded text-[8px]">
+              <span className="bg-surface border border-border-subtle px-1.5 py-0.5 rounded text-[10px]">
                 Entry
               </span>
             </div>
@@ -173,10 +172,7 @@ export default function SeatLayoutModal({
               {rowNumbers.map((rowNum) => {
                 const rowData = rows[rowNum]
                 return (
-                  <div
-                    key={rowNum}
-                    className="grid grid-cols-12 gap-1.5 items-center"
-                  >
+                  <div key={rowNum} className="grid grid-cols-12 gap-1.5 items-center">
                     {/* Left seats */}
                     <div className="col-span-5 flex gap-1.5">
                       {rowData.left.map((seat) => {
@@ -185,35 +181,34 @@ export default function SeatLayoutModal({
                         return (
                           <div
                             key={seat.id}
-                            className={`flex-1 min-h-13 rounded-xl p-1.5 border flex flex-col justify-between transition-all ${
+                            className={cn(
+                              "flex-1 min-h-12 rounded-[var(--yh-radius-md)] p-1.5 border flex flex-col justify-between transition-colors",
                               isBooked
-                                ? "bg-blue-50/80 border-blue-200 text-blue-950"
-                                : "bg-white border-dashed border-slate-200 text-slate-400"
-                            }`}
+                                ? "bg-brand-soft/70 border-brand/30 text-ink"
+                                : "bg-surface border-dashed border-border-subtle text-ink-muted",
+                            )}
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-slate-800">
-                                {seat.label}
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[11px] font-bold text-ink">
+                                {formatSeatLabel(seat.id)}
                               </span>
                               {isBooked ? (
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
                               ) : (
-                                <span className="text-[8px] font-bold text-slate-300">
-                                  Free
-                                </span>
+                                <span className="text-[9px] font-medium text-ink-muted">Free</span>
                               )}
                             </div>
                             {isBooked ? (
-                              <div>
-                                <div className="text-[10px] font-black truncate leading-tight">
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-semibold truncate leading-tight text-ink">
                                   {p.name}
                                 </div>
-                                <div className="text-[8px] font-bold text-blue-700 truncate">
+                                <div className="text-[10px] font-medium text-brand truncate">
                                   #{p.invoiceNo}
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-[9px] font-bold text-slate-400 text-center py-1">
+                              <div className="text-[10px] font-medium text-ink-muted text-center py-0.5">
                                 Available
                               </div>
                             )}
@@ -223,7 +218,7 @@ export default function SeatLayoutModal({
                     </div>
 
                     {/* Central Aisle */}
-                    <div className="col-span-2 text-center text-[8px] font-black text-slate-400 uppercase tracking-wider py-1 border-x border-dashed border-slate-200">
+                    <div className="col-span-2 text-center text-[10px] font-bold text-ink-muted uppercase tracking-wider py-1 border-x border-dashed border-border-subtle">
                       R{rowNum}
                     </div>
 
@@ -235,35 +230,34 @@ export default function SeatLayoutModal({
                         return (
                           <div
                             key={seat.id}
-                            className={`flex-1 min-h-13 rounded-xl p-1.5 border flex flex-col justify-between transition-all ${
+                            className={cn(
+                              "flex-1 min-h-12 rounded-[var(--yh-radius-md)] p-1.5 border flex flex-col justify-between transition-colors",
                               isBooked
-                                ? "bg-blue-50/80 border-blue-200 text-blue-950"
-                                : "bg-white border-dashed border-slate-200 text-slate-400"
-                            }`}
+                                ? "bg-brand-soft/70 border-brand/30 text-ink"
+                                : "bg-surface border-dashed border-border-subtle text-ink-muted",
+                            )}
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-slate-800">
-                                {seat.label}
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[11px] font-bold text-ink">
+                                {formatSeatLabel(seat.id)}
                               </span>
                               {isBooked ? (
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
                               ) : (
-                                <span className="text-[8px] font-bold text-slate-300">
-                                  Free
-                                </span>
+                                <span className="text-[9px] font-medium text-ink-muted">Free</span>
                               )}
                             </div>
                             {isBooked ? (
-                              <div>
-                                <div className="text-[10px] font-black truncate leading-tight">
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-semibold truncate leading-tight text-ink">
                                   {p.name}
                                 </div>
-                                <div className="text-[8px] font-bold text-blue-700 truncate">
+                                <div className="text-[10px] font-medium text-brand truncate">
                                   #{p.invoiceNo}
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-[9px] font-bold text-slate-400 text-center py-1">
+                              <div className="text-[10px] font-medium text-ink-muted text-center py-0.5">
                                 Available
                               </div>
                             )}
@@ -277,7 +271,7 @@ export default function SeatLayoutModal({
             </div>
 
             {/* Rear */}
-            <div className="bg-slate-100 rounded-xl py-1 mt-3 text-center text-[9px] font-black text-slate-400 uppercase tracking-wider">
+            <div className="bg-surface-muted rounded-[var(--yh-radius-md)] py-1 mt-3 text-center text-[10px] font-semibold text-ink-muted uppercase tracking-wider">
               Rear of Bus / Emergency Exit
             </div>
           </div>
@@ -286,144 +280,137 @@ export default function SeatLayoutModal({
     )
   }
 
+  const modalFooter = (
+    <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="text-xs text-ink-muted">
+        <strong>Conductor Instructions:</strong> Printed PDF generates separate dedicated pages for Upper and Lower decks with check-in checkboxes.
+      </div>
+      <div className="flex items-center gap-2 justify-end shrink-0">
+        <Button type="button" variant="outline" size="sm" onClick={handleExportCsv}>
+          <Download size={14} className="mr-1.5" />
+          Export CSV
+        </Button>
+        <Button type="button" variant="primary" size="sm" onClick={() => handlePrint(deckFilter)}>
+          <Printer size={14} className="mr-1.5" />
+          Print / PDF
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden my-auto">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/80">
-          <div className="flex items-center gap-3">
-            <div
-              className="p-3 rounded-2xl text-white shadow-md shadow-indigo-100"
-              style={{ backgroundColor: accentColor }}
-            >
-              <Bus size={22} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-black text-slate-900 leading-tight">
-                  Passenger Seat Layout & Boarding Chart
-                </h3>
-                <span className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  {manifestData.layoutType} Sleeper
-                </span>
-              </div>
-              <p className="text-xs font-bold text-slate-500 mt-0.5">
-                {tourName} • 📅 {journeyDateFormatted} • 🚌 {busNumber}
-              </p>
-            </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="xl"
+      className="max-w-5xl max-h-[92vh]"
+      title={
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand-soft text-brand shrink-0">
+            <Bus size={20} />
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition-all"
-            >
-              <Download size={14} />
-              <span>Export CSV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handlePrint(deckFilter)}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-100 flex items-center gap-1.5 transition-all"
-            >
-              <Printer size={14} />
-              <span>Print / Download PDF</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors ml-1"
-            >
-              <X size={20} />
-            </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-base sm:text-lg font-bold text-ink">
+                Passenger Seat Layout & Boarding Chart
+              </span>
+              <Badge variant="brand" size="sm">
+                {manifestData.layoutType} Sleeper
+              </Badge>
+            </div>
+            <p className="text-xs text-ink-muted font-normal mt-0.5 truncate">
+              {tourName} • 📅 {journeyDateFormatted} • 🚌 {busNumber}
+            </p>
           </div>
         </div>
-
+      }
+      footer={modalFooter}
+    >
+      <div className="space-y-5">
         {/* Controls & Metrics Strip */}
-        <div className="px-6 py-3 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+        <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-lg)] border border-border-subtle flex flex-wrap items-center justify-between gap-3">
           {/* Deck Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <div role="tablist" aria-label="Deck view selector" className="flex items-center bg-surface p-1 rounded-[var(--yh-radius-md)] border border-border-subtle">
             <button
               type="button"
+              role="tab"
+              aria-selected={deckFilter === "both"}
               onClick={() => setDeckFilter("both")}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
                 deckFilter === "both"
-                  ? "bg-white text-indigo-600 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
+                  ? "bg-brand text-brand-fg shadow-xs"
+                  : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+              )}
             >
               <Layers size={13} />
               Both Decks
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={deckFilter === "lower"}
               onClick={() => setDeckFilter("lower")}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
                 deckFilter === "lower"
-                  ? "bg-white text-emerald-600 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
+                  ? "bg-brand text-brand-fg shadow-xs"
+                  : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+              )}
             >
               Lower Deck ({manifestData.lowerDeck.bookedCount}/{manifestData.lowerDeck.capacity})
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={deckFilter === "upper"}
               onClick={() => setDeckFilter("upper")}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-black transition-all ${
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
                 deckFilter === "upper"
-                  ? "bg-white text-indigo-600 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
+                  ? "bg-brand text-brand-fg shadow-xs"
+                  : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+              )}
             >
               Upper Deck ({manifestData.upperDeck.bookedCount}/{manifestData.upperDeck.capacity})
             </button>
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-              <span className="font-bold text-slate-500">Booked:</span>
-              <span className="font-black text-slate-900">
-                {manifestData.totalBooked} Berths
-              </span>
+          <div className="flex items-center gap-3 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
+              <span className="text-ink-muted">Booked:</span>
+              <span className="font-semibold text-ink tabular-nums">{manifestData.totalBooked} Berths</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-              <span className="font-bold text-slate-500">Available:</span>
-              <span className="font-black text-slate-900">
-                {manifestData.totalAvailable} Berths
-              </span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-border-strong shrink-0" />
+              <span className="text-ink-muted">Available:</span>
+              <span className="font-semibold text-ink tabular-nums">{manifestData.totalAvailable} Berths</span>
             </div>
-            <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-xl font-black">
+            <Badge variant="brand" size="sm">
               {manifestData.occupancyPercentage}% Occupancy
-            </div>
+            </Badge>
           </div>
         </div>
 
         {/* Content Body: Decks Layout */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {(deckFilter === "both" || deckFilter === "lower") &&
-              renderDeckPreview(manifestData.lowerDeck)}
-            {(deckFilter === "both" || deckFilter === "upper") &&
-              renderDeckPreview(manifestData.upperDeck)}
-          </div>
-
-          {/* Info note */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 flex items-center justify-between">
-            <div>
-              <strong>Conductor Instructions:</strong> The downloaded/printed PDF generates separate dedicated pages for Upper and Lower decks with conductor checklist checkboxes for fast passenger boarding.
-            </div>
-            <div className="text-[11px] font-bold text-slate-400">
-              {companyName} {companyHQ ? `• ${companyHQ}` : ""} {companyPhone ? `• ${companyPhone}` : ""}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {(deckFilter === "both" || deckFilter === "lower") &&
+            renderDeckPreview(manifestData.lowerDeck)}
+          {(deckFilter === "both" || deckFilter === "upper") &&
+            renderDeckPreview(manifestData.upperDeck)}
         </div>
+
+        {companyHQ || companyPhone ? (
+          <div className="text-[11px] text-ink-muted text-right">
+            {companyName} {companyHQ ? `• ${companyHQ}` : ""} {companyPhone ? `• ${companyPhone}` : ""}
+          </div>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   )
 }

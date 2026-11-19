@@ -10,6 +10,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher"
  * prominent New Booking CTA, gated ThemeSwitcher, and accessible user menu.
  * @param {{
  *   pageTitle: string,
+ *   hideTitleOnDesktop?: boolean,
  *   searchTerm: string,
  *   setSearchTerm: (val: string) => void,
  *   showSearch?: boolean,
@@ -23,6 +24,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher"
  */
 export function AppTopBar({
   pageTitle,
+  hideTitleOnDesktop = false,
   searchTerm,
   setSearchTerm,
   showSearch = true,
@@ -71,7 +73,12 @@ export function AppTopBar({
               <Menu size={20} />
             </IconButton>
           </div>
-          <h1 className="text-base sm:text-lg font-bold text-ink tracking-tight truncate">
+          <h1
+            className={cn(
+              "text-base sm:text-lg font-bold text-ink tracking-tight truncate",
+              hideTitleOnDesktop && "lg:hidden",
+            )}
+          >
             {pageTitle}
           </h1>
         </div>

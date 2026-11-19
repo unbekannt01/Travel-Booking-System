@@ -39,6 +39,7 @@ import {
 } from "../utils/bookingFormHelpers"
 import {
   Card,
+  Modal,
   Button,
   IconButton,
   Input,
@@ -1980,109 +1981,112 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
         </div>
       )}
 
-      {/* ── Existing Auto-Assign Seats Modal (unchanged, restyled in Part 3.4) ── */}
-      {showAutoAssignModal && (
-        <div className="fixed inset-0 z-99999 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl">
-                  <Wand2 size={20} />
-                </div>
-                <div>
-                  <h4 className="text-lg font-black text-slate-900">Auto-assign Seats</h4>
-                  <p className="text-xs font-bold text-slate-400">
-                    Proposing {tempAssignments.length} nearby seats
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAutoAssignModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
-              >
-                <X size={18} />
-              </button>
+      {/* ── Accessible Auto-Assign Seats Modal (Part 3.4) ── */}
+      <Modal
+        isOpen={showAutoAssignModal}
+        onClose={() => setShowAutoAssignModal(false)}
+        size="md"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand-soft text-brand shrink-0">
+              <Wand2 size={18} />
             </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                Deck Preference
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "any", label: "Any Deck" },
-                  { id: "lower", label: "Lower Deck" },
-                  { id: "upper", label: "Upper Deck" },
-                ].map((deck) => (
-                  <button
-                    key={deck.id}
-                    type="button"
-                    onClick={() => handleDeckPreferenceChange(deck.id)}
-                    className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      deckPreference === deck.id
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {deck.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-              {tempAssignments.map((assign, idx) => (
-                <div
-                  key={assign.passengerIndex}
-                  className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-slate-900 truncate">
-                      {assign.passengerName}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold">
-                      Passenger #{assign.passengerIndex + 1}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-400">Assigned:</span>
-                    <input
-                      type="text"
-                      value={assign.proposedSeatId}
-                      onChange={(e) => {
-                        const val = e.target.value.trim()
-                        const updated = [...tempAssignments]
-                        updated[idx].proposedSeatId = val
-                        setTempAssignments(updated)
-                      }}
-                      className="w-28 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-indigo-700 text-center uppercase"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowAutoAssignModal(false)}
-                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyAutoAssign}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-100 active:scale-95 transition-all cursor-pointer"
-              >
-                Apply Assignments
-              </button>
+            <div>
+              <span className="text-base font-bold text-ink">Auto-assign Seats</span>
+              <p className="text-xs text-ink-muted font-normal mt-0.5">
+                Proposing {tempAssignments.length} nearby seats
+              </p>
             </div>
           </div>
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAutoAssignModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleApplyAutoAssign}
+            >
+              Apply Assignments
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-ink-secondary">
+              Deck Preference
+            </label>
+            <div role="group" aria-label="Deck preference" className="grid grid-cols-3 gap-2">
+              {[
+                { id: "any", label: "Any Deck" },
+                { id: "lower", label: "Lower Deck" },
+                { id: "upper", label: "Upper Deck" },
+              ].map((deck) => (
+                <button
+                  key={deck.id}
+                  type="button"
+                  aria-pressed={deckPreference === deck.id}
+                  onClick={() => handleDeckPreferenceChange(deck.id)}
+                  className={cn(
+                    "py-2 px-3 rounded-[var(--yh-radius-md)] text-xs font-semibold border transition-colors cursor-pointer min-h-10",
+                    deckPreference === deck.id
+                      ? "bg-brand text-brand-fg border-brand"
+                      : "bg-surface text-ink-secondary border-border-subtle hover:bg-surface-hover hover:text-ink",
+                    FOCUS_RING_CLASS,
+                  )}
+                >
+                  {deck.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            {tempAssignments.map((assign, idx) => (
+              <div
+                key={assign.passengerIndex}
+                className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-md)] border border-border-subtle flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-ink truncate">
+                    {assign.passengerName}
+                  </p>
+                  <p className="text-[11px] text-ink-muted">
+                    Passenger #{assign.passengerIndex + 1}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-ink-muted font-medium">Assigned:</span>
+                  <input
+                    type="text"
+                    value={assign.proposedSeatId}
+                    onChange={(e) => {
+                      const val = e.target.value.trim()
+                      const updated = [...tempAssignments]
+                      updated[idx].proposedSeatId = val
+                      setTempAssignments(updated)
+                    }}
+                    className={cn(
+                      "w-28 px-2.5 py-1.5 bg-surface border border-border-strong rounded-[var(--yh-radius-sm)] text-xs font-mono font-bold text-brand text-center uppercase tabular-nums",
+                      FOCUS_RING_CLASS,
+                    )}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      </Modal>
     </form>
   )
 }

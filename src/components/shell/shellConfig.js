@@ -39,7 +39,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Journeys",
     description: "Coordinate departures, boarding check-ins, and coach manifests.",
     iconName: "MapPin",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: true,
   },
   {

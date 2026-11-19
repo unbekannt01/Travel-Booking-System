@@ -248,4 +248,23 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Structured into 4 accessible steps (**1. Tour & Date + Primary Contact**, **2. Passengers & Seats**, **3. Pricing & Payment**, **4. Review**) with `aria-current="step"`, `aria-live="polite"` step announcements, inline `<Field>` errors, per-step error summary, and focus movement to the first invalid field.
   - Full cross-step validation runs before save (using untouched `calculatePricing` in `src/utils/pricing.js` and `isValidIndianPhone`/`isValidAadhaar` in `src/utils/validators.js`). Review step masks passenger Aadhaar via `maskAadhaar()`.
   - `Dashboard.jsx`'s `handleSaveBooking` returns a structured `{ ok, booking | error, status, data }` result so `BookingForm` surfaces authoritative server HTTP 400/409 errors (seat conflicts, total mismatches, advance bounds) in a top-of-form `role="alert"` banner while preserving all entered user data.
+
+---
+
+## 11. Operational Modals & Journeys Screen (Part 3.4)
+
+- **Operational Modals Migration to `Modal` Primitive**:
+  - `src/components/common/SeatLayoutModal.jsx`: Fully migrated from hardcoded `fixed inset-0` overlays to the accessible `Modal` primitive with focus trapping, Escape dismissal, and body scroll lock. Tokenized deck navigation (Lower/Upper tabs), WCAG AA color-coded berth legend, and human-readable berth labels via `formatSeatLabel`. All print/export functions (`printSeatLayout`, CSV) remain untouched with strict output escaping.
+  - `src/utils/seatFormatting.js` (re-exported in `src/utils/formatters.js`): Pure, testable formatting utilities (`formatSeatLabel`, `formatSeatList`). Parses sleeper berth codes (`"lower-L1-1"` → `"Lower L1-1"`, `"upper-R2-2"` → `"Upper R2-2"`) with case normalization and robust fallback safety; formats multi-seat lists with overflow truncation (`"Lower L1-1, Upper R2-2 +2"`).
+  - `BookingForm.jsx` Auto-Assign Modal: Rebuilt on `Modal` with deck preference radios and accessible capacity checks.
+  - `src/components/PaymentTracker.jsx` Modals: Record Payment and Payment Ledger migrated to `Modal`, `Table`, `Field`, `Input`, `Select`, and `StatusPill`. Void payment dialog migrated to a dedicated destructive confirmation prompt on `Modal`.
+  - `src/components/dashboard/CancelBookingModal.jsx`: Rebuilt on `Modal` with real-time refund calculation (`Math.max(0, totalPaid - fee)`), bounds checking, preset buttons (₹0 fee for full refund, Retain All for ₹0 refund), clear seat release warning, and top `role="alert"` banner for server errors.
+  - `src/components/dashboard/InvoicesModal.jsx`: Rebuilt on `Modal` (`size="xl"`), sticky toolbar featuring `SearchInput`, tour filter `Select`, and status filter chips (`All`, `Paid`, `Pending`, `Cancelled`) with `aria-pressed`. Desktop view (`md+`) renders accessible `Table` with invoice number, status pill, traveler name/phone, tour badge, journey date, passenger count, total amount (`formatINR`), and action icon buttons. Mobile view (`<md`) renders responsive stacked cards with `min-h-11` touch targets. Filter misses render `EmptyState`.
+- **Journeys Screen (`src/components/JourneyManager.jsx`)**:
+  - Integrated into the AppShell heading hierarchy with `journey.hasOwnHeading: false` in `src/components/shell/shellConfig.js`, enabling the shell `<PageHeader>` to render a single `Journeys` `<h1>`.
+  - Departure cards tokenized with accessible `role="progressbar"` (`aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-label`), departure status badges, and bus occupancy rates.
+  - Boarding checklist with mobile card layout and desktop table layout, passenger check-in toggles, seat swap modal on `Modal`, and quick payment collection on `Modal`. All print/export manifest documents remain untouched with strict output escaping.
+- **App Shell Header Polish (`src/components/shell/AppTopBar.jsx` & `AppShell.jsx`)**:
+  - Added `hideTitleOnDesktop` prop to `AppTopBar.jsx` bound to `!pageMeta.hasOwnHeading`. On `lg+` viewports when `PageHeader` renders the page title in `<main>`, the duplicate top-bar title is hidden via `lg:hidden`, while remaining visible on mobile viewports (`<lg`).
+
   - Sticky live summary column on `lg+` and collapsible summary bar docked above the sticky step footer on `<lg`. Existing coach seat picker and auto-assign modals remain functionally intact for Part 3.4 restyling.

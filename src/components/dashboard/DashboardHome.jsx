@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 import PaymentTracker from "../PaymentTracker"
 import { formatDisplayDate } from "../../utils/date"
-import { formatINR } from "../../utils/formatters"
+import { formatINR, formatSeatLabel } from "../../utils/formatters"
 import { cn } from "../../utils/cn"
 import {
   computeOverviewMetrics,
@@ -654,7 +654,7 @@ export default function DashboardHome({
                             </span>
                             <span className="text-xs text-ink-muted block truncate max-w-[130px]">
                               {assignedSeats.length > 0
-                                ? assignedSeats.slice(0, 3).join(", ") +
+                                ? assignedSeats.map((s) => formatSeatLabel(s)).slice(0, 3).join(", ") +
                                   (assignedSeats.length > 3 ? ` +${assignedSeats.length - 3}` : "")
                                 : "Unassigned"}
                             </span>
@@ -796,7 +796,7 @@ export default function DashboardHome({
                         <span>• {formatDisplayDate(b.journeyDate)}</span>
                         <span className="tabular-nums">
                           • {paxCount} {paxCount === 1 ? "PAX" : "PAX"}
-                          {assignedSeats.length > 0 ? ` (${assignedSeats.length} seated)` : ""}
+                          {assignedSeats.length > 0 ? ` (${assignedSeats.map((s) => formatSeatLabel(s)).slice(0, 2).join(", ")}${assignedSeats.length > 2 ? ` +${assignedSeats.length - 2}` : ""})` : ""}
                         </span>
                       </div>
 

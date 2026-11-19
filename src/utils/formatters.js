@@ -50,3 +50,5 @@ export function formatINR(amount, options) {
   const formatted = abs.toLocaleString("en-IN", formatOptions)
   return isNegative ? `-₹${formatted}` : `₹${formatted}`
 }
+
+export { formatSeatLabel, formatSeatList } from "./seatFormatting.js"

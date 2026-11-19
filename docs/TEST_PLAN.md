@@ -17,10 +17,11 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (153 Tests / 21 Suites)
+## 2. Test Suites & Coverage Map (171 Tests / 22 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === true`, `tours.hasOwnHeading === true`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
 | **`tests/aadhaar-edit-roundtrip.test.js`** | 7 | **Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)**: Frontend validator detection of masked Aadhaar and `[UNCHANGED]` sentinel token; `isValidAadhaar` with `{ allowMasked: true }`; backend `isMaskedOrUnchangedAadhaar` verification; `BookingForm` Step 1 validation with masked Aadhaar; backend reconciliation preserving existing AES-256-GCM ciphertext on edit; re-encryption of new 12-digit Aadhaar when replaced; explicit clearance of Aadhaar; non-inheritance of Aadhaar by new passengers; guarantees raw masked strings are never persisted. |
 | **`tests/overview-and-booking-form.test.js`** | 10 | **Overview & Stepped Booking Form (Part 3.3)**: Bus capacity (`2x1`=36, `2x2`=40) and clamped occupancy %; `getBookingPaymentStatus` (`Cancelled`/`Paid`/`Partial`/`Pending`); KPI & Today's Operations metrics + 7-day departure grouping; recent booking status & search filtering; payment urgency classification (`Overdue`, `Due on boarding`, `Due soon`, `Scheduled`); 4-step booking validation (Steps 0–2 & cross-step `validateAllBookingSteps`, duplicate/conflicting seats, Aadhaar, advance bounds), step click navigation rules, sticky summary composition via `calculatePricing`, server 400/409 error formatting, and `hasOwnHeading: false` shell verification. |
 | **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === false`; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
@@ -100,6 +101,30 @@ Verify the following manually in desktop & mobile viewports (`360px`, `768px`, `
 - [ ] **Every Row Action**: Test View Invoice (`Eye`), Edit (`Edit3`), Cancel (`Ban`), and Delete + Undo (`Trash2`) from Recent Bookings, plus `View All Invoices`, `Open Manifests`, `Filter` pending dues, and `Assign Seats`.
 - [ ] **Empty State**: With 0 bookings (or a non-matching filter), verify `EmptyState` renders without overflow and `"Create your first booking"` opens the form.
 - [ ] **Mobile (`360px`) & Keyboard-Only Flow**: Confirm Recent Bookings switches to stacked cards with zero horizontal page scroll, filter chips wrap cleanly, sticky mobile summary expands/collapses above the Back/Next/Save footer without overlapping `MobileBottomNav`, and the entire 4-step form can be completed with keyboard alone.
+
+---
+
+## 3.3 Operational Modals & Journeys Screen Verification Checklist (Part 3.4)
+
+Verify the following manually across desktop & mobile viewports (`360px`, `768px`, `1024px`, `1440px`):
+
+- [ ] **SeatLayoutModal**:
+  - Open coach seat modal from Overview recent bookings or Journeys screen; confirm `Modal` backdrop blur, focus trap, Escape key closes modal.
+  - Check lower/upper deck tabs, human-readable seat labels (`Lower L1-1`, `Upper R2-2`), occupancy status indicators, print/export buttons functionality.
+- [ ] **Journeys Screen (`JourneyManager`)**:
+  - Confirm single `Journeys` page heading rendered by `PageHeader` (no double heading in top bar on `lg+`).
+  - Verify departure cards with accessible `role="progressbar"`, departure status tags, and bus occupancy rates.
+  - Verify boarding checklist on mobile (`<md`) and desktop (`md+`), check-in toggles, seat swap modal, quick collection modal, and manifest print/export untouched.
+- [ ] **Record Payment & Payment Ledger (`PaymentTracker`)**:
+  - Open Record Payment modal from Overview; verify `Modal` dialog, payment mode select, amount input with bounds checking, receipt generator.
+  - Open Payment Ledger; verify payment history table, void transaction modal with destructive prompt confirmation.
+- [ ] **Cancel Booking (`CancelBookingModal`)**:
+  - Open Cancel Booking dialog; verify `Modal` overlay, preset buttons (₹0 fee for full refund, Retain All for 0 refund), real-time refund calculation (`formatINR`), seat release warning, and `role="alert"` server error presentation.
+- [ ] **All Booking Invoices (`InvoicesModal`)**:
+  - Open Invoices modal; confirm `Modal` (`size="xl"`), sticky search bar and status filter chips (`All`, `Paid`, `Pending`, `Cancelled`) with `aria-pressed`.
+  - Desktop view (`md+`): accessible `Table` with invoice number, status pill, traveler name/phone, tour badge, journey date, passenger count, total amount, and action icon buttons.
+  - Mobile view (`<md`): stacked responsive cards with large touch targets (`min-h-11`).
+  - Empty state: verify `EmptyState` when search or filter matches 0 invoices.
 
 ---
 

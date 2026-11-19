@@ -2,7 +2,6 @@ import { useState, useMemo } from "react"
 import {
   MapPin,
   Check,
-  Download,
   MessageCircle,
   Mail,
   Bus,
@@ -11,21 +10,40 @@ import {
   Clock,
   Printer,
   ChevronRight,
-  CreditCard,
   CheckCheck,
   XCircle,
   ArrowLeftRight,
   Banknote,
-  X,
   Ticket,
   Layers,
+  ChevronDown,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
+import { formatINR, formatSeatLabel } from "../utils/formatters"
 import BoardingPassModal from "./common/BoardingPassModal"
 import SeatLayoutModal from "./common/SeatLayoutModal"
+import {
+  Card,
+  Button,
+  Modal,
+  Badge,
+  StatusPill,
+  StatCard,
+  Field,
+  Input,
+  Select,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  FOCUS_RING_CLASS,
+} from "./ui"
+import { cn } from "../utils/cn"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
@@ -49,7 +67,7 @@ const generateAllSeats = (busType) => {
   return seats
 }
 
-export default function JourneyManager({ bookings, onUpdateBooking, user }) {
+export default function JourneyManager({ bookings = [], onUpdateBooking, user }) {
   const { toast } = useToast()
   const [boardingPassTarget, setBoardingPassTarget] = useState(null)
   const todayStr = useMemo(() => toDateInputValue(new Date()), [])
@@ -73,20 +91,21 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
 
-  // Phase 3: Seat swap state
+  // Seat swap modal state
   const [swappingSeat, setSwappingSeat] = useState(null) // { bookingId, passengerId, passengerName, currentSeatId }
+  const [selectedNewSeat, setSelectedNewSeat] = useState("")
   const [swapLoading, setSwapLoading] = useState(false)
 
-  // Phase 3: Quick payment state
+  // Quick payment state
   const [quickPayBooking, setQuickPayBooking] = useState(null)
   const [quickPayAmount, setQuickPayAmount] = useState("")
   const [quickPayMode, setQuickPayMode] = useState("Cash")
   const [quickPayLoading, setQuickPayLoading] = useState(false)
 
-  // Phase 3: Batch check-in loading
+  // Batch check-in loading
   const [batchLoading, setBatchLoading] = useState(null) // bookingId currently batch-processing
 
-  // Phase 6: Passenger Seat Layout modal state
+  // Passenger Seat Layout modal state
   const [showSeatLayoutModal, setShowSeatLayoutModal] = useState(false)
   const [activeLayoutDeparture, setActiveLayoutDeparture] = useState(null)
 
@@ -139,16 +158,16 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         const balanceDue = Math.max(0, dep.totalAmount - dep.advanceReceived)
 
         let statusTag = "Upcoming"
-        let statusStyle = "bg-indigo-100 text-indigo-700"
+        let statusBadgeVariant = "brand"
         if (dep.dateStr === todayStr) {
           statusTag = "TODAY"
-          statusStyle = "bg-emerald-500 text-white animate-pulse"
+          statusBadgeVariant = "success"
         } else if (dep.dateStr === tomorrowStr) {
           statusTag = "TOMORROW"
-          statusStyle = "bg-amber-500 text-white"
+          statusBadgeVariant = "warning"
         } else if (dep.dateStr < todayStr) {
           statusTag = "PAST"
-          statusStyle = "bg-slate-200 text-slate-600"
+          statusBadgeVariant = "neutral"
         }
 
         return {
@@ -157,7 +176,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
           occupancyPct,
           balanceDue,
           statusTag,
-          statusStyle,
+          statusBadgeVariant,
         }
       })
       .sort((a, b) => new Date(a.journeyDate) - new Date(b.journeyDate))
@@ -217,7 +236,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
   const totalPassengers = journeyBookings.reduce((sum, b) => sum + (b.passengers?.length || 0), 0)
   const totalCheckedIn = journeyBookings.reduce(
     (sum, b) => sum + (b.passengers?.filter((p) => p.checkedIn)?.length || 0),
-    0
+    0,
   )
 
   const activeDepartureObj = useMemo(() => {
@@ -234,14 +253,14 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         onUpdateBooking(updatedBooking)
       }
       toast.success(
-        `${passenger.name} marked as ${!passenger.checkedIn ? "Checked In" : "Pending"}`
+        `${passenger.name} marked as ${!passenger.checkedIn ? "Checked In" : "Pending"}`,
       )
     } catch (err) {
       toast.error(err.message || "Failed to update check-in status")
     }
   }
 
-  // Phase 3: Batch check-in / unboard all
+  // Batch check-in / unboard all
   const handleBatchCheckin = async (booking, checkedIn) => {
     const bookingId = booking._id || booking.id
     setBatchLoading(bookingId)
@@ -251,7 +270,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
       toast.success(
         checkedIn
           ? `All ${booking.passengers.length} passengers boarded`
-          : `All passengers unboarded for ${booking.invoiceNo}`
+          : `All passengers unboarded for ${booking.invoiceNo}`,
       )
     } catch (err) {
       toast.error(err.message || "Failed to batch update check-in")
@@ -260,19 +279,20 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
     }
   }
 
-  // Phase 3: Seat swap handler
+  // Seat swap handler
   const handleSeatSwap = async (newSeatId) => {
-    if (!swappingSeat) return
+    if (!swappingSeat || !newSeatId) return
     setSwapLoading(true)
     try {
       const updatedBooking = await swapSeat(
         swappingSeat.bookingId,
         swappingSeat.passengerId,
-        newSeatId
+        newSeatId,
       )
       if (onUpdateBooking) onUpdateBooking(updatedBooking)
-      toast.success(`${swappingSeat.passengerName} moved to seat ${newSeatId}`)
+      toast.success(`${swappingSeat.passengerName} moved to seat ${formatSeatLabel(newSeatId)}`)
       setSwappingSeat(null)
+      setSelectedNewSeat("")
     } catch (err) {
       toast.error(err.message || "Failed to reassign seat")
     } finally {
@@ -280,7 +300,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
     }
   }
 
-  // Phase 3: Available seats for swap (all seats minus occupied ones on this departure)
+  // Available seats for swap (all seats minus occupied ones on this departure)
   const availableSeatsForSwap = useMemo(() => {
     if (!swappingSeat || !activeDepartureObj) return []
     const busType = activeDepartureObj.busType || "2x1 Sleeper Luxury"
@@ -291,12 +311,12 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         if (p.seatId) occupied.add(p.seatId)
       }
     }
-    // Remove the current seat from "occupied" (the passenger's own seat is available to stay)
+    // Remove the current seat from occupied so current seat can be re-selected
     if (swappingSeat.currentSeatId) occupied.delete(swappingSeat.currentSeatId)
     return allSeats.filter((s) => !occupied.has(s))
   }, [swappingSeat, activeDepartureObj])
 
-  // Phase 3: Quick payment handler
+  // Quick payment handler
   const handleQuickPay = async () => {
     if (!quickPayBooking) return
     const num = Number(quickPayAmount)
@@ -313,7 +333,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         paymentNotes: "Collected at boarding",
       })
       if (onUpdateBooking) onUpdateBooking(updated)
-      toast.success(`₹${num.toLocaleString()} collected from ${quickPayBooking.contactName}`)
+      toast.success(`${formatINR(num, 0)} collected from ${quickPayBooking.contactName}`)
       setQuickPayBooking(null)
       setQuickPayAmount("")
       setQuickPayMode("Cash")
@@ -327,7 +347,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
   const handleSendWhatsApp = (booking) => {
     const passengers = booking.passengers.map((p) => `${p.name} (${p.city})`).join(", ")
     const message = `Hi ${booking.contactName},\n\nYour journey details:\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt. Thank you!`
-    const phoneNumber = booking.contactPhone.replace(/\D/g, "")
+    const phoneNumber = (booking.contactPhone || "").replace(/\D/g, "")
     const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
   }
@@ -350,7 +370,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
 
   const getSortedSeatRows = (passengers) => {
     const sorted = [...passengers].sort((a, b) =>
-      (a.seatId || "").localeCompare(b.seatId || "", undefined, { numeric: true })
+      (a.seatId || "").localeCompare(b.seatId || "", undefined, { numeric: true }),
     )
 
     const rows = []
@@ -365,52 +385,99 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Top Header & View Mode Switcher */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Departures & Journey Coordination</h2>
-          <p className="text-slate-500 font-bold text-sm">
-            Organize trips by coach departures, monitor bus occupancy, and manage boarding manifests.
-          </p>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 no-print">
+    <div className="space-y-6">
+      {/* View Switcher Tabs & Print Header (no-print) */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
+        <div role="tablist" aria-label="Journey view mode" className="flex bg-surface-muted p-1 rounded-[var(--yh-radius-lg)] border border-border-subtle">
           <button
             type="button"
+            role="tab"
+            aria-selected={viewMode === "departures"}
             onClick={() => {
               setViewMode("departures")
               setSelectedDepartureKey(null)
             }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all ${
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-10",
               viewMode === "departures"
-                ? "bg-white text-indigo-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
+                ? "bg-surface text-brand font-bold shadow-xs"
+                : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+              FOCUS_RING_CLASS,
+            )}
           >
             <Bus size={15} />
             Coaches & Departures ({departures.length})
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={viewMode === "manifest"}
             onClick={() => setViewMode("manifest")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-black transition-all ${
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-10",
               viewMode === "manifest"
-                ? "bg-white text-indigo-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
+                ? "bg-surface text-brand font-bold shadow-xs"
+                : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+              FOCUS_RING_CLASS,
+            )}
           >
             <Users size={15} />
             Boarding Manifest
           </button>
         </div>
+
+        {/* Print / Export Action Menu */}
+        <div className="relative self-end sm:self-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExportOptions(!showExportOptions)}
+            aria-expanded={showExportOptions}
+            aria-haspopup="true"
+          >
+            <Printer size={14} className="mr-1.5" />
+            Print Manifest
+            <ChevronDown size={14} className="ml-1 opacity-70" />
+          </Button>
+          {showExportOptions && (
+            <div className="absolute right-0 top-full mt-1.5 w-60 rounded-[var(--yh-radius-lg)] bg-surface-elevated border border-border-subtle shadow-[var(--yh-shadow-overlay)] z-[var(--yh-z-dropdown)] overflow-hidden py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExportOptions(false)
+                  setActiveLayoutDeparture(activeDepartureObj || (departures.length > 0 ? departures[0] : null))
+                  setShowSeatLayoutModal(true)
+                }}
+                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-brand hover:bg-brand-soft/50 flex items-center gap-2 border-b border-border-subtle transition-colors cursor-pointer"
+              >
+                <Layers size={14} />
+                <span>Seat Layout Chart (PDF)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrintSeatLayout(true)}
+                className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                Print Manifest (With Aadhaar)
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrintSeatLayout(false)}
+                className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                Print Manifest (Without Aadhaar)
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Filter Bar (Visible in Departures and Unscoped Manifest) */}
-      <div className="space-y-4 no-print">
+      {/* Filter Bar (no-print) */}
+      <Card elevation="sm" padding="md" className="space-y-4 no-print">
+        {/* Time Horizon Chips */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-400 mr-1">Time Horizon:</span>
+          <span className="text-xs font-semibold text-ink-muted mr-1">Time Horizon:</span>
           {[
             { id: "all", label: "All Departures" },
             { id: "today", label: "Today" },
@@ -422,575 +489,600 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
             <button
               key={mode.id}
               type="button"
+              aria-pressed={dateFilterMode === mode.id}
               onClick={() => {
                 setDateFilterMode(mode.id)
                 setSelectedDepartureKey(null)
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              className={cn(
+                "px-3.5 py-1.5 rounded-[var(--yh-radius-md)] text-xs font-semibold border transition-colors cursor-pointer min-h-9",
                 dateFilterMode === mode.id
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
+                  ? "bg-brand text-brand-fg border-brand"
+                  : "bg-surface text-ink-secondary border-border-subtle hover:bg-surface-hover hover:text-ink",
+                FOCUS_RING_CLASS,
+              )}
             >
               {mode.label}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Filter Tour</label>
-            <select
-              value={selectedTour}
-              onChange={(e) => setSelectedTour(e.target.value)}
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-            >
-              <option value="all">All Tours</option>
-              {uniqueTours.map((tour) => (
-                <option key={tour} value={tour}>
-                  {tour}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Or Specific Date</label>
-            <input
-              type="date"
-              value={customDate}
-              onChange={(e) => {
-                setCustomDate(e.target.value)
-                setDateFilterMode("custom")
-                setSelectedDepartureKey(null)
-              }}
-              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-black uppercase tracking-widest text-slate-400">Print / Export</label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowExportOptions(!showExportOptions)}
-                className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
+        {/* Sub-Filters: Tour & Specific Date */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t border-border-subtle">
+          <Field id="journey-tour-filter" label="Filter Tour">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={selectedTour}
+                onChange={(e) => setSelectedTour(e.target.value)}
               >
-                <Printer size={14} /> Print Coach Manifest
-              </button>
-              {showExportOptions && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-20">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowExportOptions(false)
-                      setActiveLayoutDeparture(activeDepartureObj || (departures.length > 0 ? departures[0] : null))
-                      setShowSeatLayoutModal(true)
-                    }}
-                    className="w-full px-4 py-2.5 text-left hover:bg-indigo-50 font-black text-xs text-indigo-700 flex items-center gap-2 border-b border-slate-100"
-                  >
-                    <Layers size={14} className="text-indigo-600" />
-                    <span>Seat Layout Chart (PDF)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePrintSeatLayout(true)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-xs text-slate-700"
-                  >
-                    Print Manifest (With Aadhaar)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePrintSeatLayout(false)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-slate-50 font-bold text-xs text-slate-700"
-                  >
-                    Print Manifest (Without Aadhaar)
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+                <option value="all">All Tours</option>
+                {uniqueTours.map((tour) => (
+                  <option key={tour} value={tour}>
+                    {tour}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
+          <Field id="journey-date-filter" label="Or Specific Date">
+            {({ id }) => (
+              <Input
+                id={id}
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  setCustomDate(e.target.value)
+                  setDateFilterMode("custom")
+                  setSelectedDepartureKey(null)
+                }}
+              />
+            )}
+          </Field>
         </div>
-      </div>
+      </Card>
 
       {/* ────────────────────────────────────────────────────────── */}
-      {/* MODE 1: DEPARTURES GROUPED CARD LANDING VIEW             */}
+      {/* MODE 1: DEPARTURES GROUPED CARD VIEW                       */}
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "departures" && (
         <div className="space-y-6">
           {filteredDepartures.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-xs">
-              <Bus size={48} className="text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-black text-slate-800 mb-1">No Departures Found</h3>
-              <p className="text-slate-400 font-bold text-xs">
+            <Card elevation="sm" padding="lg" className="text-center py-12">
+              <Bus size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
+              <h3 className="text-base font-bold text-ink mb-1">No Departures Found</h3>
+              <p className="text-xs text-ink-muted">
                 No active bus departures match the selected filters.
               </p>
-            </div>
+            </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredDepartures.map((dep) => {
-                const occupancyColor =
-                  dep.occupancyPct >= 80
-                    ? "bg-emerald-500"
-                    : dep.occupancyPct >= 50
-                      ? "bg-amber-500"
-                      : "bg-indigo-500"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredDepartures.map((dep) => (
+                <Card
+                  key={dep.key}
+                  elevation="sm"
+                  padding="md"
+                  className="flex flex-col justify-between hover:border-border-strong transition-colors"
+                >
+                  <div className="space-y-4">
+                    {/* Top status & date */}
+                    <div className="flex justify-between items-start gap-2">
+                      <Badge variant={dep.statusBadgeVariant} size="sm">
+                        {dep.statusTag}
+                      </Badge>
+                      <span className="text-xs font-semibold text-ink-muted flex items-center gap-1 shrink-0">
+                        <Clock size={12} className="opacity-70" />
+                        {formatDisplayDate(dep.journeyDate)}
+                      </span>
+                    </div>
 
-                return (
-                  <div
-                    key={dep.key}
-                    className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between"
-                  >
+                    {/* Tour title & Coach badge */}
                     <div>
-                      {/* Top status & date */}
-                      <div className="flex justify-between items-start mb-3">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${dep.statusStyle}`}>
-                          {dep.statusTag}
-                        </span>
-                        <div className="text-right">
-                          <span className="text-xs font-black text-slate-800 flex items-center gap-1 justify-end">
-                            <Clock size={12} className="text-slate-400" />
-                            {formatDisplayDate(dep.journeyDate)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Tour title & Coach badge */}
-                      <h3 className="text-xl font-black text-slate-900 leading-tight mb-2">
+                      <h3 className="text-base sm:text-lg font-bold text-ink leading-snug">
                         {dep.tourName}
                       </h3>
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 mb-5">
-                        <Bus size={13} className="text-indigo-600" />
+                      <div className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-ink-secondary">
+                        <Bus size={13} className="text-brand shrink-0" />
                         <span>{dep.busType} ({dep.capacity} Berths)</span>
                       </div>
+                    </div>
 
-                      {/* Coach Occupancy Meter */}
-                      <div className="space-y-1.5 mb-4 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-100">
-                        <div className="flex justify-between text-xs font-black">
-                          <span className="text-slate-500 uppercase tracking-wider text-[10px]">Bus Capacity</span>
-                          <span className="text-slate-900">
-                            {dep.bookedCount} / {dep.capacity} Seats ({dep.occupancyPct}%)
-                          </span>
-                        </div>
-                        <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${occupancyColor} transition-all duration-300`}
-                            style={{ width: `${dep.occupancyPct}%` }}
-                          />
-                        </div>
+                    {/* Coach Capacity Meter with role="progressbar" */}
+                    <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-ink-muted">Bus Capacity</span>
+                        <span className="text-ink tabular-nums">
+                          {dep.bookedCount} / {dep.capacity} Seats ({dep.occupancyPct}%)
+                        </span>
                       </div>
-
-                      {/* Boarding Progress & Financials */}
-                      <div className="grid grid-cols-2 gap-2 text-xs mb-5">
-                        <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Boarded Pax</p>
-                          <p className="text-sm font-black text-emerald-900 mt-0.5">
-                            {dep.checkedInPax} / {dep.totalPax}
-                          </p>
-                        </div>
-                        <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-100">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-amber-700">Pending Due</p>
-                          <p className="text-sm font-black text-amber-900 mt-0.5">
-                            ₹{dep.balanceDue.toLocaleString()}
-                          </p>
-                        </div>
+                      <div
+                        role="progressbar"
+                        aria-valuenow={dep.bookedCount}
+                        aria-valuemin={0}
+                        aria-valuemax={dep.capacity}
+                        aria-label={`Coach capacity: ${dep.bookedCount} of ${dep.capacity} berths booked, ${dep.occupancyPct}%`}
+                        className="w-full h-2.5 bg-surface-muted rounded-full overflow-hidden border border-border-subtle"
+                      >
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all duration-300",
+                            dep.occupancyPct >= 80
+                              ? "bg-success"
+                              : dep.occupancyPct >= 50
+                                ? "bg-accent-warm"
+                                : "bg-brand",
+                          )}
+                          style={{ width: `${dep.occupancyPct}%` }}
+                        />
                       </div>
                     </div>
 
-                    {/* Bottom Actions */}
-                    <div className="pt-4 border-t border-slate-100 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveLayoutDeparture(dep)
-                          setShowSeatLayoutModal(true)
-                        }}
-                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all"
-                        title="Download / Print Passenger Seat Layout"
-                      >
-                        <Layers size={13} className="text-indigo-600" />
-                        <span>Layout</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedDepartureKey(dep.key)
-                          setViewMode("manifest")
-                        }}
-                        className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-100 flex items-center justify-center gap-1.5 transition-all"
-                      >
-                        <span>Open Boarding</span>
-                        <ChevronRight size={14} />
-                      </button>
+                    {/* Boarding Progress & Financials */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-success-soft text-success-text">
+                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Boarded Pax</p>
+                        <p className="text-sm font-bold tabular-nums mt-0.5">
+                          {dep.checkedInPax} / {dep.totalPax}
+                        </p>
+                      </div>
+                      <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-warning-soft text-warning-text">
+                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Pending Due</p>
+                        <p className="text-sm font-bold tabular-nums mt-0.5">
+                          {formatINR(dep.balanceDue, 0)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                )
-              })}
+
+                  {/* Card Actions */}
+                  <div className="pt-4 mt-4 border-t border-border-subtle flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setActiveLayoutDeparture(dep)
+                        setShowSeatLayoutModal(true)
+                      }}
+                      title="Download / Print Passenger Seat Layout"
+                    >
+                      <Layers size={13} className="mr-1 text-brand" />
+                      <span>Layout</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setSelectedDepartureKey(dep.key)
+                        setViewMode("manifest")
+                      }}
+                    >
+                      <span>Open Boarding</span>
+                      <ChevronRight size={14} className="ml-1" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
             </div>
           )}
         </div>
       )}
 
       {/* ────────────────────────────────────────────────────────── */}
-      {/* MODE 2: PASSENGER BOARDING MANIFEST                      */}
+      {/* MODE 2: PASSENGER BOARDING MANIFEST                        */}
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "manifest" && (
         <div className="space-y-6">
           {/* Active Departure Banner (if scoped) */}
           {activeDepartureObj && (
-            <div className="bg-linear-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDepartureKey(null)}
-                  className="flex items-center gap-1 text-xs font-black uppercase tracking-wider text-indigo-300 hover:text-white mb-2 transition-colors"
-                >
-                  <ArrowLeft size={14} /> Back to All Departures
-                </button>
-                <h3 className="text-2xl font-black">{activeDepartureObj.tourName}</h3>
-                <p className="text-xs text-indigo-200 font-bold mt-1">
-                  📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
-                </p>
-              </div>
-              <div className="flex gap-3 flex-wrap items-center">
-                <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] font-black uppercase text-indigo-200">Boarded</p>
-                  <p className="text-xl font-black">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
+            <Card elevation="sm" padding="md" className="bg-brand-soft/50 border border-brand/20">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDepartureKey(null)}
+                    className="mb-2 -ml-2 text-brand hover:text-brand-hover"
+                  >
+                    <ArrowLeft size={14} className="mr-1" /> Back to All Departures
+                  </Button>
+                  <h3 className="text-xl sm:text-2xl font-bold text-ink">{activeDepartureObj.tourName}</h3>
+                  <p className="text-xs text-ink-muted mt-1">
+                    📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
+                  </p>
                 </div>
-                <div className="bg-white/10 px-4 py-2.5 rounded-2xl text-center">
-                  <p className="text-[10px] font-black uppercase text-indigo-200">Occupancy</p>
-                  <p className="text-xl font-black">{activeDepartureObj.occupancyPct}%</p>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
+                    <p className="text-[10px] font-semibold text-ink-muted uppercase">Boarded</p>
+                    <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
+                  </div>
+                  <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
+                    <p className="text-[10px] font-semibold text-ink-muted uppercase">Occupancy</p>
+                    <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.occupancyPct}%</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setActiveLayoutDeparture(activeDepartureObj)
+                      setShowSeatLayoutModal(true)
+                    }}
+                  >
+                    <Layers size={14} className="mr-1.5 text-brand" />
+                    <span>Seat Layout PDF</span>
+                  </Button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveLayoutDeparture(activeDepartureObj)
-                    setShowSeatLayoutModal(true)
-                  }}
-                  className="bg-white text-indigo-900 hover:bg-indigo-50 px-4 py-2.5 rounded-2xl text-center font-black text-xs shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Layers size={15} className="text-indigo-600" />
-                  <span>Seat Layout PDF</span>
-                </button>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Manifest Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Bookings Count</p>
-              <h3 className="text-3xl font-black text-slate-900">{journeyBookings.length}</h3>
-            </div>
-            <div className="bg-white rounded-2xl shadow-xs border border-slate-100 p-6">
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-2">Total Passengers</p>
-              <h3 className="text-3xl font-black text-slate-900">{totalPassengers}</h3>
-            </div>
-            <div className="bg-green-50 rounded-2xl shadow-xs border border-green-200 p-6">
-              <p className="text-green-600 font-bold text-xs uppercase tracking-widest mb-2">Checked In / Boarded</p>
-              <h3 className="text-3xl font-black text-green-600">
-                {totalCheckedIn}/{totalPassengers}
-              </h3>
-              <p className="text-xs text-green-500 font-bold mt-2">
-                {totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete
-              </p>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatCard
+              label="Bookings Count"
+              value={journeyBookings.length}
+              icon={Bus}
+              iconTone="brand"
+            />
+            <StatCard
+              label="Total Passengers"
+              value={totalPassengers}
+              icon={Users}
+              iconTone="accent"
+            />
+            <StatCard
+              label="Checked In / Boarded"
+              value={`${totalCheckedIn}/${totalPassengers}`}
+              subtitle={`${totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete`}
+              icon={Check}
+              iconTone="success"
+            />
           </div>
 
           {/* Bookings & Passenger List */}
           {journeyBookings.length === 0 ? (
-            <div className="bg-white rounded-3xl shadow-xs border border-slate-100 p-12 text-center">
-              <MapPin size={48} className="text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-black text-slate-900 mb-2">No Passengers Found</h3>
-              <p className="text-slate-500 font-bold">
+            <Card elevation="sm" padding="lg" className="text-center py-12">
+              <MapPin size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
+              <h3 className="text-base font-bold text-ink mb-1">No Passengers Found</h3>
+              <p className="text-xs text-ink-muted">
                 No active bookings match this departure selection.
               </p>
-            </div>
+            </Card>
           ) : (
             journeyBookings.map((booking) => {
-              const checkedInCount = booking.passengers.filter((p) => p.checkedIn).length
+              const checkedInCount = (booking.passengers || []).filter((p) => p.checkedIn).length
+              const allCheckedIn = (booking.passengers || []).every((p) => p.checkedIn)
+              const noneCheckedIn = (booking.passengers || []).every((p) => !p.checkedIn)
+              const isBatchProcessing = batchLoading === (booking._id || booking.id)
+              const balanceDue = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
+              const isFullyPaid = balanceDue === 0
 
               return (
-                <div
+                <Card
                   key={booking.id || booking._id}
-                  className="bg-white rounded-3xl shadow-xs border border-slate-100 overflow-hidden"
+                  elevation="sm"
+                  padding="none"
+                  className="overflow-hidden"
                 >
-                  <div className="bg-linear-to-r from-indigo-50 to-blue-50 p-6 border-b border-slate-100">
-                    <div className="flex items-start justify-between mb-4">
+                  {/* Booking Header Banner */}
+                  <div className="bg-surface-muted/60 p-4 sm:p-5 border-b border-border-subtle">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
                       <div>
-                        <h3 className="text-xl font-black text-slate-900 mb-1">{booking.tourName}</h3>
-                        <p className="text-sm text-slate-500 font-bold">Invoice: #{booking.invoiceNo}</p>
+                        <h4 className="text-base font-bold text-ink">{booking.tourName}</h4>
+                        <p className="text-xs text-ink-muted font-medium">Invoice #{booking.invoiceNo}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                          Check-in Progress
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-600 transition-all"
-                              style={{
-                                width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
-                              }}
-                            />
-                          </div>
-                          <span className="text-sm font-black text-slate-900">
-                            {checkedInCount}/{booking.passengers.length}
-                          </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-ink-muted">Check-in:</span>
+                        <div
+                          role="progressbar"
+                          aria-valuenow={checkedInCount}
+                          aria-valuemin={0}
+                          aria-valuemax={booking.passengers.length}
+                          aria-label={`Boarding progress: ${checkedInCount} of ${booking.passengers.length} passengers boarded`}
+                          className="w-20 sm:w-24 h-2 bg-border-subtle rounded-full overflow-hidden"
+                        >
+                          <div
+                            className="h-full bg-success transition-all"
+                            style={{
+                              width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
+                            }}
+                          />
                         </div>
+                        <span className="text-xs font-bold text-ink tabular-nums">
+                          {checkedInCount}/{booking.passengers.length}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                       <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Date</p>
-                        <p className="font-black text-slate-900">{formatDisplayDate(booking.journeyDate)}</p>
+                        <span className="text-ink-muted block">Date</span>
+                        <span className="font-semibold text-ink">{formatDisplayDate(booking.journeyDate)}</span>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Customer</p>
-                        <p className="font-black text-slate-900">{booking.contactName}</p>
+                        <span className="text-ink-muted block">Primary Customer</span>
+                        <span className="font-semibold text-ink">{booking.contactName}</span>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Passengers</p>
-                        <p className="font-black text-slate-900">{booking.passengers.length} PAX</p>
+                        <span className="text-ink-muted block">Passengers</span>
+                        <span className="font-semibold text-ink tabular-nums">{booking.passengers.length} PAX</span>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Payment</p>
-                        <p
-                          className={`font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"}`}
-                        >
-                          {booking.advanceReceived >= booking.totalAmount
-                            ? "Paid"
-                            : `Due ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}`}
-                        </p>
+                        <span className="text-ink-muted block">Payment</span>
+                        <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
                       </div>
                     </div>
                   </div>
 
-                  {/* Phase 3: Batch Actions + Quick Balance Bar */}
-                  <div className="px-6 py-3 bg-slate-50/60 border-b border-slate-100 flex flex-wrap items-center gap-3 no-print">
-                    {/* Batch check-in buttons */}
-                    {(() => {
-                      const allCheckedIn = booking.passengers.every((p) => p.checkedIn)
-                      const noneCheckedIn = booking.passengers.every((p) => !p.checkedIn)
-                      const isBatchProcessing = batchLoading === (booking._id || booking.id)
-                      return (
-                        <>
-                          {!allCheckedIn && (
-                            <button
-                              type="button"
-                              disabled={isBatchProcessing}
-                              onClick={() => handleBatchCheckin(booking, true)}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-sm disabled:opacity-50"
-                            >
-                              <CheckCheck size={14} />
-                              {isBatchProcessing ? "Boarding..." : `Board All (${booking.passengers.length})`}
-                            </button>
-                          )}
-                          {!noneCheckedIn && (
-                            <button
-                              type="button"
-                              disabled={isBatchProcessing}
-                              onClick={() => handleBatchCheckin(booking, false)}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-black transition-all disabled:opacity-50"
-                            >
-                              <XCircle size={14} />
-                              Unboard All
-                            </button>
-                          )}
-                        </>
-                      )
-                    })()}
+                  {/* Batch Actions & Quick Balance Bar (no-print) */}
+                  <div className="px-4 sm:px-5 py-2.5 bg-surface border-b border-border-subtle flex flex-wrap items-center gap-2 no-print">
+                    {!allCheckedIn && (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        disabled={isBatchProcessing}
+                        onClick={() => handleBatchCheckin(booking, true)}
+                        className="min-h-11 sm:min-h-9"
+                      >
+                        <CheckCheck size={14} className="mr-1.5" />
+                        {isBatchProcessing ? "Boarding..." : `Board All (${booking.passengers.length})`}
+                      </Button>
+                    )}
+                    {!noneCheckedIn && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isBatchProcessing}
+                        onClick={() => handleBatchCheckin(booking, false)}
+                        className="min-h-11 sm:min-h-9"
+                      >
+                        <XCircle size={14} className="mr-1.5" />
+                        Unboard All
+                      </Button>
+                    )}
 
-                    {/* Boarding Passes */}
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setBoardingPassTarget({ booking, paxIndex: "all" })}
-                      className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black transition-all border border-indigo-100 shadow-xs"
                       title="View & Print Boarding Passes with QR"
+                      className="min-h-11 sm:min-h-9"
                     >
-                      <Ticket size={14} />
+                      <Ticket size={14} className="mr-1.5 text-brand" />
                       <span>Boarding Passes ({booking.passengers.length})</span>
-                    </button>
+                    </Button>
 
-                    {/* Spacer */}
                     <div className="flex-1" />
 
-                    {/* Quick Balance Collection */}
-                    {booking.advanceReceived < booking.totalAmount && (
-                      <button
+                    {balanceDue > 0 && (
+                      <Button
                         type="button"
+                        variant="accent"
+                        size="sm"
                         onClick={() => {
                           setQuickPayBooking(booking)
-                          setQuickPayAmount(
-                            Math.max(0, booking.totalAmount - (booking.advanceReceived || 0)).toString()
-                          )
+                          setQuickPayAmount(balanceDue.toString())
                           setQuickPayMode(booking.paymentMode || "Cash")
                         }}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all shadow-sm"
+                        className="min-h-11 sm:min-h-9"
                       >
-                        <Banknote size={14} />
-                        Collect ₹{Math.max(0, booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}
-                      </button>
+                        <Banknote size={14} className="mr-1.5" />
+                        Collect {formatINR(balanceDue, 0)}
+                      </Button>
                     )}
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-full">
-                      <thead>
-                        <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-200">
-                          <th className="px-6 py-4">No.</th>
-                          <th className="px-6 py-4">Name</th>
-                          <th className="px-6 py-4">Age / Gender</th>
-                          <th className="px-6 py-4">City</th>
-                          <th className="px-6 py-4">Seat</th>
-                          <th className="px-6 py-4">Payment</th>
-                          <th className="px-6 py-4">Check-in</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
+                  {/* Passenger Roster: Desktop Table (hidden on mobile) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>Passenger Name</TableHead>
+                          <TableHead>Age / Gender</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Seat</TableHead>
+                          <TableHead>Payment</TableHead>
+                          <TableHead align="right">Boarding Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {booking.passengers.map((passenger, idx) => {
-                          const isCheckedIn = passenger.checkedIn
+                          const isCheckedIn = Boolean(passenger.checkedIn)
                           const pId = passenger._id || idx
-                          const isSwapping =
-                            swappingSeat &&
-                            swappingSeat.bookingId === (booking._id || booking.id) &&
-                            swappingSeat.passengerId === pId
                           return (
-                            <tr
-                              key={pId}
-                              className={`transition-colors ${isCheckedIn ? "bg-green-50" : "hover:bg-slate-50"}`}
-                            >
-                              <td className="px-6 py-4">
-                                <span className="font-black text-slate-900">{idx + 1}</span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="font-black text-slate-900">{passenger.name}</span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="font-bold text-slate-600 text-xs">
-                                  {passenger.age} / {passenger.gender}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="font-bold text-slate-600 text-xs">{passenger.city}</span>
-                              </td>
-                              <td className="px-6 py-4">
-                                {isSwapping ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <select
-                                      autoFocus
-                                      disabled={swapLoading}
-                                      onChange={(e) => {
-                                        if (e.target.value) handleSeatSwap(e.target.value)
-                                      }}
-                                      className="px-2 py-1 bg-white border border-indigo-300 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 max-w-[140px]"
-                                      defaultValue=""
-                                    >
-                                      <option value="" disabled>
-                                        {swapLoading ? "Moving..." : "Pick seat"}
-                                      </option>
-                                      {availableSeatsForSwap.map((s) => (
-                                        <option key={s} value={s}>
-                                          {s}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      type="button"
-                                      onClick={() => setSwappingSeat(null)}
-                                      className="p-1 text-slate-400 hover:text-slate-600 rounded"
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      activeDepartureObj &&
-                                      setSwappingSeat({
-                                        bookingId: booking._id || booking.id,
-                                        passengerId: pId,
-                                        passengerName: passenger.name,
-                                        currentSeatId: passenger.seatId,
-                                      })
-                                    }
-                                    className="group flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black hover:bg-indigo-100 transition-colors"
-                                    title="Click to reassign seat"
-                                  >
-                                    {passenger.seatId || "—"}
-                                    <ArrowLeftRight
-                                      size={11}
-                                      className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    />
-                                  </button>
-                                )}
-                              </td>
-                              <td className="px-6 py-4">
-                                <span
-                                  className={`text-xs font-black ${booking.advanceReceived >= booking.totalAmount ? "text-green-600" : "text-amber-600"}`}
+                            <TableRow key={pId} className={isCheckedIn ? "bg-success-soft/20" : undefined}>
+                              <TableCell tabular className="font-semibold text-ink-muted">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="font-semibold text-ink">
+                                {passenger.name}
+                              </TableCell>
+                              <TableCell className="text-xs text-ink-secondary">
+                                {passenger.age} / {passenger.gender}
+                              </TableCell>
+                              <TableCell className="text-xs text-ink-secondary">
+                                {passenger.city}
+                              </TableCell>
+                              <TableCell>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    activeDepartureObj &&
+                                    setSwappingSeat({
+                                      bookingId: booking._id || booking.id,
+                                      passengerId: pId,
+                                      passengerName: passenger.name,
+                                      currentSeatId: passenger.seatId,
+                                    })
+                                  }
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors cursor-pointer",
+                                    passenger.seatId
+                                      ? "bg-brand-soft text-brand border-brand/20 hover:border-brand/50"
+                                      : "bg-surface-muted text-ink-muted border-border-subtle hover:bg-surface-hover",
+                                    FOCUS_RING_CLASS,
+                                  )}
+                                  title="Click to reassign seat"
                                 >
-                                  {booking.advanceReceived >= booking.totalAmount ? "Paid" : "Pending"}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-2">
+                                  <span>{formatSeatLabel(passenger.seatId)}</span>
+                                  <ArrowLeftRight size={11} className="opacity-70" />
+                                </button>
+                              </TableCell>
+                              <TableCell>
+                                <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
+                              </TableCell>
+                              <TableCell align="right">
+                                <div className="flex items-center justify-end gap-2">
                                   <button
                                     type="button"
                                     onClick={() => handleToggleCheckIn(booking, passenger, idx)}
-                                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
                                       isCheckedIn
-                                        ? "bg-green-600 text-white shadow-md shadow-green-100"
-                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                    }`}
+                                        ? "bg-success text-success-fg shadow-xs"
+                                        : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
+                                      FOCUS_RING_CLASS,
+                                    )}
                                   >
-                                    <Check size={14} />
+                                    <Check size={13} />
                                     {isCheckedIn ? "Boarded" : "Check In"}
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
-                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                                    title="View & Print Passenger Boarding Pass with QR"
+                                    className={cn(
+                                      "p-2 rounded-[var(--yh-radius-md)] text-ink-muted hover:text-brand hover:bg-brand-soft/60 transition-colors",
+                                      FOCUS_RING_CLASS,
+                                    )}
+                                    title="View & Print Passenger Boarding Pass"
+                                    aria-label={`Print Boarding Pass for ${passenger.name}`}
                                   >
                                     <Ticket size={16} />
                                   </button>
                                 </div>
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           )
                         })}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
 
-                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-3 justify-end no-print">
-                    <button
+                  {/* Passenger Roster: Mobile-first Stacked Checklist (<md) */}
+                  <div className="md:hidden divide-y divide-border-subtle">
+                    {booking.passengers.map((passenger, idx) => {
+                      const isCheckedIn = Boolean(passenger.checkedIn)
+                      const pId = passenger._id || idx
+                      return (
+                        <div
+                          key={pId}
+                          className={cn(
+                            "p-4 space-y-3",
+                            isCheckedIn ? "bg-success-soft/20" : "bg-surface",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-ink-muted tabular-nums mr-1.5">
+                                #{idx + 1}
+                              </span>
+                              <span className="font-semibold text-ink text-sm">
+                                {passenger.name}
+                              </span>
+                              <p className="text-xs text-ink-muted mt-0.5">
+                                {passenger.gender} • {passenger.age} yrs • {passenger.city}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                activeDepartureObj &&
+                                setSwappingSeat({
+                                  bookingId: booking._id || booking.id,
+                                  passengerId: pId,
+                                  passengerName: passenger.name,
+                                  currentSeatId: passenger.seatId,
+                                })
+                              }
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors shrink-0",
+                                passenger.seatId
+                                  ? "bg-brand-soft text-brand border-brand/20"
+                                  : "bg-surface-muted text-ink-muted border-border-subtle",
+                              )}
+                            >
+                              <span>{formatSeatLabel(passenger.seatId)}</span>
+                              <ArrowLeftRight size={10} />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
+                              className="text-xs font-medium text-brand flex items-center gap-1 py-1"
+                            >
+                              <Ticket size={13} />
+                              Boarding Pass
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                              className={cn(
+                                "flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[var(--yh-radius-md)] text-xs font-semibold min-h-11 transition-colors cursor-pointer",
+                                isCheckedIn
+                                  ? "bg-success text-success-fg shadow-xs"
+                                  : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
+                                FOCUS_RING_CLASS,
+                              )}
+                            >
+                              <Check size={14} />
+                              {isCheckedIn ? "Boarded" : "Check In"}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Customer Communication Footer (no-print) */}
+                  <div className="p-3 sm:px-5 bg-surface-muted/40 border-t border-border-subtle flex flex-wrap items-center justify-end gap-2 no-print">
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleSendWhatsApp(booking)}
-                      className="flex items-center justify-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-green-100"
                     >
-                      <MessageCircle size={15} />
+                      <MessageCircle size={14} className="mr-1.5 text-emerald-600" />
                       WhatsApp Trip Info
-                    </button>
+                    </Button>
                     {booking.contactEmail && (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleSendEmail(booking)}
-                        className="flex items-center justify-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-100"
                       >
-                        <Mail size={15} />
+                        <Mail size={14} className="mr-1.5 text-blue-600" />
                         Email Info
-                      </button>
+                      </Button>
                     )}
                   </div>
-                </div>
+                </Card>
               )
             })
           )}
 
-          {/* Printable Manifest */}
+          {/* Printable Manifest (Untouched layout for physical printing) */}
           <div className="print-only hidden">
             {journeyBookings.map((booking) => {
               const seatRows = getSortedSeatRows(booking.passengers)
@@ -1091,82 +1183,159 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         </div>
       )}
 
-      {/* Phase 3: Quick Payment Modal */}
-      {quickPayBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in no-print">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-                  <Banknote size={24} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">Quick Collection</h3>
-                  <p className="text-xs font-bold text-slate-400">
-                    {quickPayBooking.invoiceNo} — {quickPayBooking.contactName}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setQuickPayBooking(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl"
+      {/* Accessible Seat Swap Modal */}
+      <Modal
+        isOpen={Boolean(swappingSeat)}
+        onClose={() => {
+          setSwappingSeat(null)
+          setSelectedNewSeat("")
+        }}
+        size="sm"
+        title="Reassign Passenger Seat"
+        description={
+          swappingSeat ? (
+            <span>
+              Moving <strong className="text-ink">{swappingSeat.passengerName}</strong> from{" "}
+              <strong className="text-brand">{formatSeatLabel(swappingSeat.currentSeatId)}</strong>
+            </span>
+          ) : null
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSwappingSeat(null)
+                setSelectedNewSeat("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={swapLoading || !selectedNewSeat}
+              onClick={() => handleSeatSwap(selectedNewSeat)}
+            >
+              {swapLoading ? "Reassigning..." : "Confirm Reassignment"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Field id="swap-new-seat" label="Select New Available Seat">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={selectedNewSeat}
+                onChange={(e) => setSelectedNewSeat(e.target.value)}
+                disabled={swapLoading}
               >
-                <X size={20} />
-              </button>
-            </div>
+                <option value="" disabled>
+                  -- Choose an available seat --
+                </option>
+                {availableSeatsForSwap.map((s) => (
+                  <option key={s} value={s}>
+                    {formatSeatLabel(s)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          {availableSeatsForSwap.length === 0 && (
+            <p className="text-xs text-warning-text font-medium">
+              No alternate berths are currently available on this departure coach.
+            </p>
+          )}
+        </div>
+      </Modal>
 
-            <div className="bg-amber-50 rounded-2xl p-4 mb-6 border border-amber-100">
-              <div className="flex justify-between text-xs font-black">
-                <span className="text-amber-700">Balance Due</span>
-                <span className="text-amber-900">
-                  ₹{Math.max(0, quickPayBooking.totalAmount - (quickPayBooking.advanceReceived || 0)).toLocaleString()}
-                </span>
-              </div>
+      {/* Accessible Quick Collection Modal */}
+      <Modal
+        isOpen={Boolean(quickPayBooking)}
+        onClose={() => setQuickPayBooking(null)}
+        size="sm"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-[var(--yh-radius-md)] bg-accent-warm-soft text-accent-warm-text shrink-0">
+              <Banknote size={18} />
             </div>
-
-            <div className="space-y-4 mb-6">
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Amount (₹)</label>
-                <input
-                  type="number"
-                  value={quickPayAmount}
-                  onChange={(e) => setQuickPayAmount(e.target.value)}
-                  min="1"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-900 outline-none focus:ring-2 focus:ring-amber-100 focus:border-amber-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-slate-400">Mode</label>
-                <select
-                  value={quickPayMode}
-                  onChange={(e) => setQuickPayMode(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none"
-                >
-                  {["Cash", "UPI", "NEFT/RTGS", "Cheque", "Card"].map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setQuickPayBooking(null)}
-                className="py-3 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleQuickPay}
-                disabled={quickPayLoading}
-                className="py-3 rounded-2xl font-black text-sm bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-200 transition-all disabled:opacity-50"
-              >
-                {quickPayLoading ? "Recording..." : "Collect Payment"}
-              </button>
+            <div>
+              <span className="text-base font-bold text-ink">Collect Payment at Boarding</span>
+              <p className="text-xs text-ink-muted font-normal mt-0.5">
+                {quickPayBooking?.invoiceNo} — {quickPayBooking?.contactName}
+              </p>
             </div>
           </div>
-        </div>
-      )}
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setQuickPayBooking(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="accent"
+              size="sm"
+              disabled={quickPayLoading}
+              onClick={handleQuickPay}
+            >
+              {quickPayLoading ? "Recording..." : "Confirm Collection"}
+            </Button>
+          </div>
+        }
+      >
+        {quickPayBooking && (
+          <div className="space-y-4">
+            <div className="p-3 rounded-[var(--yh-radius-md)] bg-accent-warm-soft text-accent-warm-text flex items-center justify-between text-xs">
+              <span className="font-medium">Balance Remaining Due:</span>
+              <span className="font-bold text-sm tabular-nums">
+                {formatINR(
+                  Math.max(0, quickPayBooking.totalAmount - (quickPayBooking.advanceReceived || 0)),
+                  0,
+                )}
+              </span>
+            </div>
+
+            <Field id="quick-pay-amount" label="Amount Collected (₹)">
+              {({ id }) => (
+                <Input
+                  id={id}
+                  type="number"
+                  min="1"
+                  tabular
+                  value={quickPayAmount}
+                  onChange={(e) => setQuickPayAmount(e.target.value)}
+                />
+              )}
+            </Field>
+
+            <Field id="quick-pay-mode" label="Payment Mode">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={quickPayMode}
+                  onChange={(e) => setQuickPayMode(e.target.value)}
+                >
+                  {["Cash", "UPI", "NEFT/RTGS", "Cheque", "Card"].map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        )}
+      </Modal>
 
       {/* Boarding Passes Modal */}
       {boardingPassTarget && (
@@ -1178,7 +1347,7 @@ export default function JourneyManager({ bookings, onUpdateBooking, user }) {
         />
       )}
 
-      {/* Phase 6: Passenger Seat Layout Modal */}
+      {/* Passenger Seat Layout Modal */}
       {showSeatLayoutModal && (
         <SeatLayoutModal
           departure={activeLayoutDeparture}
