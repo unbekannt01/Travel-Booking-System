@@ -292,8 +292,11 @@
 
 /* Custom print styles */
 @media print {
-  body {
+  body,
+  [data-theme="dark"],
+  .dark {
     background: white !important;
+    color: black !important;
   }
   .no-print {
     display: none !important;

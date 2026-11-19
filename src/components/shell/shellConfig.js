@@ -5,9 +5,9 @@
 
 /**
  * Single feature flag gating the user-facing Light/Dark/System theme switcher in the shell.
- * Kept false until Part 3.5 finishes migrating inner screens to Design System v2 tokens.
+ * Enabled now that Part 3.5 has finished migrating all inner screens to Design System v2 tokens.
  */
-export const SHOW_THEME_TOGGLE = false
+export const SHOW_THEME_TOGGLE = true
 
 export const SIDEBAR_STORAGE_KEY = "yatrahub-sidebar-collapsed"
 

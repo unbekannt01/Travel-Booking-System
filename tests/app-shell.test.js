@@ -28,8 +28,8 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
       )
     })
 
-    it("keeps SHOW_THEME_TOGGLE hidden (false) until inner screens migrate in Part 3.5", () => {
-      assert.equal(SHOW_THEME_TOGGLE, false)
+    it("enables SHOW_THEME_TOGGLE (true) now that all inner screens have migrated to tokens", () => {
+      assert.equal(SHOW_THEME_TOGGLE, true)
     })
   })
 
