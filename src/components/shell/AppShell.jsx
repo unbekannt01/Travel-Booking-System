@@ -8,10 +8,12 @@ import {
   Settings,
   LogOut,
   Plus,
+  AlertTriangle,
 } from "lucide-react"
 import { cn } from "../../utils/cn"
 import { formatINR } from "../../utils/formatters"
 import { Avatar, Button, Drawer, PageHeader, FOCUS_RING_CLASS } from "../ui"
+import { subscribeApiStatus, checkApiHealth } from "../../data/client"
 import {
   NAV_ITEMS,
   SHOW_THEME_TOGGLE,
@@ -69,6 +71,25 @@ export function AppShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed())
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [announcement, setAnnouncement] = useState("")
+  const [isApiReachable, setIsApiReachable] = useState(true)
+  const [retryingApi, setRetryingApi] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = subscribeApiStatus((reachable) => {
+      setIsApiReachable(reachable)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  const handleRetryApi = useCallback(async () => {
+    setRetryingApi(true)
+    try {
+      const ok = await checkApiHealth()
+      setIsApiReachable(ok)
+    } finally {
+      setRetryingApi(false)
+    }
+  }, [])
 
   const mainRef = useRef(null)
   const isFirstRenderRef = useRef(true)
@@ -160,6 +181,29 @@ export function AppShell({
           onLogout={onLogout}
           user={user}
         />
+
+        {/* API-unreachable status banner (Task F) */}
+        {!isApiReachable && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="bg-warning-soft border-b border-warning-border px-4 py-2.5 text-xs font-semibold text-warning-text flex items-center justify-between gap-3 shrink-0"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle size={15} className="text-warning-text shrink-0" />
+              <span className="truncate">Cannot connect to server. Please verify local MongoDB and backend service.</span>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 text-xs px-2.5 shrink-0"
+              disabled={retryingApi}
+              onClick={handleRetryApi}
+            >
+              {retryingApi ? "Retrying..." : "Retry Connection"}
+            </Button>
+          </div>
+        )}
 
         <main
           id="main-content"

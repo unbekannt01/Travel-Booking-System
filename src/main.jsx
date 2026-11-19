@@ -14,13 +14,16 @@ import "./index.css"
 import { ThemeProvider } from "./theme"
 import { ToastProvider } from "./components/common/ToastContext"
 import { ConfirmModalProvider } from "./components/common/ConfirmModalContext"
+import { RootErrorBoundary } from "./components/common/RootErrorBoundary"
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <ToastProvider>
         <ConfirmModalProvider>
-          <App />
+          <RootErrorBoundary>
+            <App />
+          </RootErrorBoundary>
         </ConfirmModalProvider>
       </ToastProvider>
     </ThemeProvider>

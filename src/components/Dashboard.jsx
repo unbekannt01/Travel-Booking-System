@@ -45,6 +45,7 @@ const TwoFactorSetup = lazy(() => import("./TwoFactorSetup"))
 const Disable2FAModal = lazy(() => import("./dashboard/Disable2FAModal"))
 const InvoicesModal = lazy(() => import("./dashboard/InvoicesModal"))
 const CancelBookingModal = lazy(() => import("./dashboard/CancelBookingModal"))
+const NotFoundPage = lazy(() => import("./common/NotFoundPage"))
 
 const prefetchedTabs = new Set()
 
@@ -565,6 +566,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 formatIndianPhone={formatIndianPhone}
                 showToast={(msg, type) => toast[type] ? toast[type](msg) : toast.info(msg)}
               />
+            )}
+
+            {!["dashboard", "form", "passengers", "tours", "journey", "analytics", "settings"].includes(activeTab) && (
+              <NotFoundPage onGoOverview={() => setActiveTab("dashboard")} />
             )}
           </Suspense>
         </ChunkErrorBoundary>
