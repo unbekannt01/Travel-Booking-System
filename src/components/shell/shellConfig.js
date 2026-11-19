@@ -66,7 +66,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Settings",
     description: "Company branding, GST details, ticket templates, and 2FA security.",
     iconName: "Settings",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: false,
   },
 ])
