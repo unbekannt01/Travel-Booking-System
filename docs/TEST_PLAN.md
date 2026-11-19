@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 14 test suites (84 tests), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 46 test suites (191 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -17,13 +17,13 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (190 Tests / 23 Suites)
+## 2. Test Suites & Coverage Map (191 Tests / 23 Test Files / 46 TAP Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
 | **`tests/remaining-screens-and-auth.test.js`** | 19 | **Remaining Screens, Auth & Theme Toggle (Part 3.5)**: Password complexity policy (`checkPasswordCriteria` test matrix for length, case, number, symbol); user-friendly auth error mapping (`formatAuthError` for 401, 403, 429, network, and fallback); API status event subscription and emission (`API_STATUS_EVENT`, `subscribeApiStatus`, `emitApiStatus`); `SHOW_THEME_TOGGLE` is explicitly true; all 6 navigation items (`dashboard`, `passengers`, `journey`, `tours`, `analytics`, `settings`) have `hasOwnHeading: false`; `resolvePageMeta` returns non-empty title and description for all tabs; print styles isolate dark mode. |
 | **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === false`, `tours.hasOwnHeading === false`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
-| **`tests/aadhaar-edit-roundtrip.test.js`** | 7 | **Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)**: Frontend validator detection of masked Aadhaar and `[UNCHANGED]` sentinel token; `isValidAadhaar` with `{ allowMasked: true }`; backend `isMaskedOrUnchangedAadhaar` verification; `BookingForm` Step 1 validation with masked Aadhaar; backend reconciliation preserving existing AES-256-GCM ciphertext on edit; re-encryption of new 12-digit Aadhaar when replaced; explicit clearance of Aadhaar; non-inheritance of Aadhaar by new passengers; guarantees raw masked strings are never persisted. |
+| **`tests/aadhaar-edit-roundtrip.test.js`** | 8 | **Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)**: Frontend validator detection of masked Aadhaar and `[UNCHANGED]` sentinel token; `isValidAadhaar` with `{ allowMasked: true }`; backend `isMaskedOrUnchangedAadhaar` verification; `BookingForm` Step 1 validation with masked Aadhaar; backend reconciliation preserving existing AES-256-GCM ciphertext on edit; re-encryption of new 12-digit Aadhaar when replaced; explicit clearance of Aadhaar; non-inheritance of Aadhaar by new passengers; guarantees raw masked strings are never persisted; single passenger update (`PUT /:bookingId/passengers/:passengerIdentifier`) reconciliation and encryption. |
 | **`tests/overview-and-booking-form.test.js`** | 10 | **Overview & Stepped Booking Form (Part 3.3)**: Bus capacity (`2x1`=36, `2x2`=40) and clamped occupancy %; `getBookingPaymentStatus` (`Cancelled`/`Paid`/`Partial`/`Pending`); KPI & Today's Operations metrics + 7-day departure grouping; recent booking status & search filtering; payment urgency classification (`Overdue`, `Due on boarding`, `Due soon`, `Scheduled`); 4-step booking validation (Steps 0–2 & cross-step `validateAllBookingSteps`, duplicate/conflicting seats, Aadhaar, advance bounds), step click navigation rules, sticky summary composition via `calculatePricing`, server 400/409 error formatting, and `hasOwnHeading: false` shell verification. |
 | **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === true` once all screens migrated; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
 | **`tests/ui-foundation.test.js`** | 12 | **UI Foundation (Part 3.1)**: `formatINR` Indian digit grouping (lakhs/crores, 0 & 2 decimals, negatives, null/NaN safety); theme preference resolution (`system`/`light`/`dark`) and resilient `localStorage` fallback when storage throws; `applyThemeToDocument`; `STATUS_META` 6-status icon/tone coverage; `getInitials`/`getAvatarTone`; CVA variant classes (tokens, 44px mobile touch targets, focus rings); `cn()` conflict merging. |
@@ -52,9 +52,9 @@ All tests run in ESM mode with zero transpilation overhead.
 ```
 TAP version 13
 1..48
-# tests 190
+# tests 191
 # suites 46
-# pass 190
+# pass 191
 # fail 0
 # cancelled 0
 # skipped 0
@@ -171,16 +171,47 @@ Verify the following manually across desktop & mobile viewports (`360px`, `768px
 
 ---
 
+## 3.5 Automated UI Smoke & Accessibility Audit (`npm run ui:smoke`) (Part 3.6)
+
+An automated Playwright and `@axe-core/playwright` smoke runner is provided in `scripts/ui-smoke.mjs`.
+
+### What it tests:
+1. **8 Application Views**: Overview (`dashboard`), Travelers (`passengers`), Journeys (`journey`), Destinations (`tours`), Analytics (`analytics`), Settings (`settings`), Stepped Booking Form (`form`), and Dev UI Kit (`ui-kit`).
+2. **4 Responsive Viewports**: Small mobile (`360x740`), Tablet (`768x1024`), Laptop/Desktop (`1024x768`), Wide Monitor (`1440x900`).
+3. **2 Themes**: Light mode and Dark mode (`data-theme="dark"`).
+4. **Horizontal Overflow Guard**: Asserts `document.documentElement.scrollWidth <= document.documentElement.clientWidth` across all viewports.
+5. **WCAG 2.1 AA Accessibility Analysis**: Executes `new AxeBuilder({ page })` with `['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']` tags to identify any remaining automated accessibility violations.
+6. **Report Generation**: Writes detailed markdown report to gitignored `docs/screenshots/report.md` with captured page screenshots.
+
+### Execution Instructions (Windows PowerShell):
+```powershell
+# 1. Install Playwright browser binary (one-time setup)
+npx playwright install chromium
+
+# 2. Start Local MongoDB (if not running as a Windows service)
+mongod --dbpath "C:\data\db"
+
+# 3. Start Express Backend (in terminal 1)
+cd backend
+npm start
+
+# 4. Start Vite Frontend (in terminal 2)
+npm run dev
+
+# 5. Run UI Smoke Suite (in terminal 3)
+$env:UI_SMOKE_EMAIL="operator@yatrahub.local"
+$env:UI_SMOKE_PASSWORD="OperatorPassword123!"
+npm run ui:smoke
+```
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-While the pure business logic and utility coverage is extensive (84 tests passing), the following gaps are scheduled for future phases:
+With 191 unit & regression tests passing across 46 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
-   - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are tested manually.
-   - *Phase 7 Plan*: Introduce integration tests using an in-memory MongoDB runner (`mongodb-memory-server`) or local test database to test Express route handlers, auth cookies, and Mongoose schema validations.
-2. **React Component & UI Unit Tests**:
-   - Ticket templates are tested at the HTML generation level, but React DOM rendering is not automated.
-   - *Phase 3 Plan*: Add component test fixtures for critical counter components (BookingForm, Seat Map, JourneyManager).
-3. **End-to-End (E2E) Browser Workflows**:
-   - Multi-step customer reservation, seat lock verification, payment collection, and print preview flow.
-   - *Phase 7 Plan*: Smoke test scripts simulating full operator reservation workflows before go-live.
+   - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.
+   - *Phase 7 Plan*: Introduce automated integration tests using an in-memory MongoDB runner (`mongodb-memory-server`) to test Express route handlers, auth cookies, and Mongoose schema validations end-to-end.
+2. **Visual Regression Snapshot Testing**:
+   - *Phase 7 Plan*: Compare screenshots captured by `npm run ui:smoke` against golden baseline images to catch unintended visual regressions automatically.

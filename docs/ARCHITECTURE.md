@@ -320,3 +320,26 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Activated: `SHOW_THEME_TOGGLE = true` in `src/components/shell/shellConfig.js`.
   - Complete token coverage: Every screen, modal, card, table, and form element now uses `--yh-*` tokens.
   - Print Isolation (`src/index.css`): Strict `@media print` rules enforcing `background: white !important; color: black !important;` on `body`, `[data-theme="dark"]`, and `.dark` containers, ensuring ticket templates, invoices, receipts, and manifests print cleanly on paper regardless of active dark mode.
+
+---
+
+## 13. Quality Engineering & Phase 3 Verification (Part 3.6)
+
+- **Design System v2 Token Completion & CSS Cleanup**:
+  - All coach seat picker layouts (`BookingForm.jsx`), seat indicators, and modals fully migrated to `--yh-*` tokens and accessible primitives.
+  - Redundant `tailwind.config.js` safely eliminated; Tailwind CSS 4 compiles standalone via `@import "tailwindcss";` and `@theme` definitions in `src/index.css`.
+  - Legacy CSS variables (`--background`, `--foreground`, `--card`, `--popover`, `--border`, `--destructive`, `--chart-*`, etc.) cleaned up, with shorthand compatibility aliases mapped to canonical design system tokens.
+- **Accessibility & Static Analysis (eslint-plugin-jsx-a11y)**:
+  - Added `eslint-plugin-jsx-a11y` flat recommended configuration into `eslint.config.js`.
+  - Systematically resolved all 24 JSX accessibility violations across forms, modals, drawers, tooltips, and tables, achieving 0 errors and 0 warnings.
+  - Keyboard accessibility: Standardized `tabIndex={0}` on scrollable tables, managed focus on dialog openings, eliminated autofocus disruption, and isolated backdrop click overlays with `aria-hidden="true"`.
+- **Automated UI Smoke & Axe Core Verification (`scripts/ui-smoke.mjs`)**:
+  - Added `npm run ui:smoke` command executing Playwright-based headless browser traversal with `@axe-core/playwright`.
+  - Audits all 8 application views (Overview, Travelers, Journeys, Destinations, Analytics, Settings, Booking Form, Dev UI Kit) across 4 standard viewports (360px mobile, 768px tablet, 1024px desktop, 1440px wide) in both Light and Dark themes.
+  - Validates zero horizontal scrolling (`scrollWidth <= clientWidth`), captures full-page visual screenshots, and produces an axe-core WCAG 2.1 AA violation report in `docs/screenshots/report.md`.
+- **Security & PII Hardening (SEC-012 Single Passenger Reconciliation)**:
+  - Reconciled both `aadhar` and legacy `aadhaar` field keys on granular passenger updates (`PUT /:bookingId/passengers/:passengerIdentifier`), enforcing AES-256-GCM encryption on newly submitted 12-digit numbers while preserving existing ciphertexts when masked or unchanged.
+  - Enforced `maskBookingPaxAadhaar(booking)` across all single/batch passenger updates and status routes (`checkin`, `batch-checkin`, `toggle-payment`, `cancel`, `restore`) to eliminate ciphertext leakage.
+- **Dependency & Audit Baseline**:
+  - Zero vulnerabilities across root and backend npm dependencies (`npm audit` and `npm audit --omit=dev` reporting 0 vulnerabilities).
+  - 191 automated test cases passing across 46 TAP test suites covering business logic, pricing, crypto, tokens, auth, and UI states.

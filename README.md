@@ -64,40 +64,59 @@ Open your browser at **`http://localhost:5173`**.
 
 ---
 
-## 🧪 Automated Test Suite
+## 🧪 Automated Test Suite & Quality Verification
 
-YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`):
+YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit and business logic tests (84 tests across 14 suites)
+# Run all unit, security, crypto, and business logic tests (191 tests across 46 suites)
 npm test
 
-# Code hygiene & linting (ESLint)
+# Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
 npm run lint
 
-# Production bundle compilation (Vite)
+# Production bundle compilation & chunk size verification (Vite)
 npm run build
+
+# Automated UI smoke test & axe-core WCAG 2.1 AA audit (Playwright)
+npm run ui:smoke
 ```
 
-### Test Coverage Summary (**84 tests across 14 test suites**):
-1. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):
-   - Internal duplicate seat rejection in the same booking (`400 Bad Request`).
-   - Cross-booking collision rejection on the same tour, date, and seat (`409 Conflict`).
-   - Seat release upon booking cancellation.
-2. **Single-Source Invoice Numbers** (`tests/invoice-generation.test.js`):
-   - Tour code acronyms (`KYX`, `CDX`), month codes, and zero-collision sequential counters.
-3. **Payment Ledger & Calculations** (`tests/payment-calculations.test.js`):
-   - Advance + balance = total, partial installment ledger appending, overpayment guards, voiding.
-4. **Pricing & GST Calculations** (`tests/pricing-calculations.test.js`):
-   - Exclusive and inclusive 5% GST, rupee/percentage discounts, tax-exempt tours, 2-decimal rounding.
-5. **Cancellation & Refunds** (`tests/cancellation-ledger.test.js`):
-   - Retention fees, full refunds, non-refundable advances, fee validation.
-6. **Multi-language Documents (en, hi, gu)** (`tests/i18n-documents.test.js`):
-   - Complete dictionary parity across English, Hindi, and Gujarati for invoices, receipts, and QR passes.
-7. **Boarding Passes & Manifest** (`tests/manifest-boarding.test.js`):
-   - Boarding verification, conductor manifest generation, passenger rosters.
-8. **Ticket Templates Registry** (`tests/ticket-templates.test.js`):
-   - Validation for all 6 modular ticket templates (`classic`, `modern`, `heritage`, `corporate`, `thermal`, `transit`), fallback resolution, multilingual output, and batch printing.
+### Test Coverage Summary (**191 tests across 46 test suites / 23 test files**):
+1. **Masked Aadhaar Edit Round-Trip & PII Reconciliation** (`tests/aadhaar-edit-roundtrip.test.js`):
+   - Frontend and backend masked Aadhaar detection, preservation of AES-256-GCM ciphertext on edit, non-inheritance, and granular single-passenger reconciliation.
+2. **Remaining Screens, Auth & Theme Toggle** (`tests/remaining-screens-and-auth.test.js`):
+   - Password complexity policy, auth error formatting, API status event bus, shell heading ownership, and dark mode print isolation.
+3. **Operational Modals & Journeys Screen** (`tests/operational-modals-journey.test.js`):
+   - Sleeper berth label/list parsing, boarding math, progress bar calculations, cancellation refund presets, and invoice filtering.
+4. **Overview & Stepped Booking Form** (`tests/overview-and-booking-form.test.js`):
+   - Bus capacities, payment status & urgency classification, 4-step booking form validation, and server error presentation.
+5. **App Shell & Navigation Configuration** (`tests/app-shell.test.js`):
+   - Canonical navigation routes, metadata resolution, skeleton variants, and persistent collapsed sidebar state.
+6. **UI Foundation & Design Tokens** (`tests/ui-foundation.test.js`):
+   - `formatINR` Indian rupee currency formatting (lakhs/crores), theme resolution (`system`/`light`/`dark`), and CVA variants.
+7. **XSS Neutralization & CSP** (`tests/xss-escaping.test.js`):
+   - Strict output escaping across all 6 ticket templates and CSP meta tag embedding.
+8. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):
+   - Internal duplicate seat rejection (`400 Bad Request`) and cross-booking collision rejection (`409 Conflict`).
+9. **Single-Source Invoice Numbers** (`tests/invoice-generation.test.js`):
+   - Tour code acronyms (`DSX`, `CDX`), month codes, and zero-collision sequential counters.
+10. **Payment Ledger & Calculations** (`tests/payment-calculations.test.js`):
+    - Multi-installment payment recording, overpayment bounds, and ledger voiding.
+11. **Pricing & GST Calculations** (`tests/pricing-calculations.test.js`):
+    - Exclusive/inclusive 5% GST, fixed/percentage discounts, and 2-decimal rupee rounding.
+12. **Cancellation & Refunds** (`tests/cancellation-ledger.test.js`):
+    - Real-time refund calculation and retention fee bounds checking.
+13. **Multi-language Documents (en, hi, gu)** (`tests/i18n-documents.test.js`):
+    - Complete dictionary parity across English, Hindi, and Gujarati.
+14. **Ticket Templates Registry** (`tests/ticket-templates.test.js`):
+    - Validation for all 6 modular ticket templates (`classic`, `modern`, `heritage`, `corporate`, `thermal`, `transit`).
+15. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
+    - 2x1 and 2x2 sleeper coach mapping with separate Upper and Lower deck page breaks.
+16. **CSV Export Utility** (`tests/csv-export.test.js`):
+    - RFC4180 compliance, UTF-8 BOM, and spreadsheet formula injection protection (`=`, `+`, `-`, `@`).
+17. **Validators & Security Hardening** (`tests/validators.test.js`, `tests/auth-security.test.js`, `tests/server-pricing.test.js`):
+    - Indian mobile validation, Aadhaar Verhoeff checksums, AES-256-GCM encryption, session revocation, and brute-force lockout.
 9. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
    - 2x1 (36 berths) and 2x2 (40 berths) coach mapping, booked passenger assignment, unbooked seats marked Available, cancelled booking release, Upper & Lower deck separation.
 10. **CSV Export Utility** (`tests/csv-export.test.js`):
@@ -287,31 +306,41 @@ Travel-Booking-System/
 │   ├── middleware/           # JWT auth verification
 │   └── package.json          # Backend dependencies
 │
+├── scripts/                  # Developer & Automation Tools
+│   └── ui-smoke.mjs          # Playwright & axe-core automated UI smoke suite
+│
 ├── shared/                   # Shared business logic
 │   └── businessLogic.js      # Zero-dependency financial & validation logic (ESM)
 │
 ├── src/                      # React 19 Frontend
+│   ├── theme/                # Theme management (useTheme, ThemeProvider, system/light/dark)
 │   ├── components/           # UI Views & Modals
+│   │   ├── ui/               # 25 Design System v2 Accessible Primitives (Button, Modal, Table, etc.)
+│   │   ├── shell/            # Accessible App Shell (Sidebar, TopBar, MobileBottomNav, Lazy Skeletons)
 │   │   ├── common/           # Modal contexts, BoardingPassModal, SeatLayoutModal, ReceiptModal
-│   │   ├── dashboard/        # Modular dashboard (Home, Sidebar, SettingsPanel, InvoicesModal)
+│   │   ├── dashboard/        # Modular dashboard (Home, SettingsPanel, InvoicesModal, CancelModal)
 │   │   ├── tickets/          # Modular Ticket Templates Registry (6 styles)
-│   │   ├── BookingForm.jsx   # Sleeper berth map & reservation form
+│   │   ├── BookingForm.jsx   # 4-step sleeper berth map & reservation form
 │   │   ├── InvoiceView.jsx   # Printable invoice with Bank/UPI details
 │   │   ├── JourneyManager.jsx# Bus departure coordinator & check-in
 │   │   ├── PaymentTracker.jsx# Ledger & balance collection tracker
 │   │   ├── TourInventory.jsx # Coach packages & destinations
-│   │   └── TourAnalytics.jsx # Revenue charts & booking statistics
+│   │   ├── TourAnalytics.jsx # Revenue charts & booking statistics
+│   │   └── PassengerManagement.jsx # Travelers screen with masked Aadhaar reveal & CSV export
 │   ├── data/                 # Centralized Data Access Layer
 │   │   ├── adapters/         # REST adapter
-│   │   ├── client.js         # HTTP client with auth headers
+│   │   ├── client.js         # HTTP client with auth headers & offline status bus
 │   │   ├── bookings.js       # Booking queries & mutations
 │   │   ├── tours.js          # Tour package operations
 │   │   ├── payments.js       # Payment ledger recordings
 │   │   └── settings.js       # Company & bank settings
 │   ├── i18n/                 # Multilingual dictionaries (en, hi, gu)
-│   └── utils/                # Pure utilities (date, formatters, pricing, seatLayout, csv)
+│   └── utils/                # Pure utilities (formatters, formatINR, pricing, seatFormatting, csv)
 │
-├── tests/                    # Automated Test Suite (84 tests across 14 suites)
+├── tests/                    # Automated Test Suite (191 tests across 46 TAP suites)
+│   ├── aadhaar-edit-roundtrip.test.js
+│   ├── app-shell.test.js
+│   ├── auth-security.test.js
 │   ├── cancellation-ledger.test.js
 │   ├── csv-export.test.js
 │   ├── customer-history.test.js
@@ -319,25 +348,23 @@ Travel-Booking-System/
 │   ├── i18n-documents.test.js
 │   ├── invoice-generation.test.js
 │   ├── manifest-boarding.test.js
+│   ├── operational-modals-journey.test.js
+│   ├── overview-and-booking-form.test.js
 │   ├── passenger-checkin.test.js
 │   ├── payment-calculations.test.js
 │   ├── pricing-calculations.test.js
+│   ├── remaining-screens-and-auth.test.js
 │   ├── seat-layout.test.js
+│   ├── server-pricing.test.js
 │   ├── ticket-templates.test.js
+│   ├── ui-foundation.test.js
 │   ├── ui-improvements.test.js
-│   └── validators.test.js
+│   ├── validators.test.js
+│   └── xss-escaping.test.js
 │
-└── docs/                     # Comprehensive Project Documentation
+└── docs/                     # Tracked Project Documentation
     ├── ARCHITECTURE.md       # Full architecture specification
-    ├── DECISIONS.md          # Architecture Decision Records (ADRs)
     ├── DEPLOYMENT.md         # Local deployment & MongoDB setup guide
-    ├── DESIGN.md             # UI components, ticket templates & design system
-    ├── GO LIVE CHECKLIST.md  # Production readiness checklist
-    ├── MEMORY.md             # Progress log & backlog
-    ├── PRD.md                # Product requirements & user personas
-    ├── PROMPTS.md            # Phase prompt history & roadmap
-    ├── RULES.md              # Engineering rules & security guidelines
-    ├── SECURITY.md           # Threat model, posture & security audit
     └── TEST_PLAN.md          # Test suite details & coverage map
 ```
 
