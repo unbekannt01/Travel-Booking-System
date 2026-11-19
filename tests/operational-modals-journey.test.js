@@ -63,7 +63,7 @@ describe("Operational Modals & Journeys Screen (Part 3.4)", () => {
     it("verifies heading flags across routes for shell polish", () => {
       assert.equal(resolvePageMeta("dashboard").hasOwnHeading, false)
       assert.equal(resolvePageMeta("journey").hasOwnHeading, false)
-      assert.equal(resolvePageMeta("passengers").hasOwnHeading, true)
+      assert.equal(resolvePageMeta("passengers").hasOwnHeading, false)
       assert.equal(resolvePageMeta("tours").hasOwnHeading, true)
     })
 

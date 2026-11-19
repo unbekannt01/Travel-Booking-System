@@ -1,520 +1,743 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo } from "react"
 import {
-  ShieldCheck,
-  MapPin,
   Phone,
-  User,
   Fingerprint,
   FileDown,
   Eye,
   EyeOff,
-  Filter,
-  X,
   Printer,
   Edit3,
-  Search,
-  CheckCircle2,
-  Ban,
-  Clock,
   Ticket,
-} from "lucide-react";
-import { maskAadhaar } from "../utils/formatters";
-import { formatDisplayDate } from "../utils/date";
-import BoardingPassModal from "./common/BoardingPassModal";
+  Users,
+  CheckCircle2,
+} from "lucide-react"
+import { maskAadhaar, formatSeatLabel } from "../utils/formatters"
+import { isMaskedAadhaar } from "../utils/validators"
+import { formatDisplayDate } from "../utils/date"
+import { downloadCsv } from "../utils/csv"
+import { request } from "../data/client"
+import BoardingPassModal from "./common/BoardingPassModal"
+import {
+  Card,
+  Button,
+  IconButton,
+  Select,
+  SearchInput,
+  Badge,
+  StatusPill,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  Modal,
+  EmptyState,
+  FOCUS_RING_CLASS,
+} from "./ui"
+import { cn } from "../utils/cn"
+
+const STATUS_CHIPS = [
+  { id: "all", label: "All" },
+  { id: "paid", label: "Paid" },
+  { id: "pending", label: "Pending" },
+  { id: "cancelled", label: "Cancelled" },
+]
+
+const BOARDING_CHIPS = [
+  { id: "all", label: "All Boarding" },
+  { id: "boarded", label: "Boarded" },
+  { id: "not_boarded", label: "Not Boarded" },
+]
 
 export default function PassengerManagement({
-  bookings,
+  bookings = [],
   onEditBooking,
   user,
 }) {
-  const [selectedTour, setSelectedTour] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [showPreview, setShowPreview] = useState(false);
-  const [includeAadhar, setIncludeAadhar] = useState(true);
-  const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({});
-  const [boardingPassTarget, setBoardingPassTarget] = useState(null);
+  const [selectedTour, setSelectedTour] = useState("all")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [boardingFilter, setBoardingFilter] = useState("all")
+  const [showPreview, setShowPreview] = useState(false)
+  const [includeAadhar, setIncludeAadhar] = useState(true)
+  const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({})
+  const [boardingPassTarget, setBoardingPassTarget] = useState(null)
 
-  const toggleAadhaarVisibility = (key) => {
-    setUnmaskedAadhaar((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const uniqueTours = [...new Set(bookings.map((b) => b.tourName))].filter(
-    Boolean
-  );
+  const uniqueTours = useMemo(() => {
+    return [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
+  }, [bookings])
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((b) => {
-      if (selectedTour !== "all" && b.tourName !== selectedTour) return false;
+      if (selectedTour !== "all" && b.tourName !== selectedTour) return false
 
-      const isCancelled = b.status === "Cancelled" || b.status === "cancelled";
-      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0));
-      const isPaid = !isCancelled && (b.isPaid || balance === 0);
-      const isPending = !isCancelled && !isPaid;
+      const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+      const isPaid = !isCancelled && (b.isPaid || balance === 0)
+      const isPending = !isCancelled && !isPaid
 
-      if (statusFilter === "paid" && !isPaid) return false;
-      if (statusFilter === "pending" && !isPending) return false;
-      if (statusFilter === "cancelled" && !isCancelled) return false;
+      if (statusFilter === "paid" && !isPaid) return false
+      if (statusFilter === "pending" && !isPending) return false
+      if (statusFilter === "cancelled" && !isCancelled) return false
 
       if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase().trim();
+        const q = searchTerm.toLowerCase().trim()
         const matchesContact =
           b.contactName?.toLowerCase().includes(q) ||
-          b.contactPhone?.toLowerCase().includes(q);
-        const matchesInvoice = b.invoiceNo?.toLowerCase().includes(q);
-        const matchesTour = b.tourName?.toLowerCase().includes(q);
+          b.contactPhone?.toLowerCase().includes(q)
+        const matchesInvoice = b.invoiceNo?.toLowerCase().includes(q)
+        const matchesTour = b.tourName?.toLowerCase().includes(q)
         const matchesPax = b.passengers?.some(
           (p) =>
             p.name?.toLowerCase().includes(q) ||
             p.city?.toLowerCase().includes(q) ||
             p.seatId?.toLowerCase().includes(q) ||
-            p.contact?.toLowerCase().includes(q)
-        );
+            p.contact?.toLowerCase().includes(q),
+        )
         if (!matchesContact && !matchesInvoice && !matchesTour && !matchesPax) {
-          return false;
+          return false
         }
       }
 
-      return true;
-    });
-  }, [bookings, selectedTour, statusFilter, searchTerm]);
+      return true
+    })
+  }, [bookings, selectedTour, statusFilter, searchTerm])
 
-  const getJourneyDate = () => {
-    const booking = filteredBookings[0];
-    return booking?.journeyDate ? formatDisplayDate(booking.journeyDate) : "N/A";
-  };
+  // Flattened passengers matching boarding filter
+  const passengerEntries = useMemo(() => {
+    const list = []
+    filteredBookings.forEach((b) => {
+      ;(b.passengers || []).forEach((p, idx) => {
+        if (boardingFilter === "boarded" && !p.checkedIn) return
+        if (boardingFilter === "not_boarded" && p.checkedIn) return
+        list.push({ booking: b, passenger: p, paxIndex: idx })
+      })
+    })
+    return list
+  }, [filteredBookings, boardingFilter])
 
-  const handleExport = (withAadhar) => {
-    setIncludeAadhar(withAadhar);
-    setShowPreview(true);
-  };
+  const handleRevealAadhaar = async (booking, pax, idx) => {
+    const key = `${booking._id || booking.id}-${pax._id || idx}`
+    if (unmaskedAadhaar[key]) {
+      setUnmaskedAadhaar((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Authorized action: Reveal full Aadhaar number for ${pax.name}?\n\nThis action is logged in the operational audit trail.`,
+    )
+    if (!confirmed) return
+
+    try {
+      const res = await request(
+        `/api/bookings/${booking._id || booking.id}/passengers/${pax._id || idx}/reveal-aadhaar`,
+      )
+      if (res && res.aadhar) {
+        setUnmaskedAadhaar((prev) => ({
+          ...prev,
+          [key]: res.aadhar,
+        }))
+        // Auto-hide after 15 seconds to minimize exposure
+        setTimeout(() => {
+          setUnmaskedAadhaar((prev) => {
+            const next = { ...prev }
+            delete next[key]
+            return next
+          })
+        }, 15000)
+      }
+    } catch {
+      // Fallback: if already unmasked locally
+      if (pax.aadhar && !isMaskedAadhaar(pax.aadhar)) {
+        setUnmaskedAadhaar((prev) => ({ ...prev, [key]: pax.aadhar }))
+      }
+    }
+  }
+
+  const handleExportCSV = (withAadhaar) => {
+    const headers = [
+      "#",
+      "Tour",
+      "Journey Date",
+      "Invoice #",
+      "Passenger Name",
+      "Age",
+      "Gender",
+      "City",
+      "Contact",
+      "Seat",
+      ...(withAadhaar ? ["Aadhaar"] : []),
+      "Boarding Status",
+      "Payment Status",
+    ]
+
+    const rows = [headers]
+    let counter = 1
+
+    passengerEntries.forEach(({ booking: b, passenger: p }) => {
+      const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+      const isPaid = !isCancelled && (b.isPaid || balance === 0)
+      const paymentStatus = isCancelled ? "Cancelled" : isPaid ? "Paid" : "Pending"
+
+      rows.push([
+        counter++,
+        b.tourName || "—",
+        formatDisplayDate(b.journeyDate),
+        `#${b.invoiceNo}`,
+        p.name || "—",
+        p.age || "—",
+        p.gender ? p.gender.toUpperCase() : "—",
+        p.city || "—",
+        p.contact || "—",
+        formatSeatLabel(p.seatId),
+        ...(withAadhaar ? [p.aadhar ? maskAadhaar(p.aadhar) : "—"] : []),
+        p.checkedIn ? "Boarded" : "Not Boarded",
+        paymentStatus,
+      ])
+    })
+
+    const slug = selectedTour === "all" ? "all-tours" : selectedTour.toLowerCase().replace(/\s+/g, "-")
+    const filename = `yatrahub-travelers-${slug}-${new Date().toISOString().slice(0, 10)}.csv`
+    downloadCsv(filename, rows)
+  }
+
+  const handleOpenPrintPreview = (withAadhar) => {
+    setIncludeAadhar(withAadhar)
+    setShowPreview(true)
+  }
 
   const handlePrint = () => {
-    window.print();
-  };
+    window.print()
+  }
 
   return (
-    <div className="space-y-8 animate-in">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-indigo-100">
-            <ShieldCheck size={28} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              Admin: Internal Manifest
-            </h2>
-            <p className="text-sm font-medium text-slate-500">
-              Confidential traveler documents and contact database
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-          <div className="relative min-w-50">
-            <Filter
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
+    <div className="space-y-6">
+      {/* Top Action Toolbar: Filters, CSV & Print Manifest Actions */}
+      <Card elevation="sm" padding="md" className="space-y-4">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Search bar */}
+          <div className="flex-1 max-w-md">
+            <SearchInput
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClear={() => setSearchTerm("")}
+              placeholder="Search traveler, phone, city, tour, seat..."
+              size="sm"
+              aria-label="Search travelers"
             />
-            <select
-              value={selectedTour}
-              onChange={(e) => setSelectedTour(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none appearance-none cursor-pointer"
-            >
-              <option value="all">All Tours</option>
-              {uniqueTours.map((tour) => (
-                <option key={tour} value={tour}>
-                  {tour}
-                </option>
-              ))}
-            </select>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleExport(false)}
-              disabled={filteredBookings.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileDown size={16} /> Without Aadhar
-            </button>
-            <button
-              onClick={() => handleExport(true)}
-              disabled={filteredBookings.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileDown size={16} /> With Aadhar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Sticky Search and Filter Chips Toolbar */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        {/* Search input */}
-        <div className="relative flex-1 max-w-md">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search passenger, phone, city, tour, seat..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all outline-none"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Filter chips */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0">
-            Status:
-          </span>
-          {[
-            { id: "all", label: "All" },
-            { id: "paid", label: "Paid" },
-            { id: "pending", label: "Pending" },
-            { id: "cancelled", label: "Cancelled" },
-          ].map((chip) => {
-            const isActive = statusFilter === chip.id;
-            return (
-              <button
-                key={chip.id}
-                onClick={() => setStatusFilter(chip.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
-                  isActive
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+          {/* Tour filter & Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-full sm:w-52 shrink-0">
+              <Select
+                size="sm"
+                value={selectedTour}
+                onChange={(e) => setSelectedTour(e.target.value)}
+                aria-label="Filter by destination"
               >
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                <option value="all">All Destinations</option>
+                {uniqueTours.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<FileDown size={15} />}
+              disabled={passengerEntries.length === 0}
+              onClick={() => handleExportCSV(false)}
+              title="Download CSV without Aadhaar numbers"
+            >
+              Export CSV
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<FileDown size={15} />}
+              disabled={passengerEntries.length === 0}
+              onClick={() => handleExportCSV(true)}
+              title="Download CSV including masked Aadhaar numbers"
+            >
+              CSV with Aadhaar
+            </Button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Printer size={15} />}
+              disabled={passengerEntries.length === 0}
+              onClick={() => handleOpenPrintPreview(includeAadhar)}
+            >
+              Print Manifest
+            </Button>
+          </div>
+        </div>
+
+        {/* Filter Chips Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-subtle">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by payment status">
+            <span className="text-xs font-semibold text-ink-muted mr-1">Payment:</span>
+            {STATUS_CHIPS.map((chip) => {
+              const isActive = statusFilter === chip.id
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setStatusFilter(chip.id)}
+                  className={cn(
+                    "rounded-[var(--yh-radius-full)] px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer",
+                    isActive
+                      ? "bg-brand text-brand-fg shadow-xs"
+                      : "bg-surface-muted text-ink-muted hover:bg-surface-hover hover:text-ink",
+                    FOCUS_RING_CLASS,
+                  )}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by boarding status">
+            <span className="text-xs font-semibold text-ink-muted mr-1">Boarding:</span>
+            {BOARDING_CHIPS.map((chip) => {
+              const isActive = boardingFilter === chip.id
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setBoardingFilter(chip.id)}
+                  className={cn(
+                    "rounded-[var(--yh-radius-full)] px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer",
+                    isActive
+                      ? "bg-brand-primary text-white shadow-xs"
+                      : "bg-surface-muted text-ink-muted hover:bg-surface-hover hover:text-ink",
+                    FOCUS_RING_CLASS,
+                  )}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
+
+      {/* Filter Active Notice */}
       {selectedTour !== "all" && (
-        <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-indigo-600 p-2 rounded-lg text-white">
-              <Filter size={18} />
-            </div>
-            <div>
-              <p className="text-xs font-black uppercase tracking-wider text-indigo-600">
-                Filtered by Tour
-              </p>
-              <p className="text-sm font-black text-indigo-900">
-                {selectedTour}
-              </p>
-            </div>
+        <div className="flex items-center justify-between p-3 rounded-[var(--yh-radius-md)] bg-brand-soft border border-border-subtle text-xs">
+          <div className="flex items-center gap-2">
+            <Badge variant="primary" size="sm">
+              Destination
+            </Badge>
+            <span className="font-semibold text-ink">Showing travelers for {selectedTour}</span>
           </div>
           <button
+            type="button"
             onClick={() => setSelectedTour("all")}
-            className="text-indigo-600 hover:text-indigo-800 font-bold text-sm flex items-center gap-1"
+            className="font-semibold text-brand hover:underline cursor-pointer"
           >
-            <X size={16} /> Clear Filter
+            Clear filter
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-100">
-                <th className="px-8 py-5">Tour Assignment</th>
-                <th className="px-8 py-5">Full Name</th>
-                <th className="px-8 py-5">Contact Details</th>
-                <th className="px-8 py-5">Aadhar Card</th>
-                <th className="px-8 py-5">Location</th>
-                <th className="px-8 py-5 text-center">Age/Sex</th>
-                <th className="px-8 py-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredBookings.flatMap((booking) => {
-                return booking.passengers.map((p, idx) => {
-                  const passengerKey = `${booking._id || booking.id}-${p._id || idx}`
-                  const isAadhaarVisible = !!unmaskedAadhaar[passengerKey]
+      {/* Main Passenger Table / Card List */}
+      {passengerEntries.length === 0 ? (
+        <EmptyState
+          icon={<Users size={28} />}
+          title="No travelers found"
+          description={
+            searchTerm || statusFilter !== "all" || boardingFilter !== "all" || selectedTour !== "all"
+              ? "Try adjusting your search query or filters to find what you are looking for."
+              : "No passenger reservations have been created yet."
+          }
+          action={
+            searchTerm || statusFilter !== "all" || boardingFilter !== "all" || selectedTour !== "all" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm("")
+                  setSelectedTour("all")
+                  setStatusFilter("all")
+                  setBoardingFilter("all")
+                }}
+              >
+                Reset all filters
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <>
+          {/* Desktop Table View (md+) */}
+          <div className="hidden md:block">
+            <Table ariaLabel="Travelers roster table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tour &amp; Date</TableHead>
+                  <TableHead>Traveler Name</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Seat</TableHead>
+                  <TableHead>Aadhaar</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead align="center">Age/Sex</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead align="right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {passengerEntries.map(({ booking: b, passenger: p, paxIndex: idx }) => {
+                  const passengerKey = `${b._id || b.id}-${p._id || idx}`
+                  const isAadhaarVisible = Boolean(unmaskedAadhaar[passengerKey])
+                  const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+                  const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+                  const isPaid = !isCancelled && (b.isPaid || balance === 0)
+
                   return (
-                  <tr
-                    key={passengerKey}
-                    className="hover:bg-slate-50/50 transition-colors group"
-                  >
-                    <td className="px-8 py-5">
-                      <span className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider block w-fit">
-                        {booking.tourName}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-bold mt-1 block">
-                        {formatDisplayDate(booking.journeyDate)}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 font-black text-slate-900">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                          <User size={14} />
-                        </div>
-                        {p.name}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                        <Phone size={14} className="text-indigo-400" />{" "}
-                        {p.contact || "NOT PROVIDED"}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                        <Fingerprint size={14} className="text-indigo-400" />{" "}
-                        <span>
-                          {p.aadhar
-                            ? isAadhaarVisible
-                              ? p.aadhar
-                              : maskAadhaar(p.aadhar)
-                            : "MISSING"}
+                    <TableRow key={passengerKey}>
+                      <TableCell>
+                        <Badge variant="primary" size="sm" className="mb-0.5 block w-fit">
+                          {b.tourName}
+                        </Badge>
+                        <span className="text-xs text-ink-muted block">
+                          {formatDisplayDate(b.journeyDate)} • #{b.invoiceNo}
                         </span>
-                        {p.aadhar && (
-                          <button
-                            type="button"
-                            onClick={() => toggleAadhaarVisibility(passengerKey)}
-                            className="text-slate-400 hover:text-indigo-600 p-1 rounded-md transition-colors"
-                            title={isAadhaarVisible ? "Hide Aadhaar" : "Show Aadhaar"}
+                      </TableCell>
+
+                      <TableCell>
+                        <span className="font-bold text-ink block">{p.name}</span>
+                        {p.checkedIn ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-status-success-text">
+                            <CheckCircle2 size={12} /> Boarded
+                          </span>
+                        ) : null}
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
+                          <Phone size={13} className="text-ink-muted shrink-0" />
+                          <span>{p.contact || b.contactPhone || "—"}</span>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <span className="font-bold text-brand tabular-nums">
+                          {formatSeatLabel(p.seatId)}
+                        </span>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <Fingerprint size={14} className="text-ink-muted shrink-0" />
+                          <span className="font-mono text-xs tabular-nums text-ink">
+                            {p.aadhar
+                              ? isAadhaarVisible
+                                ? unmaskedAadhaar[passengerKey] || p.aadhar
+                                : maskAadhaar(p.aadhar)
+                              : "—"}
+                          </span>
+                          {p.aadhar ? (
+                            <IconButton
+                              aria-label={isAadhaarVisible ? "Hide Aadhaar" : "Reveal Aadhaar"}
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 text-ink-muted hover:text-brand"
+                              onClick={() => handleRevealAadhaar(b, p, idx)}
+                              title={isAadhaarVisible ? "Hide Aadhaar" : "Reveal Aadhaar"}
+                            >
+                              {isAadhaarVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </IconButton>
+                          ) : null}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <span className="text-xs text-ink-secondary">{p.city || "—"}</span>
+                      </TableCell>
+
+                      <TableCell align="center">
+                        <span className="text-xs font-semibold text-ink tabular-nums">
+                          {p.age ? `${p.age}Y` : "—"} / {p.gender ? p.gender.charAt(0).toUpperCase() : "—"}
+                        </span>
+                      </TableCell>
+
+                      <TableCell>
+                        <StatusPill
+                          status={isCancelled ? "Cancelled" : isPaid ? "Paid" : "Pending"}
+                          size="sm"
+                        />
+                      </TableCell>
+
+                      <TableCell align="right">
+                        <div className="flex items-center justify-end gap-1">
+                          <IconButton
+                            aria-label={`View boarding pass for ${p.name}`}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setBoardingPassTarget({ booking: b, paxIndex: idx })}
+                            title="Boarding Pass & QR"
                           >
-                            {isAadhaarVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
-                        <MapPin size={14} className="text-indigo-400" />{" "}
-                        {p.city}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-center font-black text-slate-900 text-xs">
-                      {p.age}Y / {p.gender.toUpperCase()}
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          title="View & Print Boarding Pass & QR"
-                        >
-                          <Ticket size={18} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onEditBooking(booking)}
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title="Edit Passenger Details"
-                        >
-                          <Edit3 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            })}
-              {filteredBookings.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-8 py-20 text-center text-slate-400 font-bold"
-                  >
-                    No passenger records available in system.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                            <Ticket size={16} />
+                          </IconButton>
+                          <IconButton
+                            aria-label={`Edit booking #${b.invoiceNo}`}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onEditBooking(b)}
+                            title="Edit booking"
+                          >
+                            <Edit3 size={16} />
+                          </IconButton>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="bg-indigo-600 p-2 rounded-xl text-white">
-                  <Eye size={20} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    Passenger Manifest Preview
-                  </h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    {includeAadhar
-                      ? "With Aadhar Numbers"
-                      : "Without Aadhar Numbers"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-100 transition-all"
+          {/* Mobile Stacked Card View (<md) */}
+          <div className="space-y-3 md:hidden">
+            {passengerEntries.map(({ booking: b, passenger: p, paxIndex: idx }) => {
+              const passengerKey = `${b._id || b.id}-${p._id || idx}`
+              const isAadhaarVisible = Boolean(unmaskedAadhaar[passengerKey])
+              const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+              const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+              const isPaid = !isCancelled && (b.isPaid || balance === 0)
+
+              return (
+                <div
+                  key={passengerKey}
+                  className="rounded-[var(--yh-radius-lg)] border border-border-subtle bg-surface p-4 space-y-3 shadow-xs"
                 >
-                  <Printer size={16} /> Export PDF
-                </button>
-                <button
-                  onClick={() => setShowPreview(false)}
-                  className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-bold text-ink text-base block truncate">{p.name}</span>
+                      <span className="text-xs text-ink-muted">
+                        Seat: <strong className="text-brand tabular-nums">{formatSeatLabel(p.seatId)}</strong>
+                      </span>
+                    </div>
+                    <StatusPill
+                      status={isCancelled ? "Cancelled" : isPaid ? "Paid" : "Pending"}
+                      size="sm"
+                    />
+                  </div>
 
-            <div
-              className="flex-1 overflow-y-auto p-8 bg-slate-50"
-              id="pdf-content"
-            >
-              <div className="bg-white p-10 rounded-2xl shadow-sm mx-auto max-w-3xl print-content">
-                {/* PDF Header */}
-                <div className="text-center mb-8 border-b-2 border-indigo-600 pb-6">
-                  <h1 className="text-3xl font-black text-indigo-600 mb-2">
-                    YATRA HUB
-                  </h1>
-                  <p className="text-sm font-bold text-slate-600 uppercase tracking-widest">
-                    Internal Passenger Manifest
-                  </p>
-                </div>
-
-                {/* Tour Information */}
-                <div className="mb-8 bg-indigo-50 p-6 rounded-xl border-2 border-indigo-100">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
-                        Tour Name
-                      </p>
-                      <p className="font-black text-indigo-900">
-                        {selectedTour === "all" ? "All Tours" : selectedTour}
-                      </p>
+                      <span className="text-ink-muted block text-[11px]">Tour</span>
+                      <span className="font-semibold text-ink truncate block">{b.tourName}</span>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
-                        Journey Date
-                      </p>
-                      <p className="font-black text-indigo-900">
-                        {getJourneyDate()}
-                      </p>
+                      <span className="text-ink-muted block text-[11px]">Journey Date</span>
+                      <span className="font-semibold text-ink">{formatDisplayDate(b.journeyDate)}</span>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
-                        Total Passengers
-                      </p>
-                      <p className="font-black text-indigo-900">
-                        {filteredBookings.reduce(
-                          (acc, b) => acc + b.passengers.length,
-                          0
-                        )}
-                      </p>
+                      <span className="text-ink-muted block text-[11px]">Contact</span>
+                      <span className="font-semibold text-ink truncate block">
+                        {p.contact || b.contactPhone || "—"}
+                      </span>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-indigo-400 mb-1">
-                        Generated On
-                      </p>
-                      <p className="font-black text-indigo-900">
-                        {new Date().toLocaleDateString()}
-                      </p>
+                      <span className="text-ink-muted block text-[11px]">Age / Sex / City</span>
+                      <span className="font-semibold text-ink">
+                        {p.age}Y • {p.gender ? p.gender.charAt(0).toUpperCase() : "—"} • {p.city || "—"}
+                      </span>
                     </div>
                   </div>
-                </div>
 
-                {/* Passenger Table */}
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b-2 border-slate-200">
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                        #
-                      </th>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                        Passenger Name
-                      </th>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                        City
-                      </th>
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                        Contact
-                      </th>
-                      {includeAadhar && (
-                        <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600">
-                          Aadhar
-                        </th>
-                      )}
-                      <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-600 text-center">
-                        Age/Gender
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredBookings.flatMap((booking, bookingIdx) =>
-                      booking.passengers.map((p, idx) => {
-                        const globalIndex =
-                          filteredBookings
-                            .slice(0, bookingIdx)
-                            .reduce((acc, b) => acc + b.passengers.length, 0) +
-                          idx +
-                          1;
-                        return (
-                          <tr
-                            key={`${booking.id}-${idx}`}
-                            className="hover:bg-slate-50"
-                          >
-                            <td className="px-4 py-3 text-sm font-bold text-slate-400">
-                              {globalIndex}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-black text-slate-900">
-                              {p.name}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-bold text-slate-600">
-                              {p.city}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-bold text-slate-600">
-                              {p.contact || "N/A"}
-                            </td>
-                            {includeAadhar && (
-                              <td className="px-4 py-3 text-sm font-bold text-slate-600">
-                                {p.aadhar || "MISSING"}
-                              </td>
-                            )}
-                            <td className="px-4 py-3 text-sm font-bold text-slate-700 text-center">
-                              {p.age}Y / {p.gender[0]}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                  {/* Aadhaar row with Reveal button */}
+                  <div className="flex items-center justify-between p-2 rounded-[var(--yh-radius-sm)] bg-surface-muted/60 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Fingerprint size={14} className="text-ink-muted shrink-0" />
+                      <span className="font-mono text-xs tabular-nums text-ink truncate">
+                        {p.aadhar
+                          ? isAadhaarVisible
+                            ? unmaskedAadhaar[passengerKey] || p.aadhar
+                            : maskAadhaar(p.aadhar)
+                          : "Aadhaar: Not on file"}
+                      </span>
+                    </div>
+                    {p.aadhar ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs font-semibold text-brand"
+                        onClick={() => handleRevealAadhaar(b, p, idx)}
+                      >
+                        {isAadhaarVisible ? "Hide" : "Reveal"}
+                      </Button>
+                    ) : null}
+                  </div>
 
-                {/* Footer */}
-                <div className="mt-10 pt-6 border-t border-slate-200 text-center">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    This is a confidential document for internal use only
-                  </p>
-                  <p className="text-xs font-bold text-indigo-600 mt-2">
-                    www.yatrahub.com
-                  </p>
+                  {/* Touch Action Bar */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="min-h-11 flex-1"
+                      leftIcon={<Ticket size={16} />}
+                      onClick={() => setBoardingPassTarget({ booking: b, paxIndex: idx })}
+                    >
+                      Boarding Pass
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="min-h-11 flex-1"
+                      leftIcon={<Edit3 size={16} />}
+                      onClick={() => onEditBooking(b)}
+                    >
+                      Edit Booking
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Manifest Print Preview Modal on Modal primitive */}
+      <Modal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        size="xl"
+        className="max-w-4xl max-h-[92vh]"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand text-brand-fg shrink-0">
+              <Printer size={18} />
+            </div>
+            <div>
+              <span className="text-base font-bold text-ink">Passenger Manifest Preview</span>
+              <p className="text-xs text-ink-muted font-normal mt-0.5">
+                {includeAadhar ? "Includes passenger Aadhaar numbers" : "Without Aadhaar numbers"}
+              </p>
             </div>
           </div>
+        }
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIncludeAadhar((prev) => !prev)}
+            >
+              Toggle Aadhaar: {includeAadhar ? "Enabled" : "Disabled"}
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPreview(false)}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                leftIcon={<Printer size={16} />}
+                onClick={handlePrint}
+              >
+                Print Manifest
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div id="pdf-content" className="bg-white p-6 sm:p-8 rounded-xl border border-slate-200 text-slate-900 print-content">
+          <div className="text-center mb-6 border-b-2 border-indigo-600 pb-4">
+            <h2 className="text-2xl font-black text-indigo-600 mb-1">
+              {user?.companyName || "YATRA HUB"}
+            </h2>
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
+              Internal Passenger Manifest
+            </p>
+          </div>
+
+          <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Destination</span>
+              <span className="font-bold text-slate-800 text-sm">
+                {selectedTour === "all" ? "All Tours" : selectedTour}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Passengers</span>
+              <span className="font-bold text-slate-800 text-sm">{passengerEntries.length} PAX</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Generated On</span>
+              <span className="font-bold text-slate-800 text-sm">{new Date().toLocaleDateString()}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-500 uppercase block">Aadhaar Stamped</span>
+              <span className="font-bold text-slate-800 text-sm">{includeAadhar ? "Yes" : "No"}</span>
+            </div>
+          </div>
+
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-600">
+                <th className="p-2">#</th>
+                <th className="p-2">Traveler Name</th>
+                <th className="p-2">City</th>
+                <th className="p-2">Contact</th>
+                <th className="p-2">Seat</th>
+                {includeAadhar && <th className="p-2">Aadhaar</th>}
+                <th className="p-2 text-center">Age/Sex</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {passengerEntries.map(({ booking: b, passenger: p }, idx) => (
+                <tr key={`${b.id || b._id}-${idx}`} className="hover:bg-slate-50">
+                  <td className="p-2 font-bold text-slate-500">{idx + 1}</td>
+                  <td className="p-2 font-bold text-slate-900">{p.name}</td>
+                  <td className="p-2 text-slate-700">{p.city || "—"}</td>
+                  <td className="p-2 text-slate-700">{p.contact || b.contactPhone || "—"}</td>
+                  <td className="p-2 font-bold text-indigo-700">{formatSeatLabel(p.seatId)}</td>
+                  {includeAadhar && (
+                    <td className="p-2 font-mono text-slate-700">
+                      {p.aadhar ? maskAadhaar(p.aadhar) : "—"}
+                    </td>
+                  )}
+                  <td className="p-2 text-center text-slate-700">
+                    {p.age}Y / {p.gender ? p.gender.charAt(0).toUpperCase() : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-500">
+            Confidential document generated for internal tour conductor operations.
+          </div>
         </div>
-      )}
+      </Modal>
 
       <style jsx global>{`
         @media print {
@@ -548,5 +771,5 @@ export default function PassengerManagement({
         />
       )}
     </div>
-  );
+  )
 }

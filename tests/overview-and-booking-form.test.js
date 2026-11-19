@@ -192,7 +192,7 @@ describe("Stepped Booking Form Helpers (Part 3.3)", () => {
     )
     assert.equal(resolvePageMeta("dashboard").hasOwnHeading, false)
     assert.equal(resolvePageMeta("form").hasOwnHeading, false)
-    assert.equal(resolvePageMeta("passengers").hasOwnHeading, true)
+    assert.equal(resolvePageMeta("passengers").hasOwnHeading, false)
   })
 
   it("validates Step 0 (Tour, Date, Bus & Primary Contact) strictly", () => {

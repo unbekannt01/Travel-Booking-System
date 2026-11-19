@@ -30,7 +30,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Travelers",
     description: "Manage passenger rosters, Aadhaar details, and booking edits.",
     iconName: "Users",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: true,
   },
   {
