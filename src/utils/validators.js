@@ -35,3 +35,53 @@ export function isValidAadhaar(aadhar, { allowMasked = false } = {}) {
   if (allowMasked && isMaskedAadhaar(aadhar)) return true
   return /^\d{12}$/.test(clean)
 }
+
+/**
+ * Evaluates password against security complexity policy (SEC-010).
+ * Requires: length >= 10, uppercase, lowercase, number, symbol.
+ */
+export function checkPasswordCriteria(password) {
+  const pwd = typeof password === "string" ? password : ""
+  return {
+    minLength: pwd.length >= 10,
+    hasUpper: /[A-Z]/.test(pwd),
+    hasLower: /[a-z]/.test(pwd),
+    hasDigit: /[0-9]/.test(pwd),
+    hasSpecial: /[^A-Za-z0-9]/.test(pwd),
+    isValid:
+      pwd.length >= 10 &&
+      /[A-Z]/.test(pwd) &&
+      /[a-z]/.test(pwd) &&
+      /[0-9]/.test(pwd) &&
+      /[^A-Za-z0-9]/.test(pwd),
+  }
+}
+
+/**
+ * Maps authentication errors, lockouts, and rate limits to human-readable guidance.
+ */
+export function formatAuthError(error) {
+  if (!error) return "An unexpected error occurred. Please try again."
+  const msg = typeof error === "string" ? error : error.message || ""
+  const lower = msg.toLowerCase()
+
+  if (lower.includes("locked") || lower.includes("lockout")) {
+    return msg
+  }
+  if (lower.includes("too many") || lower.includes("rate limit") || lower.includes("429")) {
+    return "Too many requests. Please wait a moment before trying again."
+  }
+  if (
+    lower.includes("invalid") &&
+    (lower.includes("credential") ||
+      lower.includes("password") ||
+      lower.includes("email") ||
+      lower.includes("username"))
+  ) {
+    return "Invalid username or password. Please verify and try again."
+  }
+  if (lower.includes("expired") || lower.includes("token")) {
+    return msg || "This security link or token has expired. Please request a new one."
+  }
+  return msg || "Authentication failed. Please verify your connection and try again."
+}

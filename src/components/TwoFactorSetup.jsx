@@ -1,6 +1,8 @@
 import { useState } from "react"
-import { Shield, Copy, CheckCircle2, Smartphone } from "lucide-react"
+import { Shield, Copy, CheckCircle2, Smartphone, AlertCircle } from "lucide-react"
 import { setup2FA, verify2FASetup } from "../data/auth"
+import { Button, Input, Field, Card } from "./ui/index"
+import { formatAuthError } from "../utils/validators"
 
 export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
   const [qrCode, setQrCode] = useState("")
@@ -21,7 +23,7 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
       setSecret(data.secret)
       setStep("verify")
     } catch (err) {
-      setError(err.message)
+      setError(formatAuthError(err))
     } finally {
       setLoading(false)
     }
@@ -36,131 +38,156 @@ export default function TwoFactorSetup({ token, onSetupComplete, onSkip }) {
       await verify2FASetup(verificationCode, token)
       onSetupComplete()
     } catch (err) {
-      setError(err.message)
+      setError(formatAuthError(err))
     } finally {
       setLoading(false)
     }
   }
 
   const copySecret = () => {
+    if (!secret) return
     navigator.clipboard.writeText(secret)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-(--yh-bg-subtle) flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center bg-green-500 p-4 rounded-2xl text-white shadow-xl shadow-green-500/20 mb-6">
-            <Shield size={32} strokeWidth={2.5} />
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-(--yh-brand)/10 text-(--yh-brand) shadow-sm mb-3">
+            <Shield size={28} />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Setup 2FA</h1>
-          <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-xs">
-            Secure Your Account with Google Authenticator
+          <h1 className="text-2xl font-black text-(--yh-text-primary) tracking-tight">
+            Setup Two-Factor Authentication
+          </h1>
+          <p className="text-xs text-(--yh-text-muted) font-medium mt-1">
+            Secure your account with Google Authenticator or Authy
           </p>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+        <Card elevation="md" className="p-6 sm:p-8 rounded-3xl border-(--yh-border-subtle)">
           {step === "generate" && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+            <div className="space-y-5">
+              <div className="p-4 rounded-xl bg-(--yh-surface-muted) border border-(--yh-border-subtle) text-xs">
                 <div className="flex gap-3">
-                  <Smartphone className="text-blue-500 shrink-0 mt-1" size={20} />
-                  <div className="text-sm text-slate-700">
-                    <p className="font-bold mb-2">Before you continue:</p>
-                    <ol className="list-decimal ml-4 space-y-1 font-medium">
-                      <li>Install Google Authenticator app on your phone</li>
-                      <li>Click the button below to generate your QR code</li>
-                      <li>Scan the QR code with the app</li>
-                      <li>Enter the 6-digit code to verify</li>
+                  <Smartphone className="text-(--yh-brand) shrink-0 mt-0.5" size={18} />
+                  <div className="space-y-2 text-(--yh-text-muted)">
+                    <p className="font-bold text-(--yh-text-primary)">Before continuing:</p>
+                    <ol className="list-decimal ml-4 space-y-1">
+                      <li>Open Google Authenticator on your smartphone</li>
+                      <li>Click &quot;Generate Setup Key&quot; below to show QR code</li>
+                      <li>Scan the code and enter the 6-digit code to confirm</li>
                     </ol>
                   </div>
                 </div>
               </div>
 
-              <button
+              {error && (
+                <div role="alert" className="p-3 rounded-xl bg-(--yh-danger)/10 border border-(--yh-danger)/20 text-xs text-(--yh-danger) font-medium flex items-start gap-2">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <Button
+                variant="primary"
                 onClick={generateQRCode}
                 disabled={loading}
-                className="w-full bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2"
+                className="w-full"
+                icon={<Shield size={16} />}
               >
-                <Shield size={18} strokeWidth={3} />
-                {loading ? "Generating..." : "Generate QR Code"}
-              </button>
+                {loading ? "Generating Key..." : "Generate Setup Key"}
+              </Button>
 
-              <button
+              <Button
+                variant="ghost"
                 onClick={onSkip}
-                className="w-full text-slate-500 hover:text-slate-700 py-3 rounded-2xl font-bold text-sm transition-all"
+                className="w-full text-xs text-(--yh-text-muted)"
               >
                 Skip for Now
-              </button>
+              </Button>
             </div>
           )}
 
           {step === "verify" && (
-            <form onSubmit={verifyAndEnable} className="space-y-6">
+            <form onSubmit={verifyAndEnable} className="space-y-5">
+              {/* QR Code Container */}
               <div className="flex justify-center">
-                <div className="bg-white p-4 rounded-2xl border-4 border-slate-100">
-                  <img src={qrCode || "/placeholder.svg"} alt="QR Code" className="w-48 h-48" />
+                <div className="bg-white p-3 rounded-2xl border-2 border-(--yh-border-subtle) shadow-sm">
+                  <img src={qrCode || "/placeholder.svg"} alt="2FA QR Code" className="w-44 h-44" />
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Manual Entry Key</p>
+              {/* Manual Entry Key */}
+              <div className="p-3 rounded-xl bg-(--yh-surface-muted) border border-(--yh-border-subtle)">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-(--yh-text-muted) mb-1">
+                  Manual Entry Key
+                </p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm font-mono font-bold text-slate-700 break-all">{secret}</code>
+                  <code className="flex-1 text-xs font-mono font-bold text-(--yh-text-primary) break-all">
+                    {secret}
+                  </code>
                   <button
                     type="button"
                     onClick={copySecret}
-                    className="p-2 hover:bg-slate-200 rounded-lg transition-colors shrink-0"
+                    className="p-1.5 hover:bg-(--yh-surface) rounded-lg transition-colors text-(--yh-text-muted) hover:text-(--yh-text-primary) shrink-0"
+                    title="Copy Secret"
                   >
                     {copied ? (
-                      <CheckCircle2 size={18} className="text-green-500" />
+                      <CheckCircle2 size={16} className="text-(--yh-success)" />
                     ) : (
-                      <Copy size={18} className="text-slate-400" />
+                      <Copy size={16} />
                     )}
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">
-                  Enter 6-Digit Code
-                </label>
-                <input
+              <Field label="Enter 6-Digit Authenticator Code" required>
+                <Input
                   type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
                   required
                   maxLength={6}
                   pattern="[0-9]{6}"
                   placeholder="000000"
-                  className="w-full px-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-black text-center text-2xl tracking-[0.5em]"
+                  className="text-center text-2xl font-mono font-bold tracking-[0.4em] py-3.5"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                   disabled={loading}
+                  autoFocus
                 />
-              </div>
+              </Field>
 
-              {error && <p className="text-red-500 text-xs font-bold text-center">{error}</p>}
+              {error && (
+                <div role="alert" className="p-3 rounded-xl bg-(--yh-danger)/10 border border-(--yh-danger)/20 text-xs text-(--yh-danger) font-medium flex items-start gap-2">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-              <button
+              <Button
                 type="submit"
+                variant="primary"
                 disabled={loading || verificationCode.length !== 6}
-                className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-green-500/20 transition-all flex items-center justify-center gap-2"
+                className="w-full"
+                icon={<CheckCircle2 size={16} />}
               >
-                <CheckCircle2 size={18} strokeWidth={3} />
                 {loading ? "Verifying..." : "Verify & Enable 2FA"}
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={onSkip}
-                className="w-full text-slate-500 hover:text-slate-700 py-3 rounded-2xl font-bold text-sm transition-all"
+                className="w-full text-xs text-(--yh-text-muted)"
               >
                 Skip for Now
-              </button>
+              </Button>
             </form>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   )

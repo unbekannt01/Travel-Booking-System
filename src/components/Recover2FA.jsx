@@ -1,7 +1,7 @@
-/* eslint-disable no-unused-vars */
 import { useState, useEffect } from "react"
-import { Shield, ShieldAlert, Check, Loader2, XCircle, AlertCircle, ArrowLeft } from "lucide-react"
+import { Shield, Check, Loader2, XCircle, AlertCircle, ArrowLeft } from "lucide-react"
 import { validate2FAToken, finalize2FARecovery } from "../data/auth"
+import { Button, Card } from "./ui/index"
 
 export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   const [loading, setLoading] = useState(false)
@@ -11,144 +11,164 @@ export default function Recover2FA({ token, onShow2FASetup, onBackToLogin }) {
   const [tokenError, setTokenError] = useState("")
 
   useEffect(() => {
+    let isMounted = true
     const validate = async () => {
       try {
         const data = await validate2FAToken(token)
+        if (!isMounted) return
 
         if (!data || !data.valid) {
           setTokenValid(false)
-          setTokenError((data && data.message) || "Invalid or expired recovery token")
+          setTokenError((data && data.message) || "Invalid or expired recovery link")
         } else {
           setTokenValid(true)
         }
       } catch (err) {
+        if (!isMounted) return
         setTokenValid(false)
-        setTokenError("Failed to validate token. Please try again.")
+        setTokenError(err.message || "Failed to validate recovery token. Please request a new link.")
       } finally {
-        setValidating(false)
+        if (isMounted) setValidating(false)
       }
     }
 
     validate()
+    return () => {
+      isMounted = false
+    }
   }, [token])
 
   useEffect(() => {
     if (!tokenValid || validating) return
 
+    let isMounted = true
     const recoverAccount = async () => {
       setLoading(true)
       try {
         const data = await finalize2FARecovery(token)
+        if (!isMounted) return
 
         if (data.requiresSetup && data.tempToken) {
           localStorage.setItem("auth-token", data.tempToken)
           localStorage.setItem("user", JSON.stringify(data.user))
 
           setTimeout(() => {
-            onShow2FASetup(data.tempToken)
-          }, 1500)
+            if (isMounted) onShow2FASetup(data.tempToken)
+          }, 1200)
         }
       } catch (err) {
-        setError(err.message)
+        if (isMounted) setError(err.message || "Failed to complete account recovery.")
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
     recoverAccount()
+    return () => {
+      isMounted = false
+    }
   }, [tokenValid, validating, token, onShow2FASetup])
 
   if (validating) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center">
-        <div className="w-full max-w-md bg-white p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100">
-          <div className="space-y-6">
-            <div className="inline-flex items-center justify-center bg-blue-500/10 p-5 rounded-3xl text-blue-500">
-              <Loader2 className="animate-spin" size={40} />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Validating Recovery Link...</h2>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed px-4">
-              Please wait
-            </p>
+      <div className="min-h-screen bg-(--yh-bg-subtle) flex items-center justify-center p-4 sm:p-6 text-center">
+        <Card elevation="md" className="w-full max-w-md p-8 rounded-3xl border-(--yh-border-subtle) space-y-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-(--yh-brand)/10 text-(--yh-brand) mx-auto">
+            <Loader2 className="animate-spin" size={24} />
           </div>
-        </div>
+          <h2 className="text-xl font-bold text-(--yh-text-primary)">
+            Validating Recovery Link...
+          </h2>
+          <p className="text-xs text-(--yh-text-muted)">
+            Please wait while we verify your one-time recovery token.
+          </p>
+        </Card>
       </div>
     )
   }
 
   if (!tokenValid) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center">
-        <div className="w-full max-w-md bg-white p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100">
-          <div className="space-y-6">
-            <div className="inline-flex items-center justify-center bg-red-50 p-4 rounded-2xl text-red-500 mb-4">
-              <XCircle size={48} strokeWidth={2} />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Link Expired</h2>
-              <p className="text-slate-600 font-bold text-sm">
-                {tokenError || "This 2FA recovery link has expired or has already been used."}
-              </p>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-              <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
-              <p className="text-amber-800 text-xs font-bold text-left">
-                Recovery links expire after 1 hour or after being used once for security reasons.
-              </p>
-            </div>
-            <button
-              onClick={() => onBackToLogin()}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-            >
-              <ArrowLeft size={18} strokeWidth={3} />
-              Back to Login
-            </button>
+      <div className="min-h-screen bg-(--yh-bg-subtle) flex items-center justify-center p-4 sm:p-6 text-center">
+        <Card elevation="md" className="w-full max-w-md p-8 rounded-3xl border-(--yh-border-subtle) space-y-5">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-(--yh-danger)/10 text-(--yh-danger) mx-auto">
+            <XCircle size={28} />
           </div>
-        </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-(--yh-text-primary)">
+              Recovery Link Expired
+            </h2>
+            <p className="text-xs text-(--yh-text-muted) leading-relaxed">
+              {tokenError || "This 2FA recovery link has expired or has already been used."}
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-(--yh-surface-muted) border border-(--yh-border-subtle) text-left flex items-start gap-2.5 text-xs text-(--yh-text-muted)">
+            <AlertCircle size={16} className="text-(--yh-warning) shrink-0 mt-0.5" />
+            <span>
+              For your account security, 2FA recovery links are strictly valid for 1 hour and expire upon single use.
+            </span>
+          </div>
+          <Button
+            variant="primary"
+            onClick={onBackToLogin}
+            className="w-full"
+            icon={<ArrowLeft size={16} />}
+          >
+            Back to Sign In
+          </Button>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center">
-      <div className="w-full max-w-md bg-white p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100">
+    <div className="min-h-screen bg-(--yh-bg-subtle) flex items-center justify-center p-4 sm:p-6 text-center">
+      <Card elevation="md" className="w-full max-w-md p-8 rounded-3xl border-(--yh-border-subtle)">
         {loading ? (
-          <div className="space-y-6">
-            <div className="inline-flex items-center justify-center bg-blue-500/10 p-5 rounded-3xl text-blue-500 animate-pulse">
-              <Shield size={40} />
+          <div className="space-y-4">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-(--yh-brand)/10 text-(--yh-brand) mx-auto animate-pulse">
+              <Shield size={24} />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Recovering Access...</h2>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed px-4">
-              We are verifying your recovery link and disabling 2FA temporarily
+            <h2 className="text-xl font-bold text-(--yh-text-primary)">
+              Recovering Access...
+            </h2>
+            <p className="text-xs text-(--yh-text-muted)">
+              Verifying credentials and preparing to re-configure authenticator.
             </p>
-            <Loader2 className="animate-spin mx-auto text-blue-500" size={32} />
+            <Loader2 className="animate-spin mx-auto text-(--yh-brand)" size={24} />
           </div>
         ) : error ? (
-          <div className="space-y-6">
-            <div className="inline-flex items-center justify-center bg-red-500/10 p-5 rounded-3xl text-red-500">
-              <ShieldAlert size={40} />
+          <div className="space-y-4">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-(--yh-danger)/10 text-(--yh-danger) mx-auto">
+              <AlertCircle size={24} />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Recovery Failed</h2>
-            <p className="text-red-500/70 font-bold text-xs uppercase tracking-widest leading-relaxed">{error}</p>
-            <button
-              onClick={() => onBackToLogin()}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-slate-900/20 transition-all"
+            <h2 className="text-xl font-bold text-(--yh-text-primary)">
+              Recovery Failed
+            </h2>
+            <p className="text-xs text-(--yh-danger)">{error}</p>
+            <Button
+              variant="outline"
+              onClick={onBackToLogin}
+              className="w-full"
+              icon={<ArrowLeft size={16} />}
             >
-              Return to Login
-            </button>
+              Return to Sign In
+            </Button>
           </div>
         ) : (
-          <div className="space-y-6 animate-in zoom-in-95 duration-500">
-            <div className="inline-flex items-center justify-center bg-green-500 p-5 rounded-3xl text-white shadow-xl shadow-green-500/20">
-              <Check size={40} strokeWidth={3} />
+          <div className="space-y-4">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-(--yh-success)/15 text-(--yh-success) mx-auto">
+              <Check size={28} />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">2FA Disabled</h2>
-            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">
-              Redirecting you to setup 2FA again...
+            <h2 className="text-xl font-bold text-(--yh-text-primary)">
+              2FA Reset Successfully
+            </h2>
+            <p className="text-xs text-(--yh-text-muted)">
+              Redirecting you to set up your new authenticator key...
             </p>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

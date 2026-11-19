@@ -1,6 +1,8 @@
 import { useState } from "react"
-import { Shield, ArrowRight } from "lucide-react"
+import { Shield, ArrowRight, AlertCircle } from "lucide-react"
 import { verify2FALogin } from "../data/auth"
+import { Button, Input, Field, Card } from "./ui/index"
+import { formatAuthError } from "../utils/validators"
 
 export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
   const [verificationCode, setVerificationCode] = useState("")
@@ -17,73 +19,74 @@ export default function TwoFactorVerify({ tempToken, onVerifySuccess }) {
       onVerifySuccess(data.user)
     } catch (err) {
       console.error("2FA Verification Error:", err.message)
-      setError(err.message)
+      setError(formatAuthError(err))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-(--yh-bg-subtle) flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center bg-green-500 p-4 rounded-2xl text-white shadow-xl shadow-green-500/20 mb-6 animate-pulse">
-            <Shield size={32} strokeWidth={2.5} />
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-(--yh-success)/15 text-(--yh-success) shadow-sm mb-3">
+            <Shield size={28} />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Two-Factor Authentication</h1>
-          <p className="text-slate-500 font-bold mt-2 uppercase tracking-widest text-xs">
-            Enter Code from Google Authenticator
+          <h1 className="text-2xl font-black text-(--yh-text-primary) tracking-tight">
+            Two-Factor Verification
+          </h1>
+          <p className="text-xs text-(--yh-text-muted) font-medium mt-1">
+            Enter the 6-digit code from Google Authenticator
           </p>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 text-center">
-              <p className="text-sm font-bold text-slate-700">
-                Open your Google Authenticator app and enter the 6-digit code for YatraHub
+        <Card elevation="md" className="p-6 sm:p-8 rounded-3xl border-(--yh-border-subtle)">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="p-3.5 rounded-xl bg-(--yh-surface-muted) border border-(--yh-border-subtle) text-center">
+              <p className="text-xs text-(--yh-text-muted) leading-relaxed">
+                Open your authenticator app on your phone and enter the active 6-digit security code for YatraHub.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-wider ml-1">
-                6-Digit Authentication Code
-              </label>
-              <input
+            <Field label="6-Digit Authenticator Code" required>
+              <Input
                 type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 required
                 maxLength={6}
                 pattern="[0-9]{6}"
                 placeholder="000000"
-                className="w-full px-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-green-500/10 focus:border-green-500/60 transition-all outline-none font-black text-center text-2xl tracking-[0.5em]"
+                className="text-center text-2xl font-mono font-bold tracking-[0.4em] py-3.5"
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ""))}
                 disabled={loading}
                 autoFocus
               />
-            </div>
+            </Field>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
-                <p className="text-red-600 text-xs font-bold text-center">{error}</p>
+              <div role="alert" className="p-3 rounded-xl bg-(--yh-danger)/10 border border-(--yh-danger)/20 text-xs text-(--yh-danger) font-medium flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
+              variant="primary"
               disabled={loading || verificationCode.length !== 6}
-              className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-green-500/20 transition-all flex items-center justify-center gap-2"
+              className="w-full"
+              icon={<ArrowRight size={16} />}
             >
-              <ArrowRight size={18} strokeWidth={3} />
               {loading ? "Verifying..." : "Verify & Continue"}
-            </button>
+            </Button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-50">
-            <p className="text-xs text-slate-400 text-center font-medium">
-              The code refreshes every 30 seconds. Make sure to enter the current code.
-            </p>
-          </div>
-        </div>
+          <p className="text-[11px] text-(--yh-text-muted) text-center mt-5 pt-4 border-t border-(--yh-border-subtle)">
+            TOTP codes rotate every 30 seconds. Enter the current code before the timer expires.
+          </p>
+        </Card>
       </div>
     </div>
   )

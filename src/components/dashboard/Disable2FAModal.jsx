@@ -1,4 +1,5 @@
-import { Shield } from "lucide-react"
+import { ShieldAlert, AlertTriangle } from "lucide-react"
+import { Modal, Button, Input, Field } from "../ui/index"
 
 export default function Disable2FAModal({
   isOpen,
@@ -7,55 +8,53 @@ export default function Disable2FAModal({
   setDisable2FACode,
   handleDisable2FA,
 }) {
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-slate-100 animate-in zoom-in-95 duration-200">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center bg-red-500 p-4 rounded-2xl text-white shadow-xl shadow-red-500/20 mb-6">
-            <Shield size={32} strokeWidth={2.5} />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Disable 2FA?
-          </h2>
-          <p className="text-slate-500 font-bold mt-2 text-sm">
-            Enter your current 6-digit code to confirm
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Disable Two-Factor Authentication"
+      description="Enter your current 6-digit authenticator code to confirm."
+      size="sm"
+    >
+      <div className="space-y-4">
+        <div className="p-3.5 rounded-xl bg-(--yh-danger)/10 border border-(--yh-danger)/20 flex items-start gap-2.5 text-xs text-(--yh-danger)">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            Disabling 2FA lowers account security. Anyone with your password will be able to access passenger records and invoices.
           </p>
         </div>
 
-        <div className="space-y-4 mb-6">
-          <input
+        <Field label="6-Digit Authenticator Code" required>
+          <Input
             type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
             maxLength={6}
-            value={disable2FACode}
-            onChange={(e) =>
-              setDisable2FACode(e.target.value.replace(/\D/g, ""))
-            }
+            pattern="[0-9]{6}"
             placeholder="000000"
-            className="w-full px-4 py-3.5 bg-slate-50 border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary/60 transition-all outline-none font-black text-2xl text-center tracking-[0.5em]"
+            className="text-center text-2xl font-mono font-bold tracking-[0.4em] py-3.5"
+            value={disable2FACode}
+            onChange={(e) => setDisable2FACode(e.target.value.replace(/\D/g, ""))}
             autoFocus
           />
-        </div>
+        </Field>
 
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="py-4 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
-          >
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <Button variant="outline" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             type="button"
-            onClick={handleDisable2FA}
             disabled={disable2FACode.length !== 6}
-            className="bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-red-100 transition-all"
+            onClick={handleDisable2FA}
+            className="bg-(--yh-danger) hover:opacity-90 text-white"
+            icon={<ShieldAlert size={16} />}
           >
             Disable 2FA
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
