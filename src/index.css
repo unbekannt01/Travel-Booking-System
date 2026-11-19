@@ -8,15 +8,13 @@
   --font-sans: "Inter Variable", "Noto Sans Devanagari", "Noto Sans Gujarati", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
-  /* Radii (preserving legacy radius tokens + v2 scale) */
+  /* Radii */
   --radius-xs: var(--yh-radius-xs);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 2rem;
-  --radius-4xl: 2rem;
+  --radius-sm: var(--yh-radius-sm);
+  --radius-md: var(--yh-radius-md);
+  --radius-lg: var(--yh-radius-lg);
+  --radius-xl: var(--yh-radius-xl);
+  --radius-full: var(--yh-radius-full);
 
   /* Shadows */
   --shadow-yh-xs: var(--yh-shadow-xs);
@@ -75,29 +73,6 @@
   --color-info-border: var(--yh-info-border);
 
   --color-focus-ring: var(--yh-focus-ring);
-
-  /* Legacy tokens preserved so existing screens render identically until migrated in 3.2-3.5 */
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: hsl(221 83% 53%);
-  --color-primary-foreground: hsl(210 40% 98%);
-  --color-secondary: hsl(174 60% 51%);
-  --color-secondary-foreground: hsl(174 60% 15%);
-  --color-accent: hsl(45 93% 47%);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
 }
 
 @layer base {
@@ -183,24 +158,18 @@
     --yh-duration-slow: 250ms;
     --yh-ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-    /* === Legacy base variables preserved for existing screens === */
-    --background: hsl(210 40% 99%);
-    --foreground: hsl(222 47% 11%);
-    --card: hsl(0 0% 100%);
-    --card-foreground: hsl(222 47% 11%);
-    --popover: hsl(0 0% 100%);
-    --popover-foreground: hsl(222 47% 11%);
-    --destructive: hsl(0 84% 60%);
-    --destructive-foreground: hsl(210 40% 98%);
-    --border: hsl(214 32% 91%);
-    --input: hsl(214 32% 91%);
-    --ring: hsla(221, 83%, 53%, 0.2);
-    --chart-1: hsl(12 76% 61%);
-    --chart-2: hsl(173 58% 39%);
-    --chart-3: hsl(197 37% 24%);
-    --chart-4: hsl(43 74% 66%);
-    --chart-5: hsl(27 87% 67%);
-    --radius: 0.5rem;
+    /* Compatibility aliases for shorthand syntax */
+    --yh-bg-app: var(--yh-canvas);
+    --yh-bg-subtle: var(--yh-canvas);
+    --yh-bg-surface: var(--yh-surface);
+    --yh-bg-surface-muted: var(--yh-surface-muted);
+    --yh-border-default: var(--yh-border-subtle);
+    --yh-brand-subtle: var(--yh-brand-soft);
+    --yh-danger-subtle: var(--yh-danger-soft);
+    --yh-warning-subtle: var(--yh-warning-soft);
+    --yh-text-primary: var(--yh-ink);
+    --yh-text-secondary: var(--yh-ink-secondary);
+    --yh-text-muted: var(--yh-ink-muted);
   }
 
   [data-theme="dark"] {
@@ -266,13 +235,13 @@
   }
 
   * {
-    border-color: var(--border);
+    border-color: var(--yh-border-subtle);
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: var(--yh-canvas);
+    color: var(--yh-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
