@@ -57,7 +57,7 @@ export const NAV_ITEMS = Object.freeze([
     title: "Analytics",
     description: "Track tour revenue, occupancy, and seasonal performance.",
     iconName: "TrendingUp",
-    hasOwnHeading: true,
+    hasOwnHeading: false,
     mobilePrimary: false,
   },
   {
