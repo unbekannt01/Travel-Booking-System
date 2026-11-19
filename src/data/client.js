@@ -1,4 +1,4 @@
-import { API_URL } from "../config"
+import { API_URL } from "../config.js"
 
 export const API_STATUS_EVENT = "yatrahub:api-status"
 

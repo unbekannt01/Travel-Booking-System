@@ -17,14 +17,15 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (171 Tests / 22 Suites)
+## 2. Test Suites & Coverage Map (190 Tests / 23 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
-| **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === true`, `tours.hasOwnHeading === true`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
+| **`tests/remaining-screens-and-auth.test.js`** | 19 | **Remaining Screens, Auth & Theme Toggle (Part 3.5)**: Password complexity policy (`checkPasswordCriteria` test matrix for length, case, number, symbol); user-friendly auth error mapping (`formatAuthError` for 401, 403, 429, network, and fallback); API status event subscription and emission (`API_STATUS_EVENT`, `subscribeApiStatus`, `emitApiStatus`); `SHOW_THEME_TOGGLE` is explicitly true; all 6 navigation items (`dashboard`, `passengers`, `journey`, `tours`, `analytics`, `settings`) have `hasOwnHeading: false`; `resolvePageMeta` returns non-empty title and description for all tabs; print styles isolate dark mode. |
+| **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === false`, `tours.hasOwnHeading === false`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
 | **`tests/aadhaar-edit-roundtrip.test.js`** | 7 | **Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)**: Frontend validator detection of masked Aadhaar and `[UNCHANGED]` sentinel token; `isValidAadhaar` with `{ allowMasked: true }`; backend `isMaskedOrUnchangedAadhaar` verification; `BookingForm` Step 1 validation with masked Aadhaar; backend reconciliation preserving existing AES-256-GCM ciphertext on edit; re-encryption of new 12-digit Aadhaar when replaced; explicit clearance of Aadhaar; non-inheritance of Aadhaar by new passengers; guarantees raw masked strings are never persisted. |
 | **`tests/overview-and-booking-form.test.js`** | 10 | **Overview & Stepped Booking Form (Part 3.3)**: Bus capacity (`2x1`=36, `2x2`=40) and clamped occupancy %; `getBookingPaymentStatus` (`Cancelled`/`Paid`/`Partial`/`Pending`); KPI & Today's Operations metrics + 7-day departure grouping; recent booking status & search filtering; payment urgency classification (`Overdue`, `Due on boarding`, `Due soon`, `Scheduled`); 4-step booking validation (Steps 0–2 & cross-step `validateAllBookingSteps`, duplicate/conflicting seats, Aadhaar, advance bounds), step click navigation rules, sticky summary composition via `calculatePricing`, server 400/409 error formatting, and `hasOwnHeading: false` shell verification. |
-| **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === false`; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
+| **`tests/app-shell.test.js`** | 8 | **App Shell & Navigation (Part 3.2)**: Verifies 6 canonical tab IDs & labels; confirms `SHOW_THEME_TOGGLE === true` once all screens migrated; validates `resolvePageMeta` (including New vs Edit Booking and unknown fallback); tests `isNavItemActive`, `isMoreDestinationActive`, `getSkeletonVariant`, and resilient sidebar collapsed-state persistence with a throwing storage mock. |
 | **`tests/ui-foundation.test.js`** | 12 | **UI Foundation (Part 3.1)**: `formatINR` Indian digit grouping (lakhs/crores, 0 & 2 decimals, negatives, null/NaN safety); theme preference resolution (`system`/`light`/`dark`) and resilient `localStorage` fallback when storage throws; `applyThemeToDocument`; `STATUS_META` 6-status icon/tone coverage; `getInitials`/`getAvatarTone`; CVA variant classes (tokens, 44px mobile touch targets, focus rings); `cn()` conflict merging. |
 | **`tests/xss-escaping.test.js`** | 6 | **XSS Neutralization & CSP (SEC-001)**: Escapes HTML chars (`&`, `<`, `>`, `"`, `'`); handles null/undefined/primitives; sanitizes hex colors and image URLs; strictly neutralizes hostile scripts across all 6 ticket templates; verifies CSP meta tag embedding. |
 | **`tests/server-pricing.test.js`** | 10 | **Server Authority Over Pricing & Seats (SEC-002, SEC-013)**: Recalculates fixed & berth pricing; computes 5% GST; detects client price tampering; validates 2x2 coach row bounds; rejects duplicate seat IDs; verifies double-booking conflict detection. |
@@ -50,10 +51,10 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ```
 TAP version 13
-1..46
-# tests 153
-# suites 35
-# pass 153
+1..48
+# tests 190
+# suites 46
+# pass 190
 # fail 0
 # cancelled 0
 # skipped 0
@@ -125,6 +126,48 @@ Verify the following manually across desktop & mobile viewports (`360px`, `768px
   - Desktop view (`md+`): accessible `Table` with invoice number, status pill, traveler name/phone, tour badge, journey date, passenger count, total amount, and action icon buttons.
   - Mobile view (`<md`): stacked responsive cards with large touch targets (`min-h-11`).
   - Empty state: verify `EmptyState` when search or filter matches 0 invoices.
+
+---
+
+## 3.4 Remaining Screens, Auth & Dark Theme Manual Verification Checklist (Part 3.5)
+
+Verify the following manually across desktop & mobile viewports (`360px`, `768px`, `1024px`, `1440px`):
+
+- [ ] **Dark Theme Switcher**:
+  - Open the top bar on desktop or mobile; click the Theme Switcher toggle (`Sun` / `Moon` / `Monitor`).
+  - Toggle between `Light`, `Dark`, and `System`; confirm every screen (Overview, Travelers, Journeys, Destinations, Analytics, Settings, Modals) renders seamlessly with dark tokens (`--yh-bg-app`, `--yh-bg-surface`, `--yh-text-primary`, `--yh-border-default`) without unreadable low-contrast text or glaring white cards.
+  - Refresh the page; confirm theme preference persists across reload without flash of wrong theme (FOUC).
+  - Open print preview on any ticket template, invoice, receipt, or manifest while in Dark mode; verify paper print preview is strictly white background with black text (`@media print` isolation).
+- [ ] **Travelers Screen (`PassengerManagement`)**:
+  - Single `Travelers` page heading rendered by `PageHeader` (no double heading in top bar on `lg+`).
+  - Search toolbar: Type passenger name, phone, city, or seat in `SearchInput`; select Tour from dropdown; click `All` / `Boarded` / `Pending` filter chips.
+  - PII Protection & Aadhaar Reveal: Observe masked Aadhaar (`XXXX XXXX 1234`). Click the "Reveal" eye icon; confirm accessible `Modal` dialog opens, fetches and displays full 12-digit Aadhaar, and closes with Escape or Close button.
+  - Export CSV: Click "Export CSV"; verify downloaded CSV has UTF-8 BOM, sanitized fields, and spreadsheet formula injection guards.
+  - Print Manifest: Click "Print Manifest"; confirm modal opens and prints clean traveler manifest.
+- [ ] **Destinations Screen (`TourInventory`)**:
+  - Single `Destinations & Packages` page heading rendered by `PageHeader`.
+  - Package cards display bus type badge, departure date, duration, pricing breakdown, and action menu.
+  - Create Tour: Click "+ New Destination"; confirm `Modal` dialog opens. Type Tour Name and custom prefix; observe real-time Invoice Prefix Preview updating live (e.g. `YHB-DSX-NOV-001`). Switch between "Fixed" and "Per-Berth" pricing modes; save tour.
+  - Edit & Delete: Edit existing tour details; delete tour and confirm accessible `ConfirmDialog` prompt appears before deletion.
+- [ ] **Analytics Screen (`TourAnalytics`)**:
+  - Single `Analytics & Reports` page heading rendered by `PageHeader`.
+  - KPI Stat Row: Confirm 4 `StatCard`s render Total Revenue (`formatINR`), Total Bookings, Passenger Count, and Occupancy %.
+  - Visualizations: Confirm Area chart (Revenue Trends), Bar chart (Tour Performance), and Donut chart (Payment Status) render cleanly in both Light and Dark modes.
+  - Screen Reader Access: Verify hidden data tables (`sr-only`) exist with full data for assistive technology.
+  - Destination Table: Desktop `Table` and mobile stacked cards with revenue, booking count, and occupancy bars.
+- [ ] **Settings Screen (`SettingsPanel`)**:
+  - Single `Settings` page heading rendered by `PageHeader`.
+  - 7 Tabs Navigation: Click through Company, Branding, Bank & UPI, Documents, Ticket Templates, Terms & Conditions, and Security tabs.
+  - Logo Upload: In Branding tab, upload a valid company logo (< 5MB PNG/JPEG/WEBP); observe instant preview. Attempt uploading an oversized or invalid file; verify error message.
+  - Unsaved Changes Bar: Edit a field in any tab; observe sticky bottom bar appear with "You have unsaved changes", "Discard", and "Save Changes" buttons. Save and verify toast notification.
+- [ ] **Authentication & Security Screens**:
+  - Sign out; verify Auth screen in both Light and Dark mode.
+  - Registration password checklist: Switch to Register tab, type password; observe live checklist update for ≥10 characters, uppercase, lowercase, digit, and symbol.
+  - Password show/hide toggle: Click eye icon on password input; confirm text toggles between masked and visible.
+  - 2FA flows: Test TwoFactorVerify, TwoFactorSetup, Recover2FA, ResetPassword, and Disable2FAModal.
+- [ ] **App-Wide States**:
+  - 404 Page: Navigate to unknown hash/route; verify `NotFoundPage` renders with "Back to Overview" button.
+  - API Unreachable Banner: Stop backend (`Ctrl+C` in backend terminal) or disconnect network; trigger an API action; observe top sticky alert banner "Backend API Unreachable". Restart backend; perform an action; observe banner dismiss automatically.
 
 ---
 

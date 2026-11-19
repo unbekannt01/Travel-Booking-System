@@ -268,3 +268,55 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Added `hideTitleOnDesktop` prop to `AppTopBar.jsx` bound to `!pageMeta.hasOwnHeading`. On `lg+` viewports when `PageHeader` renders the page title in `<main>`, the duplicate top-bar title is hidden via `lg:hidden`, while remaining visible on mobile viewports (`<lg`).
 
   - Sticky live summary column on `lg+` and collapsible summary bar docked above the sticky step footer on `<lg`. Existing coach seat picker and auto-assign modals remain functionally intact for Part 3.4 restyling.
+
+---
+
+## 12. Remaining Screens, Auth & Dark Theme System (Part 3.5)
+
+- **Travelers Screen (`src/components/PassengerManagement.jsx`)**:
+  - Rebuilt with Design System v2 tokens, eliminating legacy hardcoded borders, shadows, and raw colors.
+  - Heading ownership flipped: `passengers.hasOwnHeading: false` in `src/components/shell/shellConfig.js` so `AppShell` renders the unified `<h1>Travelers</h1>`.
+  - Search toolbar with `SearchInput`, tour filter `Select`, and boarding status chips (`All`, `Boarded`, `Pending`).
+  - Sensitive PII Protection: Masked Aadhaar display (`XXXX XXXX 1234`) with explicit "Reveal" action invoking `client.revealAadhaar(id)` and rendering in an accessible `Modal` dialog.
+  - Safe CSV Export: RFC4180-compliant with UTF-8 BOM, spreadsheet formula injection neutralization (`=`, `+`, `-`, `@`), and sanitized passenger fields.
+  - Accessible Manifest Print: Focus-managed print modal reusing `ticketRegistry` / print manifest templates with strict output escaping.
+  - Responsive layout: Accessible `Table` on desktop (`md+`), touch-friendly stacked cards with large touch targets on mobile (`<md`). Filter misses render `EmptyState`.
+- **Destinations Screen (`src/components/TourInventory.jsx`)**:
+  - Heading ownership flipped: `tours.hasOwnHeading: false` so `AppShell` renders `<h1>Destinations & Packages</h1>`.
+  - Package catalog cards tokenized with bus type badges, departure date, duration, pricing badges (`formatINR`), and action menus.
+  - Create / Edit Tour Modal rebuilt on `Modal` primitive with `<Field>`, `<Input>`, `<Select>`, and dynamic pricing breakdown (`Fixed` vs `Per-Berth Lower/Upper`).
+  - Live Invoice Prefix Preview: Real-time preview of sequential invoice codes (e.g. `YHB-DSX-NOV-001`) as tour name or prefix is typed via `getInvoicePreview`.
+  - Delete tour confirmation using `useConfirm` / `ConfirmDialog` primitive.
+- **Analytics Screen (`src/components/TourAnalytics.jsx`)**:
+  - Heading ownership flipped: `analytics.hasOwnHeading: false` so `AppShell` renders `<h1>Analytics & Reports</h1>`.
+  - KPI Stat Row: 4 responsive `StatCard`s with `formatINR` Indian rupee formatting (Total Revenue, Total Bookings, Passenger Count, Average Occupancy %).
+  - Recharts Visualizations: Revenue trend area chart, tour performance bar chart, and payment status pie chart using CSS custom property tokens (`--yh-brand`, `--yh-success`, `--yh-warning`, `--yh-danger`, `--yh-text-primary`, `--yh-border-default`) for dark mode support.
+  - Screen Reader Accessibility: Hidden accessible data tables (`sr-only`) accompanying every chart with full numeric data breakdown for assistive technologies.
+  - Destination Performance: Accessible desktop `Table` and mobile stacked cards with revenue, booking count, and occupancy progress bars.
+- **Settings Screen (`src/components/dashboard/SettingsPanel.jsx`)**:
+  - Heading ownership flipped: `settings.hasOwnHeading: false` so `AppShell` renders `<h1>Settings</h1>`.
+  - Tabbed Navigation: Built on `Tabs` primitive across 7 structured sections:
+    1. Company Profile (name, tagline, GST, phone, address, conductor directory)
+    2. Branding & Logo (secure upload with 5MB validation, instant preview, remove logo)
+    3. Bank & UPI Details (account name, number, IFSC, bank name, UPI ID for invoices)
+    4. Document & Invoice Numbering (invoice prefix, receipt prefix, document language)
+    5. Ticket Templates (visual selector for 6 styles: Classic, Modern, Heritage, Corporate, Thermal, Transit)
+    6. Terms & Conditions (custom operator booking terms rendered on invoices and tickets)
+    7. Security & 2FA (TOTP two-factor status, QR code setup, active sessions revocation, password change)
+  - Sticky Unsaved Changes Bar: Visual alert bar at bottom of panel with Save Changes and Discard actions when changes are pending.
+- **Authentication & Security Screens**:
+  - Redesigned with Design System v2 tokens and responsive card wrappers:
+    - `Auth.jsx`: Login & Register forms with accessible inputs, `autoComplete` attributes, show/hide password toggles, real-time password complexity checklist (`checkPasswordCriteria`: ≥10 chars, upper, lower, digit, symbol), and user-friendly server error formatting (`formatAuthError`).
+    - `TwoFactorVerify.jsx`: 6-digit numeric TOTP input with auto-focus and 2FA recovery link.
+    - `TwoFactorSetup.jsx`: Step-by-step QR code scan, secret key copy with feedback, and verification code test.
+    - `Recover2FA.jsx`: Email recovery code request and verification.
+    - `ResetPassword.jsx`: Secure password reset with password complexity validation.
+    - `Disable2FAModal.jsx`: Destructive action confirmation with password verification on `Modal`.
+- **App-Wide States**:
+  - 404 Route (`NotFoundPage.jsx`): User-friendly error page with "Back to Overview" CTA when route is invalid.
+  - Root Error Boundary (`RootErrorBoundary.jsx`): Catches top-level uncaught React rendering exceptions, displaying a polished error fallback with Reload and Retry actions without white-screening.
+  - API Unreachable Banner (`AppShell.jsx`): Subscribes to API connectivity events (`API_STATUS_EVENT` via `subscribeApiStatus` in `src/data/client.js`) and renders an accessible top banner when backend is offline/unreachable, automatically clearing when connection is restored.
+- **Dark Theme Toggle & Print Isolation**:
+  - Activated: `SHOW_THEME_TOGGLE = true` in `src/components/shell/shellConfig.js`.
+  - Complete token coverage: Every screen, modal, card, table, and form element now uses `--yh-*` tokens.
+  - Print Isolation (`src/index.css`): Strict `@media print` rules enforcing `background: white !important; color: black !important;` on `body`, `[data-theme="dark"]`, and `.dark` containers, ensuring ticket templates, invoices, receipts, and manifests print cleanly on paper regardless of active dark mode.
