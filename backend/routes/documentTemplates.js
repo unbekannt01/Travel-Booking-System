@@ -1,7 +1,7 @@
 import express from "express"
 import rateLimit from "express-rate-limit"
 import { z } from "zod"
-import { verifyToken } from "../middleware/auth.js"
+import verifyToken from "../middleware/auth.js"
 import InvoiceTemplate from "../models/InvoiceTemplate.js"
 import User from "../models/User.js"
 import {
