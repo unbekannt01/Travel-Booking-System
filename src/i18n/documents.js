@@ -89,6 +89,12 @@ export const translations = {
     officialVoucher: "Official Payment Voucher",
     paymentSuccessNotice: "Payment has been recorded successfully in the audit ledger.",
     receiptIssuedBy: "Receipt Issued By",
+    creditNote: "Credit Note",
+    validUntil: "Valid Until",
+    voidStatus: "Void",
+    issuedStatus: "Issued",
+    issueDocument: "Issue Document",
+    documents: "Documents",
   },
 
   hi: {
@@ -169,6 +175,12 @@ export const translations = {
     officialVoucher: "आधिकारिक भुगतान वाउचर",
     paymentSuccessNotice: "भुगतान सफलतापूर्वक ऑडिट लेज़र में दर्ज कर लिया गया है।",
     receiptIssuedBy: "रसीद जारीकर्ता",
+    creditNote: "क्रेडिट नोट",
+    validUntil: "वैधता तिथि",
+    voidStatus: "रद्द (Void)",
+    issuedStatus: "जारी (Issued)",
+    issueDocument: "दस्तावेज़ जारी करें",
+    documents: "दस्तावेज़",
   },
 
   gu: {
@@ -249,6 +261,12 @@ export const translations = {
     officialVoucher: "સત્તાવાર ચુકવણી વાઉચર",
     paymentSuccessNotice: "ચુકવણી ઓડિટ લેજરમાં સફળતાપૂર્વક નોંધાઈ ગઈ છે.",
     receiptIssuedBy: "રસીદ આપનાર",
+    creditNote: "ક્રેડિટ નોટ",
+    validUntil: "માન્યતા તારીખ",
+    voidStatus: "રદ (Void)",
+    issuedStatus: "જારી (Issued)",
+    issueDocument: "દસ્તાવેજ જારી કરો",
+    documents: "દસ્તાવેજો",
   },
 }
 

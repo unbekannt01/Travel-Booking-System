@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.js"
 import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
 import paymentRoutes from "./routes/payments.js"
+import documentRoutes from "./routes/documents.js"
 
 const app = express()
 
@@ -51,6 +52,7 @@ app.use("/api/auth", authRoutes)
 app.use("/api/bookings", bookingRoutes)
 app.use("/api/tours", tourRoutes)
 app.use("/api/payments", paymentRoutes)
+app.use("/api/documents", documentRoutes)
 
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {

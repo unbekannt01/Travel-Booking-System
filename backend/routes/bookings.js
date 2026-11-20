@@ -7,6 +7,7 @@ import Counter from "../models/Counter.js"
 import { logAudit } from "../models/AuditLog.js"
 import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff, isMaskedOrUnchangedAadhaar } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
+import { ensureLegacyInvoiceDocument } from "./documents.js"
 import verifyToken from "../middleware/auth.js"
 import {
   generateTourCode,
@@ -441,6 +442,16 @@ router.post("/", verifyToken, async (req, res) => {
 
     if (!savedBooking) {
       return res.status(409).json({ message: "Could not generate a unique invoice number. Please try again." })
+    }
+
+    // Single code path: Issue tax-invoice IssuedDocument alongside booking
+    try {
+      const user = req.userDoc || (await User.findById(req.user.id))
+      if (user) {
+        await ensureLegacyInvoiceDocument(savedBooking, user)
+      }
+    } catch (docErr) {
+      console.error("Warning: Could not create initial IssuedDocument for booking:", docErr.message)
     }
 
     // If advance is received, record in separate Payment ledger collection

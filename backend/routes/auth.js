@@ -12,6 +12,7 @@ import nodemailer from "nodemailer"
 import User from "../models/User.js"
 import EmailToken from "../models/EmailToken.js"
 import verifyToken from "../middleware/auth.js"
+import { documentSettingsUpdateSchema } from "../utils/documentValidation.js"
 
 const router = express.Router()
 
@@ -108,6 +109,7 @@ const formatUserResponse = (user) => ({
   bankDetails: user.bankDetails,
   organizers: user.organizers,
   twoFactorEnabled: user.twoFactorEnabled,
+  documentSettings: user.documentSettings || {},
 })
 
 router.post("/register", authLimiter, async (req, res) => {
@@ -496,9 +498,13 @@ router.put("/update-company", verifyToken, async (req, res) => {
       termsAndConditions,
       organizers,
       bankDetails,
+      documentSettings,
     } = req.body
 
     const updateData = {}
+    if (documentSettings !== undefined) {
+      updateData.documentSettings = documentSettingsUpdateSchema.parse(documentSettings)
+    }
     if (companyName !== undefined) updateData.companyName = companyName
     if (companyTagline !== undefined) updateData.companyTagline = companyTagline
     if (companyHeadquarters !== undefined) updateData.companyHeadquarters = companyHeadquarters
@@ -536,6 +542,12 @@ router.put("/update-company", verifyToken, async (req, res) => {
       user: formatUserResponse(user),
     })
   } catch (error) {
+    if (error.name === "ZodError" || error.issues) {
+      return res.status(400).json({
+        message: "Invalid document settings",
+        errors: error.issues || error.errors,
+      })
+    }
     console.error("Update company error:", error.message)
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }

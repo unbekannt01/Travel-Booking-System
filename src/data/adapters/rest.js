@@ -343,3 +343,57 @@ export async function restoreDatabaseBackup() {
   throw new Error("Database restore is managed via MongoDB tools (mongorestore). Direct database restore is not supported from the browser.")
 }
 
+// --- DOCUMENTS (Part 3.7a) ---
+function normalizeDocument(d) {
+  if (!d) return d
+  return {
+    ...d,
+    id: d._id || d.id,
+  }
+}
+
+export async function listDocuments(bookingId) {
+  const query = bookingId ? `?bookingId=${encodeURIComponent(bookingId)}` : ""
+  const res = await request(`/api/documents${query}`)
+  return (res?.documents || []).map(normalizeDocument)
+}
+
+export async function getDocument(id) {
+  const res = await request(`/api/documents/${id}`)
+  return normalizeDocument(res?.document)
+}
+
+export async function issueDocument(payload) {
+  const res = await request("/api/documents", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+  return {
+    ...res,
+    document: normalizeDocument(res?.document),
+  }
+}
+
+export async function voidDocument(id, reason) {
+  const res = await request(`/api/documents/${id}/void`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  })
+  return {
+    ...res,
+    document: normalizeDocument(res?.document),
+  }
+}
+
+export async function getDocumentSettings() {
+  const res = await request("/api/documents/settings/all")
+  return res?.settings || {}
+}
+
+export async function updateDocumentSettings(settings) {
+  const res = await request("/api/documents/settings/all", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  })
+  return res?.settings || {}
+}
