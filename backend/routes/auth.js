@@ -13,6 +13,7 @@ import User from "../models/User.js"
 import EmailToken from "../models/EmailToken.js"
 import verifyToken from "../middleware/auth.js"
 import { documentSettingsUpdateSchema } from "../utils/documentValidation.js"
+import { isValidUpiVpa } from "../../shared/invoiceTemplate.js"
 
 const router = express.Router()
 
@@ -529,7 +530,21 @@ router.put("/update-company", verifyToken, async (req, res) => {
       updateData.termsAndConditions = termsAndConditions
     }
     if (organizers !== undefined) updateData.organizers = organizers
-    if (bankDetails !== undefined) updateData.bankDetails = bankDetails
+    if (bankDetails !== undefined) {
+      if (bankDetails && typeof bankDetails === "object") {
+        const rawUpi = bankDetails.upiId
+        if (rawUpi && typeof rawUpi === "string" && rawUpi.trim()) {
+          const trimmedUpi = rawUpi.trim()
+          if (!isValidUpiVpa(trimmedUpi)) {
+            return res.status(400).json({
+              message: "Invalid UPI ID (VPA) format. Must be in username@bank format (e.g. operator@okhdfcbank).",
+            })
+          }
+          bankDetails.upiId = trimmedUpi
+        }
+      }
+      updateData.bankDetails = bankDetails
+    }
 
     const user = await User.findByIdAndUpdate(req.user.id, updateData, { new: true })
 

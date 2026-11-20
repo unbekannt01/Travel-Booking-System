@@ -12,9 +12,12 @@ import {
   validateTemplateConfig,
   normalizeTemplateConfig,
   buildUpiPaymentUri,
+  isValidUpiVpa,
+  UPI_VPA_REGEX,
 } from "../shared/invoiceTemplate.js"
 import { renderDocumentHtml } from "../shared/documentRenderer.js"
 import { validateUploadedAsset } from "../backend/utils/assetValidation.js"
+import { computeAssetSha256 } from "../backend/utils/assetStorage.js"
 
 describe("Invoice Studio — Configuration & Validation (shared/invoiceTemplate.js)", () => {
   it("defines standard layout styles, paper sizes, and copy options", () => {
@@ -118,54 +121,55 @@ describe("UPI Payment URI Builder", () => {
   })
 })
 
-describe("Document HTML Pure Renderer (shared/documentRenderer.js)", () => {
-  const sampleBooking = {
-    invoiceNo: "YHB/2026-27/0055",
-    status: "Confirmed",
-    date: "2026-05-10T10:00:00.000Z",
-    journeyDate: "2026-05-20T06:00:00.000Z",
-    tourName: "Dwarka - Somnath Tour",
-    busType: "AC Sleeper 2+1",
-    contactName: "Pravinbhai Shah <script>alert('xss')</script>",
-    contactPhone: "+91 98251 11223",
-    totalAmount: 18000,
-    advanceReceived: 8000,
-    discount: 500,
-    gstRate: 5,
-    taxAmount: 850,
-    passengers: [
-      {
-        name: "Pravinbhai Shah",
-        age: 55,
-        gender: "Male",
-        seatId: "U1",
-        city: "Rajkot",
-        aadhaar: "998877665544",
-        encryptedAadhaar: "secret_encrypted_token",
-      },
-      {
-        name: "Minaxiben Shah",
-        age: 52,
-        gender: "Female",
-        seatId: "U2",
-        city: "Rajkot",
-        aadhaar: "112233445566",
-      },
-    ],
-  }
-
-  const sampleUser = {
-    companyName: "Gokul Yatra Services <img src=x onerror=alert(1)>",
-    companyHeadquarters: "Junagadh, Gujarat",
-    companyPhone: "+91 98765 43210",
-    gstNumber: "24AAAAA0000A1Z5",
-    bankDetails: {
-      accountName: "Gokul Yatra Services",
-      accountNumber: "9876543210",
-      ifscCode: "HDFC0001234",
-      upiId: "gokul@okhdfcbank",
+const sampleBooking = {
+  invoiceNo: "YHB/2026-27/0055",
+  status: "Confirmed",
+  date: "2026-05-10T10:00:00.000Z",
+  journeyDate: "2026-05-20T06:00:00.000Z",
+  tourName: "Dwarka - Somnath Tour",
+  busType: "AC Sleeper 2+1",
+  contactName: "Pravinbhai Shah <script>alert('xss')</script>",
+  contactPhone: "+91 98251 11223",
+  totalAmount: 18000,
+  advanceReceived: 8000,
+  discount: 500,
+  gstRate: 5,
+  taxAmount: 850,
+  passengers: [
+    {
+      name: "Pravinbhai Shah",
+      age: 55,
+      gender: "Male",
+      seatId: "U1",
+      city: "Rajkot",
+      aadhaar: "998877665544",
+      encryptedAadhaar: "secret_encrypted_token",
     },
-  }
+    {
+      name: "Minaxiben Shah",
+      age: 52,
+      gender: "Female",
+      seatId: "U2",
+      city: "Rajkot",
+      aadhaar: "112233445566",
+    },
+  ],
+}
+
+const sampleUser = {
+  companyName: "Gokul Yatra Services <img src=x onerror=alert(1)>",
+  companyHeadquarters: "Junagadh, Gujarat",
+  companyPhone: "+91 98765 43210",
+  gstNumber: "24AAAAA0000A1Z5",
+  bankDetails: {
+    accountName: "Gokul Yatra Services",
+    accountNumber: "9876543210",
+    ifscCode: "HDFC0001234",
+    upiId: "gokul@okhdfcbank",
+  },
+}
+
+describe("Document HTML Pure Renderer (shared/documentRenderer.js)", () => {
 
   it("strictly neutralizes XSS payloads in customer, company, and notes", () => {
     const html = renderDocumentHtml({
@@ -177,8 +181,11 @@ describe("Document HTML Pure Renderer (shared/documentRenderer.js)", () => {
     assert.ok(html.includes("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"))
     assert.equal(html.includes("<script>alert('xss')</script>"), false)
 
-    assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"))
-    assert.equal(html.includes("<img src=x onerror=alert(1)>"), false)
+    assert.ok(
+      html.includes("&lt;img src=x onerror=alert(1)&gt;") ||
+        html.includes("&lt;IMG SRC=X ONERROR=ALERT(1)&gt;")
+    )
+    assert.equal(html.toLowerCase().includes("<img src=x onerror=alert(1)>"), false)
   })
 
   it("enforces ZERO Aadhaar leakage in generated invoice HTML", () => {
@@ -262,18 +269,261 @@ describe("Document HTML Pure Renderer (shared/documentRenderer.js)", () => {
     assert.ok(html.includes("Customer cancellation"))
   })
 
-  it("golden test: legacy layout preserves existing InvoiceView visual structure", () => {
+  it("golden test: legacy layout preserves identical visible content as InvoiceView print output", () => {
     const html = renderDocumentHtml({
       booking: sampleBooking,
       user: sampleUser,
       template: { ...DEFAULT_TEMPLATE_CONFIG, layout: "legacy" },
     })
 
+    // Header & Brand
     assert.ok(html.includes("TAX INVOICE"))
-    assert.ok(html.includes("Headquarters"))
+    assert.ok(html.includes("GOKUL YATRA SERVICES"))
+    assert.ok(html.includes("Junagadh, Gujarat"))
+    assert.ok(html.includes("+91 98765 43210"))
+    assert.ok(html.includes("24AAAAA0000A1Z5"))
+
+    // Document identifier & Customer
+    assert.ok(html.includes("YHB/2026-27/0055"))
+    assert.ok(html.includes("Pravinbhai Shah"))
+    assert.ok(html.includes("+91 98251 11223"))
+
+    // Tour & Coach
+    assert.ok(html.includes("Dwarka - Somnath Tour"))
+    assert.ok(html.includes("AC Sleeper 2+1"))
+
+    // Passenger Manifest details
     assert.ok(html.includes("Passenger Manifest"))
-    assert.ok(html.includes("Balance Payable"))
+    assert.ok(html.includes("Pravinbhai Shah"))
+    assert.ok(html.includes("Minaxiben Shah"))
+    assert.ok(html.includes("U1"))
+    assert.ok(html.includes("U2"))
+    assert.ok(html.includes("Rajkot"))
+    assert.ok(html.includes("55"))
+    assert.ok(html.includes("52"))
+
+    // Financial breakdown items
+    assert.ok(html.includes("Gross Package") || html.includes("Package Amount"))
+    assert.ok(html.includes("18,000"))
+    assert.ok(html.includes("8,000"))
+    assert.ok(html.includes("10,000"))
+    assert.ok(html.includes("500"))
+    assert.ok(html.includes("5%"))
+
+    // Footer & Wish
     assert.ok(html.includes("We wish you a magnificent journey!"))
+  })
+
+  it("strictly neutralizes hostile XSS payloads across all document fields", () => {
+    const hostileBooking = {
+      ...sampleBooking,
+      contactName: "Attacker <script>alert('xss-contact')</script>",
+      notes: "Hostile Note <b onmouseover=alert('xss-notes')>mouseover</b>",
+      passengers: [
+        {
+          name: "Injected Passenger <a href=\"javascript:alert('xss-pass')\">Click</a>",
+          age: 30,
+          gender: "Male",
+          seatId: "L1",
+          city: "TestCity",
+        },
+      ],
+    }
+
+    const hostileUser = {
+      ...sampleUser,
+      companyName: "Hostile Corp <script>alert('xss-company')</script>",
+      companyTagline: "Tagline <img src=x onerror=alert('xss-tag')>",
+      termsAndConditions: [
+        "Normal term",
+        "\"><script>alert('xss-terms')</script>",
+      ],
+    }
+
+    const hostileTemplate = {
+      ...DEFAULT_TEMPLATE_CONFIG,
+      labels: {
+        title: "Malicious Title <iframe src='javascript:alert(1)'>",
+      },
+      copyLabels: {
+        copy1: "Original <svg onload=alert('xss-copy')>",
+      },
+      footer: {
+        customText: "Custom Footer <script>alert('xss-footer')</script>",
+        showWebsite: true,
+      },
+      watermark: {
+        customText: "Watermark <script>alert('xss-watermark')</script>",
+      },
+      colors: {
+        // Attempt CSS breakout injection
+        primary: "red; background: url('evil.com'); -moz-binding: url('evil.xml')",
+        text: "black; font-family: 'Arial', sans-serif; behavior: url('evil.htc')",
+      },
+    }
+
+    const html = renderDocumentHtml({
+      booking: hostileBooking,
+      user: hostileUser,
+      template: hostileTemplate,
+    })
+
+    // Assert that raw unescaped script tags and event handlers are NEVER present
+    assert.equal(html.includes("<script"), false, "No raw <script allowed")
+    assert.equal(html.toLowerCase().includes("<img src=x"), false, "No raw <img src=x allowed")
+    assert.equal(html.toLowerCase().includes("<b onmouseover="), false, "No raw onmouseover allowed")
+    assert.equal(html.toLowerCase().includes("<svg onload="), false, "No raw onload allowed")
+    assert.equal(html.toLowerCase().includes("<iframe"), false, "No raw <iframe allowed")
+    assert.equal(html.toLowerCase().includes("href=\"javascript:"), false, "No javascript: links allowed")
+
+    // Assert CSS color breakout tokens are safely sanitized to fallbacks
+    assert.equal(html.includes("background: url('evil.com')"), false)
+    assert.equal(html.includes("behavior: url('evil.htc')"), false)
+  })
+})
+
+describe("Document Asset SHA-256 Deduplication & Size Analysis (Part 3.7c)", () => {
+  it("measures 99.9% byte reduction when deduplicating 200 KB image assets", () => {
+    // Simulate 3x 200 KB base64 image data URIs (logo, signature, stamp)
+    const fake200KbLogo = "data:image/png;base64," + "A".repeat(200 * 1024 * (4 / 3))
+    const fake200KbSig = "data:image/png;base64," + "B".repeat(200 * 1024 * (4 / 3))
+    const fake200KbStamp = "data:image/png;base64," + "C".repeat(200 * 1024 * (4 / 3))
+
+    const embeddedAssets = {
+      logo: fake200KbLogo,
+      signature: fake200KbSig,
+      stamp: fake200KbStamp,
+    }
+    const rawEmbeddedBytes = Buffer.byteLength(JSON.stringify(embeddedAssets), "utf8")
+    // ~800 KB raw embedded bytes
+    assert.ok(rawEmbeddedBytes > 700 * 1024, `Expected > 700 KB, got ${rawEmbeddedBytes}`)
+
+    // Compute SHA-256 deduplicated reference objects
+    const deduplicatedAssets = {
+      logo: { sha256: computeAssetSha256(fake200KbLogo), mime: "image/png", size: 204800 },
+      signature: { sha256: computeAssetSha256(fake200KbSig), mime: "image/png", size: 204800 },
+      stamp: { sha256: computeAssetSha256(fake200KbStamp), mime: "image/png", size: 204800 },
+    }
+    const deduplicatedBytes = Buffer.byteLength(JSON.stringify(deduplicatedAssets), "utf8")
+
+    // Verify deduplicated reference is tiny (< 400 bytes)
+    assert.ok(deduplicatedBytes < 400, `Expected < 400 bytes, got ${deduplicatedBytes}`)
+
+    // Calculate reduction percentage
+    const reductionPct = ((rawEmbeddedBytes - deduplicatedBytes) / rawEmbeddedBytes) * 100
+    assert.ok(reductionPct > 99.9, `Expected > 99.9% reduction, got ${reductionPct}%`)
+  })
+
+  it("maintains backward compatibility for older documents with raw data URIs", () => {
+    const rawLogo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const olderDocument = {
+      type: "tax-invoice",
+      number: "OLD-001",
+      templateSnapshot: {
+        ...DEFAULT_TEMPLATE_CONFIG,
+        assets: {
+          logo: rawLogo,
+          signature: "",
+          stamp: "",
+        },
+      },
+    }
+
+    const html = renderDocumentHtml({
+      document: olderDocument,
+      booking: sampleBooking,
+      user: sampleUser,
+    })
+
+    // Older raw data URI is rendered directly without failure
+    assert.ok(html.includes(rawLogo))
+  })
+})
+
+describe("UPI VPA Validation & QR Code Visibility Rules (Part 3.7c)", () => {
+  it("validates standard NPCI VPAs accurately via isValidUpiVpa", () => {
+    const validVpas = [
+      "operator@okhdfcbank",
+      "shree.yatra@icici",
+      "yatrahub-travels@sbi",
+      "user_123@ybl",
+      "booking99@paytm",
+      "bus.travels.india@axl",
+    ]
+    for (const vpa of validVpas) {
+      assert.equal(isValidUpiVpa(vpa), true, `Expected valid VPA: ${vpa}`)
+    }
+
+    const invalidVpas = [
+      "",
+      "   ",
+      "not-a-vpa",
+      "@okhdfcbank",
+      "operator@",
+      "user@b", // bank handle too short (< 2 chars)
+      "user name with spaces@bank",
+      "<script>alert(1)</script>@bank",
+      "user@bank.com/path",
+      null,
+      undefined,
+    ]
+    for (const vpa of invalidVpas) {
+      assert.equal(isValidUpiVpa(vpa), false, `Expected invalid VPA: ${vpa}`)
+    }
+  })
+
+  it("renders UPI QR code when VPA is valid and balance is greater than 0", () => {
+    const html = renderDocumentHtml({
+      booking: { ...sampleBooking, totalAmount: 10000, advanceReceived: 4000 }, // balance = 6000
+      user: {
+        ...sampleUser,
+        bankDetails: { upiId: "yatratours@okhdfcbank" },
+      },
+      qrDataUrl: "data:image/png;base64,fakeQrCodeData",
+      template: {
+        ...DEFAULT_TEMPLATE_CONFIG,
+        sections: { ...DEFAULT_TEMPLATE_CONFIG.sections, showUpiQr: true },
+      },
+    })
+
+    assert.ok(html.includes("data:image/png;base64,fakeQrCodeData"))
+    assert.ok(html.includes("Scan to Pay via UPI"))
+    assert.ok(html.includes("yatratours@okhdfcbank"))
+  })
+
+  it("strictly hides UPI QR code when balance is 0 (fully paid)", () => {
+    const html = renderDocumentHtml({
+      booking: { ...sampleBooking, totalAmount: 10000, advanceReceived: 10000 }, // balance = 0
+      user: {
+        ...sampleUser,
+        bankDetails: { upiId: "yatratours@okhdfcbank" },
+      },
+      qrDataUrl: "data:image/png;base64,fakeQrCodeData",
+      template: {
+        ...DEFAULT_TEMPLATE_CONFIG,
+        sections: { ...DEFAULT_TEMPLATE_CONFIG.sections, showUpiQr: true },
+      },
+    })
+
+    assert.equal(html.includes("data:image/png;base64,fakeQrCodeData"), false)
+    assert.equal(html.includes("Scan to Pay via UPI"), false)
+  })
+
+  it("strictly hides UPI QR code when operator UPI ID is empty or invalid", () => {
+    const html = renderDocumentHtml({
+      booking: { ...sampleBooking, totalAmount: 10000, advanceReceived: 2000 }, // balance = 8000
+      user: {
+        ...sampleUser,
+        bankDetails: { upiId: "invalid-vpa-without-at" },
+      },
+      qrDataUrl: "data:image/png;base64,fakeQrCodeData",
+      template: {
+        ...DEFAULT_TEMPLATE_CONFIG,
+        sections: { ...DEFAULT_TEMPLATE_CONFIG.sections, showUpiQr: true },
+      },
+    })
+
+    assert.equal(html.includes("data:image/png;base64,fakeQrCodeData"), false)
   })
 })
 

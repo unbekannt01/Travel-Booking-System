@@ -100,8 +100,9 @@ const issuedDocumentSchema = new mongoose.Schema(
       requiresPayment: { type: Boolean, default: true },
     },
 
-    // Placeholder for Part 3.7b Invoice Studio template configuration
+    // Part 3.7b Invoice Studio template configuration & snapshot
     templateRef: { type: mongoose.Schema.Types.Mixed, default: null },
+    templateSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 )

@@ -1,3 +1,14 @@
+export const UPI_VPA_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/
+
+/**
+ * Validates Virtual Payment Address (VPA) / UPI ID format.
+ * NPCI standard: username@bank (e.g. operator@okhdfcbank).
+ */
+export function isValidUpiVpa(vpa) {
+  if (!vpa || typeof vpa !== "string") return false
+  return UPI_VPA_REGEX.test(vpa.trim())
+}
+
 /**
  * Validates 10-digit Indian mobile number
  * Accepts formats: 9876543210, +919876543210, 09876543210, 919876543210

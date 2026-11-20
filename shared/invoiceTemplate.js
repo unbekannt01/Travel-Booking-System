@@ -489,6 +489,7 @@ export function normalizeTemplateConfig(raw = {}) {
     footer,
     language,
     labels,
+    assets: typeof cfg.assets === "object" && cfg.assets !== null ? { ...cfg.assets } : {},
   }
 }
 
@@ -497,6 +498,19 @@ function sanitizeHex(val, fallback) {
     return val.trim().toLowerCase()
   }
   return fallback
+}
+
+export const UPI_VPA_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/
+
+/**
+ * Validates Virtual Payment Address (VPA) / UPI ID format.
+ * NPCI standard: username@bank (e.g. operator@okhdfcbank).
+ * @param {string} vpa
+ * @returns {boolean}
+ */
+export function isValidUpiVpa(vpa) {
+  if (!vpa || typeof vpa !== "string") return false
+  return UPI_VPA_REGEX.test(vpa.trim())
 }
 
 /**
@@ -508,7 +522,7 @@ function sanitizeHex(val, fallback) {
  * @param {string} [options.note] - Payment remarks or document number
  */
 export function buildUpiPaymentUri({ upiId, payeeName, amount, note }) {
-  if (!upiId || typeof upiId !== "string" || !upiId.trim()) return ""
+  if (!upiId || typeof upiId !== "string" || !isValidUpiVpa(upiId)) return ""
   const params = new URLSearchParams()
   params.set("pa", upiId.trim())
   if (payeeName && typeof payeeName === "string") {

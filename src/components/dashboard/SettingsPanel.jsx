@@ -29,6 +29,7 @@ import {
   Spinner,
 } from "../ui/index"
 import { cn } from "../../utils/cn"
+import { isValidUpiVpa } from "../../utils/validators"
 
 const InvoiceStudio = lazy(() => import("./InvoiceStudio"))
 
@@ -516,7 +517,19 @@ export default function SettingsPanel({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Field label="UPI ID (VPA)" hint="Printed for quick QR scan / UPI app transfers">
+            <Field
+              label="UPI ID (VPA)"
+              hint={
+                companySettings.bankDetails?.upiId && !isValidUpiVpa(companySettings.bankDetails.upiId)
+                  ? "Invalid VPA format: must be username@bank (e.g. operator@okhdfcbank)"
+                  : "Printed for quick QR scan / UPI app transfers"
+              }
+              error={
+                companySettings.bankDetails?.upiId && !isValidUpiVpa(companySettings.bankDetails.upiId)
+                  ? "Invalid UPI ID (VPA)"
+                  : undefined
+              }
+            >
               <Input
                 type="text"
                 placeholder="e.g. operator@okhdfcbank"
@@ -1009,6 +1022,10 @@ export default function SettingsPanel({
               size="sm"
               icon={<Check size={16} />}
               onClick={handleUpdateCompany}
+              disabled={Boolean(
+                companySettings.bankDetails?.upiId &&
+                  !isValidUpiVpa(companySettings.bankDetails.upiId)
+              )}
             >
               Save Changes
             </Button>

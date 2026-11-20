@@ -22,6 +22,7 @@ import {
   voidDocumentInputSchema,
   documentSettingsUpdateSchema,
 } from "../utils/documentValidation.js"
+import { deduplicateTemplateAssets, hydrateTemplateAssets } from "../utils/assetStorage.js"
 
 const router = express.Router()
 
@@ -313,6 +314,14 @@ router.post("/", verifyToken, documentWriteLimiter, async (req, res) => {
       resolvedTemplateSnapshot = DEFAULT_TEMPLATE_CONFIG
     }
 
+    // Deduplicate asset data URIs into DocumentAsset collection before saving snapshot
+    if (resolvedTemplateSnapshot && resolvedTemplateSnapshot.assets) {
+      resolvedTemplateSnapshot = {
+        ...resolvedTemplateSnapshot,
+        assets: await deduplicateTemplateAssets(req.user.id, resolvedTemplateSnapshot.assets),
+      }
+    }
+
     const newDoc = new IssuedDocument({
       userId: req.user.id,
       bookingId: booking._id,
@@ -430,7 +439,14 @@ router.get("/:id", verifyToken, async (req, res) => {
     if (!doc) {
       return res.status(404).json({ message: "Document not found" })
     }
-    res.json({ document: doc })
+    const docObj = doc.toObject()
+    if (docObj.templateSnapshot?.assets) {
+      docObj.templateSnapshot.assets = await hydrateTemplateAssets(
+        req.user.id,
+        docObj.templateSnapshot.assets
+      )
+    }
+    res.json({ document: docObj })
   } catch (error) {
     console.error("Get document error:", error.message)
     res.status(500).json({

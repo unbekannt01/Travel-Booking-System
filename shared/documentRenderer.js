@@ -8,6 +8,7 @@ import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "./escapeHtml.js"
 import {
   normalizeTemplateConfig,
   buildUpiPaymentUri,
+  isValidUpiVpa,
 } from "./invoiceTemplate.js"
 import { getType } from "./documentTypes.js"
 import { getDocumentTranslation } from "../src/i18n/documents.js"
@@ -381,6 +382,7 @@ function renderSingleSheet({
   discount,
   gstRate,
   taxAmount,
+  isTaxInclusive = false,
   showGstBreakup,
   template,
   safePrimary,
@@ -486,7 +488,7 @@ function renderSingleSheet({
         </div>
       </div>
 
-      ${qrDataUrl && template.sections.showUpiQr ? `
+      ${qrDataUrl && template.sections.showUpiQr && balance > 0 && bankDetails.upiId && isValidUpiVpa(bankDetails.upiId) ? `
       <div style="text-align:center;margin-top:12px;padding-top:8px;border-top:1px dashed #000;">
         <img src="${qrDataUrl}" alt="UPI QR" style="width:100px;height:100px;display:inline-block;" />
         <div style="font-size:10px;font-weight:700;margin-top:2px;">Scan to Pay via UPI</div>
@@ -706,8 +708,8 @@ function renderSingleSheet({
           </div>
         </div>
 
-        <!-- Optional UPI QR Box -->
-        ${qrDataUrl && template.sections.showUpiQr ? `
+        <!-- Optional UPI QR Box (rendered only if UPI ID is valid, section enabled, and balance > 0) -->
+        ${qrDataUrl && template.sections.showUpiQr && balance > 0 && bankDetails.upiId && isValidUpiVpa(bankDetails.upiId) ? `
         <div style="background:#ffffff;border:1px solid ${safeBorder};border-radius:12px;padding:12px;text-align:center;">
           <img src="${qrDataUrl}" alt="UPI QR" style="width:110px;height:110px;display:inline-block;" />
           <div style="font-size:11px;font-weight:900;color:${safePrimary};margin-top:4px;">Scan to Pay via UPI</div>
