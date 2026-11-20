@@ -15,15 +15,30 @@ import {
 } from "lucide-react"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../i18n/documents"
 import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "../utils/escapeHtml.js"
+import { getType } from "../../shared/documentTypes.js"
 import BoardingPassModal from "./common/BoardingPassModal"
 
-export default function InvoiceView({ booking, onBack, user }) {
+export default function InvoiceView({ booking: bookingInput, document: docProp, onBack, user }) {
   const [selectedLang, setSelectedLang] = useState(user?.documentLanguage || "en")
   const [showBoardingPassModal, setShowBoardingPassModal] = useState(false)
+
+  const booking = bookingInput?.booking || bookingInput
+  const doc = docProp || (bookingInput?.document ? bookingInput.document : null)
 
   const t = getDocumentTranslation(selectedLang)
   const theme = user?.invoiceTheme || "classic"
   const accentColor = user?.invoiceColor || "#4f46e5"
+
+  const docTitle = doc?.settings?.title || (doc?.type ? getType(doc.type)?.defaultTitle : null) || t.officialBookingInvoice
+  const docNumber = doc?.number || booking?.invoiceNo
+  const showGstBreakup = doc?.settings?.showGstBreakup !== undefined
+    ? doc.settings.showGstBreakup
+    : (doc?.type ? (getType(doc.type)?.showGstBreakup ?? true) : true)
+  const validUntil = doc?.validUntil
+  const isVoid = doc?.status === "void"
+  const voidReason = doc?.voidReason
+  const customTerms = doc?.settings?.terms
+  const customNotes = doc?.settings?.notes
 
   // ── Build the full HTML for the invoice (used in print window) ──
   const buildInvoiceHTML = () => {
@@ -41,7 +56,11 @@ export default function InvoiceView({ booking, onBack, user }) {
       "Final balance must be settled 24 hours prior to departure.",
       "Company is not liable for itinerary changes due to weather.",
     ]
-    const tcList = user?.termsAndConditions?.length ? user.termsAndConditions : defaultTC
+    const tcList = customTerms
+      ? (Array.isArray(customTerms) ? customTerms : customTerms.split("\n").map((s) => s.trim()).filter(Boolean))
+      : user?.termsAndConditions?.length
+        ? user.termsAndConditions
+        : defaultTC
     const tcHTML = tcList.map((item) => `<li>• ${escapeHtml(item)}</li>`).join("")
     const safeLogo = sanitizeImageUrl(user?.companyLogo)
     const logoHTML = safeLogo
@@ -92,7 +111,7 @@ export default function InvoiceView({ booking, onBack, user }) {
 <meta charset="UTF-8"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Invoice #${escapeHtml(booking.invoiceNo)}</title>
+<title>${escapeHtml(docTitle)} #${escapeHtml(docNumber)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background:#f1f5f9; color:#0f172a; }
@@ -206,6 +225,7 @@ export default function InvoiceView({ booking, onBack, user }) {
 </head>
 <body>
 <div class="page">
+  ${isVoid ? `<div style="background:#fee2e2;border:2px solid #ef4444;color:#b91c1c;padding:8px 12px;border-radius:8px;font-weight:900;text-align:center;margin-bottom:12px;text-transform:uppercase;">⛔ VOID: ${escapeHtml(voidReason || "This document has been voided")}</div>` : ""}
 
   <!-- HEADER -->
   <div class="header">
@@ -218,8 +238,8 @@ export default function InvoiceView({ booking, onBack, user }) {
         </div>
       </div>
       <div style="text-align:right;">
-        <div class="invoice-badge">${t.officialBookingInvoice}</div>
-        <div class="invoice-word">${t.invoiceWord}</div>
+        <div class="invoice-badge">${escapeHtml(docTitle)}</div>
+        <div class="invoice-word">${escapeHtml(doc?.type === "credit-note" ? t.creditNote.toUpperCase() : t.invoiceWord)}</div>
       </div>
     </div>
   </div>
@@ -245,13 +265,14 @@ export default function InvoiceView({ booking, onBack, user }) {
     <div class="meta-box">
       <div class="meta-box-grid">
         <div>
-          <div class="label">${t.invoiceNo}</div>
-          <div class="value">#${escapeHtml(booking.invoiceNo)}</div>
+          <div class="label">${escapeHtml(doc?.type === "credit-note" ? t.creditNote : t.invoiceNo)}</div>
+          <div class="value">#${escapeHtml(docNumber)}</div>
         </div>
         <div class="value-right">
           <div class="label">${t.bookingDate}</div>
           <div class="value">${bookingDate}</div>
         </div>
+        ${validUntil ? `<div><div class="label">${t.validUntil}</div><div class="value">${escapeHtml(new Date(validUntil).toLocaleDateString())}</div></div>` : ""}
         <div>
           <div class="label">${t.paymentMode}</div>
           <div class="value value-green">${escapeHtml(booking.paymentMode?.toUpperCase())}</div>
@@ -334,6 +355,7 @@ export default function InvoiceView({ booking, onBack, user }) {
       </div>`
           : ""
       }
+      ${customNotes ? `<div style="margin-top:10px; font-size:11px; font-weight:600; color:#64748b; background:#f8fafc; padding:8px 10px; border-radius:8px; border:1px solid #e2e8f0;">📝 <strong>${t.notes}:</strong> ${escapeHtml(customNotes)}</div>` : ""}
     </div>
     <div class="finance">
       <div class="fin-row">
@@ -350,7 +372,7 @@ export default function InvoiceView({ booking, onBack, user }) {
           : ""
       }
       ${
-        booking.gstRate > 0
+        showGstBreakup && booking.gstRate > 0
           ? `
       <div class="fin-row">
         <span class="fin-label">${t.gst} (${booking.gstRate}%)</span>
@@ -419,7 +441,7 @@ export default function InvoiceView({ booking, onBack, user }) {
 
   const handleShare = () => {
     const companyName = user?.companyName || "Xyz Tourism"
-    const text = `*${companyName.toUpperCase()}*\n*${t.officialBookingInvoice}: #${escapeHtml(booking.invoiceNo)}*\n\n*${t.tourName}:* ${escapeHtml(booking.tourName)}\n*${t.travelerName}:* ${escapeHtml(booking.contactName)}\n*${t.journeyDate}:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*${t.passengerManifest}:* ${booking.passengers.length} ${t.totalPax}\n\n*${t.finalAmount}:* ₹${booking.totalAmount.toLocaleString()}\n*${t.advancePaid}:* ₹${(booking.advanceReceived || 0).toLocaleString()}\n*${t.balancePayable.toUpperCase()}: ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}*\n\n_${t.wishJourney}_`
+    const text = `*${companyName.toUpperCase()}*\n*${t.officialBookingInvoice}: #${escapeHtml(docNumber)}*\n\n*${t.tourName}:* ${escapeHtml(booking.tourName)}\n*${t.travelerName}:* ${escapeHtml(booking.contactName)}\n*${t.journeyDate}:* ${new Date(booking.journeyDate).toLocaleDateString()}\n*${t.passengerManifest}:* ${booking.passengers.length} ${t.totalPax}\n\n*${t.finalAmount}:* ₹${booking.totalAmount.toLocaleString()}\n*${t.advancePaid}:* ₹${(booking.advanceReceived || 0).toLocaleString()}\n*${t.balancePayable.toUpperCase()}: ₹${(booking.totalAmount - (booking.advanceReceived || 0)).toLocaleString()}*\n\n_${t.wishJourney}_`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank")
   }
 
@@ -502,6 +524,12 @@ export default function InvoiceView({ booking, onBack, user }) {
                 : "rounded-lg border-slate-200 shadow-sm"
           }`}
         >
+          {isVoid && (
+            <div className="m-6 p-4 bg-rose-50 border-2 border-rose-500 rounded-2xl text-rose-800 font-black text-xs uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-2">⛔ VOID DOCUMENT: {voidReason || "This document has been voided"}</span>
+              <span className="bg-rose-600 text-white px-2.5 py-1 rounded-full text-[10px]">VOID</span>
+            </div>
+          )}
           {/* Header */}
           <div
             className={`p-8 lg:p-10 relative overflow-hidden ${
@@ -557,13 +585,13 @@ export default function InvoiceView({ booking, onBack, user }) {
                     color: theme === "minimal" ? "#334155" : "#ffffff",
                   }}
                 >
-                  {t.officialBookingInvoice}
+                  {docTitle}
                 </span>
                 <span
                   className="text-4xl font-black tracking-tighter"
                   style={{ opacity: theme === "minimal" ? 0.08 : 0.15 }}
                 >
-                  {t.invoiceWord}
+                  {doc?.type === "credit-note" ? t.creditNote.toUpperCase() : t.invoiceWord}
                 </span>
               </div>
             </div>
@@ -631,9 +659,9 @@ export default function InvoiceView({ booking, onBack, user }) {
                 <div className="grid grid-cols-2 gap-5">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
-                      {t.invoiceNo}
+                      {doc?.type === "credit-note" ? t.creditNote : t.invoiceNo}
                     </p>
-                    <p className="font-black text-slate-900">#{booking.invoiceNo}</p>
+                    <p className="font-black text-slate-900">#{docNumber}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
@@ -641,6 +669,12 @@ export default function InvoiceView({ booking, onBack, user }) {
                     </p>
                     <p className="font-black text-slate-900">{new Date(booking.date).toLocaleDateString()}</p>
                   </div>
+                  {validUntil && (
+                    <div className="col-span-2 pt-1 border-t border-slate-200/60 flex justify-between items-center text-xs">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t.validUntil}</span>
+                      <span className="font-bold text-slate-700">{new Date(validUntil).toLocaleDateString()}</span>
+                    </div>
+                  )}
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
                       {t.paymentMode}
@@ -761,18 +795,27 @@ export default function InvoiceView({ booking, onBack, user }) {
                   <CheckCircle2 size={13} style={{ color: accentColor }} /> {t.bookingPolicyTC}
                 </h4>
                 <ul className="text-[10px] font-bold text-slate-400 space-y-1.5 uppercase tracking-tight leading-relaxed list-none">
-                  {(user?.termsAndConditions?.length
-                    ? user.termsAndConditions
-                    : [
-                        "Valid Aadhar card is strictly required for all travelers.",
-                        "Advance payment is non-refundable upon confirmation.",
-                        "Final balance must be settled 24 hours prior to departure.",
-                        "Company is not liable for itinerary changes due to weather.",
-                      ]
+                  {(customTerms
+                    ? (Array.isArray(customTerms) ? customTerms : customTerms.split("\n").map((s) => s.trim()).filter(Boolean))
+                    : user?.termsAndConditions?.length
+                      ? user.termsAndConditions
+                      : [
+                          "Valid Aadhar card is strictly required for all travelers.",
+                          "Advance payment is non-refundable upon confirmation.",
+                          "Final balance must be settled 24 hours prior to departure.",
+                          "Company is not liable for itinerary changes due to weather.",
+                        ]
                   ).map((term, i) => (
                     <li key={i}>• {term}</li>
                   ))}
                 </ul>
+
+                {customNotes && (
+                  <div className="mt-3 p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600">
+                    <span className="font-bold text-slate-700">Note: </span>
+                    {customNotes}
+                  </div>
+                )}
 
                 {(user?.bankDetails?.upiId || user?.bankDetails?.accountNumber) && (
                   <div className="mt-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/50 space-y-1 text-xs">
@@ -818,7 +861,7 @@ export default function InvoiceView({ booking, onBack, user }) {
                     <span className="font-black">(–) ₹{booking.discount.toLocaleString()}</span>
                   </div>
                 )}
-                {booking.gstRate > 0 && (
+                {showGstBreakup && booking.gstRate > 0 && (
                   <div className="flex justify-between text-sm text-indigo-600">
                     <span className="font-bold uppercase tracking-widest text-[10px]">
                       {t.gst} ({booking.gstRate}%)
