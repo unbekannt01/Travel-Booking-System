@@ -59,6 +59,10 @@ const userSchema = new mongoose.Schema(
       bankName: { type: String, default: "" },
       upiId: { type: String, default: "" },
     },
+    documentSettings: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
+    },
     organizers: [
       {
         name: { type: String, required: true },
