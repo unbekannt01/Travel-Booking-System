@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, lazy, Suspense } from "react"
 import {
   Building2,
   Palette,
@@ -26,8 +26,11 @@ import {
   Field,
   Card,
   Badge,
+  Spinner,
 } from "../ui/index"
 import { cn } from "../../utils/cn"
+
+const InvoiceStudio = lazy(() => import("./InvoiceStudio"))
 
 export default function SettingsPanel({
   user,
@@ -734,6 +737,22 @@ export default function SettingsPanel({
             </div>
           </div>
         </Card>
+      ),
+    },
+    {
+      id: "studio",
+      label: "Invoice Studio",
+      icon: <Sparkles size={16} />,
+      content: (
+        <Suspense
+          fallback={
+            <div className="flex h-96 items-center justify-center">
+              <Spinner size="lg" />
+            </div>
+          }
+        >
+          <InvoiceStudio user={user} />
+        </Suspense>
       ),
     },
     {

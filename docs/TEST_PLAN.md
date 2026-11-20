@@ -220,9 +220,22 @@ npm run ui:smoke
 
 ---
 
+## 3.7 Manual Verification Checklist — Part 3.7b Invoice Studio & Document Renderer
+
+- [ ] **Invoice Studio Navigation**: Navigate to Settings -> click the new "Invoice Studio" tab; verify template manager loads with built-in presets and designer controls.
+- [ ] **Live Iframe Preview**: Observe the right-side preview updating in real-time as controls (layout, colors, typography, copies, sections) change.
+- [ ] **WCAG Contrast Warning**: In the Colors tab, select a low-contrast color (e.g. pale yellow `#fef08a`); verify amber warning indicates `< 4.5:1` contrast ratio. Select Indigo (`#4f46e5`); verify green checkmark confirms WCAG AA pass.
+- [ ] **Asset Upload & Magic-Byte Security**: Upload a valid PNG/JPEG logo under 200 KB; verify instant preview. Attempt to upload an `.svg` file; verify clear error rejection (`SVG format is rejected for security`).
+- [ ] **Copies & Paper Formats**: Switch copies to "2 Copies (Original + Duplicate)"; verify two sheets render with respective header tags and print page breaks. Switch paper to "Thermal 80mm"; verify POS receipt styling.
+- [ ] **Document Types Live Switcher**: In the preview toolbar, cycle between Tax Invoice, Quotation, and Credit Note; verify validUntil on quotation and cancellation charge/refund on credit note.
+- [ ] **Print Test Page**: Click "Print Test Page"; verify print dialog opens with the exact configured styles.
+- [ ] **Template Persistence & Duplication**: Click "Duplicate" on a built-in template; edit name and save; verify custom template appears in dropdown and persists across page reloads.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-With 223 unit & regression tests passing across 58 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 244 unit & regression tests passing across 59 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.

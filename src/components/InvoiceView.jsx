@@ -16,6 +16,7 @@ import {
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../i18n/documents"
 import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "../utils/escapeHtml.js"
 import { getType } from "../../shared/documentTypes.js"
+import { renderDocumentHtml } from "../utils/documentRenderer.js"
 import BoardingPassModal from "./common/BoardingPassModal"
 
 export default function InvoiceView({ booking: bookingInput, document: docProp, onBack, user }) {
@@ -425,7 +426,9 @@ export default function InvoiceView({ booking: bookingInput, document: docProp, 
   }
 
   const handlePrint = () => {
-    const html = buildInvoiceHTML()
+    const html = doc?.templateSnapshot
+      ? renderDocumentHtml({ document: doc, booking, template: doc.templateSnapshot, user })
+      : buildInvoiceHTML()
     const win = window.open("", "_blank", "width=900,height=700")
     if (!win) {
       alert("Please allow popups to print invoices.")

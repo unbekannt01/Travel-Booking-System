@@ -397,3 +397,58 @@ export async function updateDocumentSettings(settings) {
   })
   return res?.settings || {}
 }
+
+export async function listTemplates() {
+  const res = await request("/api/document-templates")
+  return res?.templates || []
+}
+
+export async function getTemplate(id) {
+  const res = await request(`/api/document-templates/${id}`)
+  return res?.template || null
+}
+
+export async function createTemplate(payload) {
+  const res = await request("/api/document-templates", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+  return res?.template
+}
+
+export async function updateTemplate(id, payload) {
+  const res = await request(`/api/document-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+  return res?.template
+}
+
+export async function deleteTemplate(id) {
+  return await request(`/api/document-templates/${id}`, {
+    method: "DELETE",
+  })
+}
+
+export async function duplicateTemplate(id) {
+  const res = await request(`/api/document-templates/${id}/duplicate`, {
+    method: "POST",
+  })
+  return res?.template
+}
+
+export async function uploadTemplateAsset(file, type = "logo") {
+  const res = await request("/api/document-templates/assets", {
+    method: "POST",
+    body: JSON.stringify({ file, type }),
+  })
+  return res
+}
+
+export async function setDefaultTemplateForType(type, templateId) {
+  const res = await request(`/api/document-templates/default/${type}`, {
+    method: "PUT",
+    body: JSON.stringify({ templateId }),
+  })
+  return res
+}

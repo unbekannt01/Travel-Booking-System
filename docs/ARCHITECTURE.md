@@ -394,5 +394,37 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Voiding an already voided document is strictly rejected (HTTP 400).
 
 - **UI Integration & Print Layout Preservation**:
-  - `src/components/dashboard/InvoicesModal.jsx`: Added inline expandable document management drawer per booking row (both desktop Table and mobile stacked cards). Displays issued documents list with type badges, document numbers, status pills, and action buttons (`View`, `Void`). Includes document type selector with `Issue Document` action and dedicated `Issue Credit Note` button for cancelled reservations.
+  - `src/components/dashboard/InvoicesModal.jsx`: Added inline expandable document management drawer per booking row (both desktop Table and mobile stacked cards). Displays issued documents list with type badges, document numbers, status pills, and action buttons (`View`, `Void`). Includes document type selector with `Issue Document` action and dedicated `Issue Credit Note` button for cancelled reservations. Accessible `Modal` with textarea replaced `window.prompt` for void reason input.
   - `src/components/InvoiceView.jsx`: Supports both legacy raw booking objects and `{ booking, document }` snapshots. Renders custom document title, formatted number, valid until date, custom terms, custom notes, and conditional GST breakup. Void documents display an prominent, non-obstructive VOID alert banner. Print HTML CSS layout, margins, and paper sizing remain strictly preserved with zero regression.
+
+---
+
+## 15. Invoice Studio & Document Renderer (Part 3.7b)
+
+- **Pure Template Engine & Presets (`shared/invoiceTemplate.js`)**:
+  - Pure zero-dependency ESM module shared across frontend and backend.
+  - Defines 5 layout architecture styles: `legacy` (exact replica of existing YatraHub invoice for complete continuity), `modern`, `classic`, `minimal`, and `corporate`.
+  - 6 built-in presets: `classic-bus` (default), `modern-minimal`, `gujarat-heritage`, `pilgrim-simple`, `thermal-compact`, and `corporate-blue`.
+  - WCAG 2.1 AA Contrast Engine: Computes relative luminance and contrast ratio between foreground brand colors and white/background paper; alerts when contrast is < 4.5:1.
+  - Strict input validation & normalization: `validateTemplateConfig` and `normalizeTemplateConfig` guarantee all fields are sanitized, dimensions clamped, and unknown options rejected.
+  - NPCI UPI payment URI builder (`buildUpiPaymentUri`) formatting `upi://pay?pa=...&pn=...&am=...&tn=...&cu=INR`.
+
+- **Pure Document Renderer (`shared/documentRenderer.js`)**:
+  - Zero-dependency ESM pure function `renderDocumentHtml({ document, booking, template, user, qrDataUrl, previewMode })`.
+  - Full output encoding with `escapeHtml`, `sanitizeHexColor`, and `sanitizeImageUrl`.
+  - **Strict Zero-Aadhaar Enforcement**: Under no circumstances is Aadhaar (raw or encrypted) rendered in invoice output.
+  - Sandboxing & CSP: Injects `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; script-src 'none';"/>` into document header.
+  - Multi-copy printing: Generates multiple sheets for `original-duplicate` (2 copies) and `original-duplicate-triplicate` (3 copies) with respective header tags and CSS `@media print { .page-break { page-break-after: always; } }`.
+  - Paper formats: Native CSS `@page` sizing for A4, A5, Thermal 80mm roll, and Thermal 58mm roll.
+  - Live Watermarks: Renders prominent VOID watermark on void documents, CANCELLED on cancelled bookings, or custom text.
+
+- **Backend Template Storage & Secure Asset Pipeline (`backend/models/InvoiceTemplate.js` & `backend/routes/documentTemplates.js`)**:
+  - `InvoiceTemplate` collection storing custom operator templates (max 20 per user).
+  - Built-in presets served dynamically with `isBuiltIn: true` and protected from direct overwrite/deletion.
+  - `POST /api/document-templates/assets`: Magic-byte file validation (`backend/utils/assetValidation.js`) verifying real binary headers for PNG (`89 50 4E 47`), JPEG (`FF D8 FF`), and WebP (`RIFF ... WEBP`) up to 200 KB. SVG files and arbitrary executables are strictly rejected to prevent XSS script injection.
+  - `IssuedDocument` schema stores immutable `templateSnapshot` and `templateRef` on issuance, guaranteeing that historical reprints never alter even if active operator templates change.
+
+- **Invoice Studio UI (`src/components/dashboard/InvoiceStudio.jsx`)**:
+  - Integrated as a lazy-loaded tab inside Settings (`SettingsPanel.jsx`) with its own Vite bundle chunk (`InvoiceStudio-*.js`).
+  - Left column designer controls: Layout & Presets, Colors with live WCAG contrast warning, Logo & Signatures uploader, Section toggles, Paper & Copies, Typography & Languages.
+  - Right column live preview: Sandboxed iframe `<iframe sandbox="" srcDoc={previewHtml} />` with document type switcher (testing Tax Invoice, Bill of Supply, Quotation, Credit Note), zoom controls, and "Print Test Page" button.

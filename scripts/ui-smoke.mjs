@@ -49,6 +49,7 @@ const SCREENS = [
   { id: "tours", label: "Destinations", tabId: "tours" },
   { id: "analytics", label: "Analytics", tabId: "analytics" },
   { id: "settings", label: "Settings", tabId: "settings" },
+  { id: "invoice-studio", label: "Invoice Studio", isSettingsTab: "studio" },
   { id: "new-booking", label: "New Booking", isAction: "new-booking" },
   { id: "ui-kit", label: "Dev UI Kit", isRoute: "#/ui-kit" },
 ]
@@ -95,8 +96,18 @@ async function run() {
   }
 
   // Verify dashboard navigation exists
-  await page.waitForSelector("#main-content", { timeout: 10000 })
-  console.log("[ui:smoke] Logged in successfully.")
+  try {
+    await page.waitForSelector("#main-content", { timeout: 10000 })
+    console.log("[ui:smoke] Logged in successfully.")
+  } catch (loginErr) {
+    console.error(`[ui:smoke] Login failed or #main-content not found: ${loginErr.message}`)
+    console.error("[ui:smoke] Diagnostic checklist:")
+    console.error("  1. Is backend running? (http://localhost:5000)")
+    console.error("  2. Is frontend running? (http://localhost:5173)")
+    console.error("  3. Are UI_SMOKE_EMAIL and UI_SMOKE_PASSWORD pointing to an active operator?")
+    await browser.close()
+    process.exit(1)
+  }
 
   // 2. Iterate through screens, themes, and viewports (READ-ONLY)
   let totalScreenshots = 0
@@ -108,6 +119,21 @@ async function run() {
     if (screen.isRoute) {
       await page.goto(`${TARGET_URL}/${screen.isRoute}`, { waitUntil: "domcontentloaded" })
       await page.waitForTimeout(600)
+    } else if (screen.isSettingsTab) {
+      if (page.url().includes("#/ui-kit")) {
+        await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" })
+        await page.waitForTimeout(600)
+      }
+      const settingsNav = await page.$('button:has-text("Settings")')
+      if (settingsNav) {
+        await settingsNav.click()
+        await page.waitForTimeout(600)
+      }
+      const studioTab = await page.$('button:has-text("Invoice Studio")')
+      if (studioTab) {
+        await studioTab.click()
+        await page.waitForTimeout(600)
+      }
     } else if (screen.isAction === "new-booking") {
       // Return to main app if on hash route
       if (page.url().includes("#/ui-kit")) {

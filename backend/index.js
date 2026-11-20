@@ -10,6 +10,7 @@ import bookingRoutes from "./routes/bookings.js"
 import tourRoutes from "./routes/tours.js"
 import paymentRoutes from "./routes/payments.js"
 import documentRoutes from "./routes/documents.js"
+import documentTemplateRoutes from "./routes/documentTemplates.js"
 
 const app = express()
 
@@ -41,6 +42,10 @@ app.use(cookieParser())
 app.use("/api/auth/update-company", express.json({ limit: "5mb" }))
 app.use("/api/auth/update-company", express.urlencoded({ limit: "5mb", extended: true }))
 
+// Route-specific 500KB payload limit for document template assets (SEC-015)
+app.use("/api/document-templates/assets", express.json({ limit: "500kb" }))
+app.use("/api/document-templates/assets", express.urlencoded({ limit: "500kb", extended: true }))
+
 // Global strict 100KB payload limit for all other API endpoints (SEC-015)
 app.use(express.json({ limit: "100kb" }))
 app.use(express.urlencoded({ limit: "100kb", extended: true }))
@@ -53,6 +58,7 @@ app.use("/api/bookings", bookingRoutes)
 app.use("/api/tours", tourRoutes)
 app.use("/api/payments", paymentRoutes)
 app.use("/api/documents", documentRoutes)
+app.use("/api/document-templates", documentTemplateRoutes)
 
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {

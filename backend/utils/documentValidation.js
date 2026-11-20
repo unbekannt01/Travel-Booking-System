@@ -20,6 +20,7 @@ export const singleDocumentSettingSchema = z
     notes: z.string().max(500, "Notes cannot exceed 500 characters").default(""),
     validityDays: z.number().int().min(1).max(365).nullable().optional(),
     showGstBreakup: z.boolean().optional(),
+    defaultTemplateId: z.string().trim().max(100).nullable().optional(),
   })
   .strict("Unknown keys in document setting are rejected")
 
@@ -38,6 +39,7 @@ export const issueDocumentInputSchema = z
     }),
     validUntil: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).optional().nullable(),
     linkedDocumentId: z.string().regex(objectIdRegex, "Invalid linked document ID format").optional().nullable(),
+    templateId: z.string().trim().max(100).optional().nullable(),
     notes: z.string().max(500).optional(),
     terms: z.string().max(1000).optional(),
   })

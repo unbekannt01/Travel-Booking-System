@@ -69,7 +69,7 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (223 tests across 58 suites)
+# Run all unit, security, crypto, and business logic tests (244 tests across 59 suites)
 npm test
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -82,8 +82,10 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**223 tests across 58 test suites / 24 test files**):
-1. **Multiple Document Types, Snapshots & Credit Notes** (`tests/document-management.test.js`):
+### Test Coverage Summary (**244 tests across 59 test suites / 25 test files**):
+1. **Invoice Studio, Presets & Document Renderer** (`tests/invoice-studio.test.js`):
+   - Layout architecture validation, 6 built-in presets (`classic-bus`, `modern-minimal`, `gujarat-heritage`, `pilgrim-simple`, `thermal-compact`, `corporate-blue`), relative luminance and WCAG 2.1 AA contrast ratio calculator (4.5:1 threshold), NPCI UPI URI generator, pure zero-Aadhaar document HTML renderer, CSP meta tag enforcement, multi-copy sheets with page breaks, thermal receipt styling, automatic VOID watermark, and binary magic-byte validation (PNG, JPEG, WebP allowed, SVG rejected).
+2. **Multiple Document Types, Snapshots & Credit Notes** (`tests/document-management.test.js`):
    - Pure document registry for 6 document types, Indian fiscal year boundary calculation, number formatting, Zod schema validation, numbering continuity from legacy invoice counters, parallel allocation simulation, zero-Aadhaar PII snapshots, credit note flow & idempotency, void audit trail, and snapshot immutability.
 2. **Masked Aadhaar Edit Round-Trip & PII Reconciliation** (`tests/aadhaar-edit-roundtrip.test.js`):
    - Frontend and backend masked Aadhaar detection, preservation of AES-256-GCM ciphertext on edit, non-inheritance, and granular single-passenger reconciliation.

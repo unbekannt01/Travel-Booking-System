@@ -4,6 +4,7 @@ import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
 import IssuedDocument from "../models/IssuedDocument.js"
+import InvoiceTemplate from "../models/InvoiceTemplate.js"
 import { logAudit } from "../models/AuditLog.js"
 import { getNextDocumentNumber } from "../utils/documentNumbering.js"
 import {
@@ -11,6 +12,10 @@ import {
   isValidType,
   getDefaultDocumentSettings,
 } from "../../shared/documentTypes.js"
+import {
+  TEMPLATE_PRESETS,
+  DEFAULT_TEMPLATE_CONFIG,
+} from "../../shared/invoiceTemplate.js"
 import { calculateCancellationRefund } from "../../shared/businessLogic.js"
 import {
   issueDocumentInputSchema,
@@ -136,6 +141,7 @@ export async function ensureLegacyInvoiceDocument(booking, user) {
       title: "TAX INVOICE",
       showGstBreakup: true,
     },
+    templateSnapshot: DEFAULT_TEMPLATE_CONFIG,
   })
 
   await doc.save()
@@ -149,7 +155,7 @@ export async function ensureLegacyInvoiceDocument(booking, user) {
 router.post("/", verifyToken, documentWriteLimiter, async (req, res) => {
   try {
     const input = issueDocumentInputSchema.parse(req.body)
-    const { bookingId, type, validUntil, linkedDocumentId, notes, terms } = input
+    const { bookingId, type, validUntil, linkedDocumentId, templateId, notes, terms } = input
 
     if (!isValidType(type)) {
       return res.status(400).json({ message: `Unsupported document type: ${type}` })
@@ -274,6 +280,39 @@ router.post("/", verifyToken, documentWriteLimiter, async (req, res) => {
       }
     }
 
+    // Resolve template config for immutable snapshot
+    const targetTemplateId =
+      templateId || user.documentSettings?.[type]?.defaultTemplateId || null
+
+    let resolvedTemplateSnapshot = null
+    let resolvedTemplateRef = null
+
+    if (targetTemplateId) {
+      if (targetTemplateId.startsWith("builtin-")) {
+        const presetKey = targetTemplateId.replace("builtin-", "")
+        if (TEMPLATE_PRESETS[presetKey]) {
+          resolvedTemplateSnapshot = TEMPLATE_PRESETS[presetKey].config
+          resolvedTemplateRef = targetTemplateId
+        }
+      } else {
+        const customTemplate = await InvoiceTemplate.findOne({
+          _id: targetTemplateId,
+          userId: req.user.id,
+        })
+        if (customTemplate) {
+          resolvedTemplateSnapshot = {
+            ...customTemplate.config,
+            assets: customTemplate.assets,
+          }
+          resolvedTemplateRef = customTemplate._id
+        }
+      }
+    }
+
+    if (!resolvedTemplateSnapshot) {
+      resolvedTemplateSnapshot = DEFAULT_TEMPLATE_CONFIG
+    }
+
     const newDoc = new IssuedDocument({
       userId: req.user.id,
       bookingId: booking._id,
@@ -284,6 +323,8 @@ router.post("/", verifyToken, documentWriteLimiter, async (req, res) => {
       status: "issued",
       linkedDocumentId: resolvedLinkedDocId,
       validUntil: resolvedValidUntil,
+      templateRef: resolvedTemplateRef,
+      templateSnapshot: resolvedTemplateSnapshot,
       amounts: snapshots.amounts,
       company: snapshots.company,
       customer: snapshots.customer,

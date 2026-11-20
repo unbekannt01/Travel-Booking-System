@@ -719,7 +719,6 @@ export default function InvoicesModal({
             rows={3}
             maxLength={250}
             disabled={isVoiding}
-            autoFocus
           />
         </Field>
 
