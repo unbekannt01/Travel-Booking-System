@@ -100,7 +100,7 @@ export function ToastContainer({ children, className }) {
       role="region"
       aria-label="Notifications"
       className={cn(
-        "fixed bottom-5 right-5 z-[var(--yh-z-toast)] flex flex-col gap-2.5 max-w-md w-[calc(100%-2.5rem)] pointer-events-none",
+        "fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-5 right-4 sm:right-5 z-[var(--yh-z-toast)] flex flex-col gap-2.5 max-w-md w-[calc(100%-2rem)] sm:w-[calc(100%-2.5rem)] pointer-events-none",
         className,
       )}
     >

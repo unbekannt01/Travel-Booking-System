@@ -119,7 +119,6 @@ export function AppTopBar({
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label={`${displayName} - Account menu`}
               onClick={() => setMenuOpen((prev) => !prev)}
               className={cn(
                 "inline-flex items-center gap-2 min-h-11 sm:min-h-9 px-2 rounded-[var(--yh-radius-md)]",
@@ -131,6 +130,7 @@ export function AppTopBar({
               <span className="hidden xl:inline text-xs font-semibold text-ink max-w-[120px] truncate">
                 {displayName}
               </span>
+              <span className="sr-only">Account menu</span>
               <ChevronDown
                 size={14}
                 aria-hidden="true"

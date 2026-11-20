@@ -72,7 +72,8 @@ export const DOCUMENT_TYPES = {
   },
 }
 
-export const DOCUMENT_TYPE_IDS = Object.keys(DOCUMENT_TYPES)
+export const DOCUMENT_TYPE_IDS = Object.freeze(Object.keys(DOCUMENT_TYPES))
+export const DOCUMENT_TYPE_LIST = Object.freeze(Object.values(DOCUMENT_TYPES))
 
 /**
  * Validates if the given string is a supported document type id.

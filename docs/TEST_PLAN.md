@@ -1,23 +1,51 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 58 test suites (223 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 65 test suites (255 tests), the Vitest component test safety net (`npm run test:ui`, 22 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
 ## 1. Test Architecture & Runner Configuration
-YatraHub uses the native Node.js test runner (`node:test`) and Node's strict assertion library (`node:assert/strict`). This eliminates heavy third-party test runners (Jest, Mocha, Vitest) for pure logic testing and provides blazing fast sub-second test execution.
 
-### Test Execution Command:
+### 1.1 Pure Logic & Backend Test Runner (`node:test`)
+YatraHub uses the native Node.js test runner (`node:test`) and Node's strict assertion library (`node:assert/strict`). This eliminates heavy third-party test runners for pure logic, crypto, and business logic testing and provides blazing fast sub-second test execution.
+
 ```bash
 npm test
 ```
-*Executes `node --test tests/*.test.js`.*
+*Executes `node --test tests/*.test.js`.* All tests run in pure ESM mode with zero transpilation overhead.
 
-All tests run in ESM mode with zero transpilation overhead.
+### 1.2 Component Test Safety Net (`npm run test:ui`)
+To catch runtime React crashes (e.g. invalid array methods on objects, null-pointer exceptions on passenger lists, unhandled prop types in primitives, or missing API error boundaries) before code reaches production or manual review, YatraHub includes a Vitest + `@testing-library/react` + `jsdom` component testing layer:
+
+```bash
+npm run test:ui
+```
+*Executes `vitest run` across `tests/components/**/*.test.jsx`.*
+
+- **Environment**: `jsdom` v25 (ensuring full compatibility with Node 22.12 LTS and zero production vulnerabilities).
+- **Setup & Interception (`tests/setup.js`)**: Configures window mocks (`matchMedia`, `ResizeObserver`, `IntersectionObserver`, `scrollTo`) and intercepts `console.error` to fail tests immediately on unhandled React warnings, uncaught boundary exceptions, or unhandled promise rejections.
+- **Provider Wrapper (`tests/testUtils.jsx`)**: Renders components wrapped in `ToastProvider` and `ConfirmModalProvider`.
+- **Comprehensive Mock Fixtures (`tests/fixtures/mockData.js`)**: Realistic, multi-scenario data covering tours, confirmed/cancelled bookings, legacy bookings lacking passengers array, issued documents across all 6 document types, company profile with bank/UPI settings, and custom invoice templates.
 
 ---
 
-## 2. Test Suites & Coverage Map (223 Tests / 24 Test Files / 58 TAP Suites)
+## 2. Test Suites & Coverage Map
+
+### 2.1 Component Test Layer (22 Tests / 9 Suites)
+
+| Suite File | Subtests | Core Scenarios Covered |
+| :--- | :---: | :--- |
+| **`tests/components/overview.test.jsx`** | 2 | Renders KPI metrics and recent bookings with full mock data; renders cleanly with empty state when bookings/tours array is empty. |
+| **`tests/components/travelers.test.jsx`** | 2 | Renders passenger manifest, search input, filter chips, and masked Aadhaar numbers; renders empty state cleanly. |
+| **`tests/components/journeys.test.jsx`** | 5 | Renders Coaches & Departures tab; switches to Boarding Manifest tab; displays manifest statistics; regression test for legacy bookings lacking `passengers` array without throwing. |
+| **`tests/components/destinations.test.jsx`** | 2 | Renders destination cards, bus configurations, and "Add Destination" action; renders clean empty state when tour list is empty. |
+| **`tests/components/analytics.test.jsx`** | 2 | Renders revenue/booking metrics and charts with mock bookings; renders clean empty state when bookings array is empty. |
+| **`tests/components/settings.test.jsx`** | 4 | Verifies `DOCUMENT_TYPES` object shape and `DOCUMENT_TYPE_LIST` array of 6 items; renders SettingsPanel tabs with `PanelErrorBoundary`; renders InvoiceStudio loaded state with all 6 document types in preview dropdown; renders InvoiceStudio calm inline error card with Retry button on API failure. |
+| **`tests/components/invoices-modal.test.jsx`** | 1 | Renders InvoicesModal with bookings and document issuance controls without crashing; verifies document type dropdown populated with non-credit-note types. |
+| **`tests/components/booking-steps.test.jsx`** | 2 | Renders Step 1 (Tour & Departure Selection); renders edit booking mode with pre-populated passengers and seats without crashing. |
+| **`tests/components/toast-dedup.test.jsx`** | 2 | Verifies 3-second toast deduplication suppresses duplicate alerts; verifies distinct messages trigger toasts independently. |
+
+### 2.2 Pure Logic & Unit Test Suites (255 Tests / 25 Test Files / 65 TAP Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
@@ -200,8 +228,10 @@ npm start
 npm run dev
 
 # 5. Run UI Smoke Suite (in terminal 3)
+# IMPORTANT: In PowerShell, always use SINGLE QUOTES around passwords containing '$'
+# (e.g. 'MyPass$123') to prevent PowerShell from expanding '$' as an empty variable.
 $env:UI_SMOKE_EMAIL="operator@yatrahub.local"
-$env:UI_SMOKE_PASSWORD="OperatorPassword123!"
+$env:UI_SMOKE_PASSWORD='OperatorPassword123!'
 npm run ui:smoke
 ```
 
@@ -250,9 +280,24 @@ npm run ui:smoke
 
 ---
 
+## 3.9 Hotfix Pass & Safety Net Verification Checklist (Part 3.7d)
+
+- [ ] **PowerShell Password Single-Quoting (`$env:UI_SMOKE_PASSWORD`)**:
+  - Verify smoke instructions explicitly document single quotes (`'...'`) for passwords containing `$`. In double quotes, PowerShell interprets `$symbol` as an unbound variable, silently sending an invalid truncated password and causing 401 Unauthorized errors.
+- [ ] **Smoke User Empty Data Rationale**:
+  - The UI smoke script runs against the authenticated test user. When this user has 0 bookings and 0 tours, every screen is tested against its zero-state behavior. Overview, Travelers, Journeys, Destinations, and Analytics must render their `EmptyState` primitives gracefully without uncaught null pointer exceptions or blank screens.
+- [ ] **Deep Tab Crawl & Crash Detection (`scripts/ui-smoke.mjs`)**:
+  - In `scripts/ui-smoke.mjs`, every tab element (`[role="tab"]`) is clicked sequentially across viewports (1280px desktop, 768px tablet, 360px mobile) and themes (light, dark).
+  - The smoke crawler inspects the DOM for crash boundary text (`Could not load this page`, `Something went wrong in this panel`, `Section Unavailable`) and reports them as fatal section failures in Section 4 of `report.md`.
+- [ ] **Component Safety Net (`npm run test:ui`)**:
+  - Execute `npm run test:ui`. Verify all 22 component tests across 9 suites pass cleanly.
+  - Verify zero audit vulnerabilities exist for production dependencies (`npm audit --omit=dev`).
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-With 244 unit & regression tests passing across 59 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 255 unit & regression tests passing across 65 TAP test suites, 22 component tests passing across 9 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.

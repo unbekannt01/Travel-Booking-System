@@ -21,9 +21,11 @@ export const Button = forwardRef(function Button(
     size = "md",
     fullWidth = false,
     loading = false,
+    isLoading = false,
     loadingText,
     leftIcon,
     rightIcon,
+    icon,
     disabled,
     type = "button",
     className,
@@ -32,22 +34,24 @@ export const Button = forwardRef(function Button(
   },
   ref,
 ) {
-  const isDisabled = Boolean(disabled || loading)
+  const isBusy = Boolean(loading || isLoading)
+  const resolvedLeftIcon = leftIcon || icon
+  const isDisabled = Boolean(disabled || isBusy)
 
   return (
     <button
       ref={ref}
       type={type}
       disabled={isDisabled}
-      aria-busy={loading || undefined}
+      aria-busy={isBusy || undefined}
       className={cn(buttonVariants({ variant, size, fullWidth }), className)}
       {...rest}
     >
-      {loading ? (
+      {isBusy ? (
         <Spinner size="sm" label={loadingText || "Loading"} />
-      ) : leftIcon ? (
+      ) : resolvedLeftIcon ? (
         <span className="shrink-0 inline-flex items-center" aria-hidden="true">
-          {leftIcon}
+          {resolvedLeftIcon}
         </span>
       ) : null}
       <span>{loading && loadingText ? loadingText : children}</span>

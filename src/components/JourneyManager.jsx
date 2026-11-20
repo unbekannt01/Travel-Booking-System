@@ -21,6 +21,7 @@ import {
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
 import { useToast } from "./common/ToastContext"
+import { PanelErrorBoundary } from "./common/PanelErrorBoundary"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
 import { formatINR, formatSeatLabel } from "../utils/formatters"
 import BoardingPassModal from "./common/BoardingPassModal"
@@ -345,18 +346,20 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
   }
 
   const handleSendWhatsApp = (booking) => {
-    const passengers = booking.passengers.map((p) => `${p.name} (${p.city})`).join(", ")
-    const message = `Hi ${booking.contactName},\n\nYour journey details:\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt. Thank you!`
+    const paxList = Array.isArray(booking.passengers) ? booking.passengers : []
+    const passengers = paxList.map((p) => `${p.name} (${p.city || ""})`).join(", ")
+    const message = `Hi ${booking.contactName || ""},\n\nYour journey details:\nInvoice: ${booking.invoiceNo || ""}\nTour: ${booking.tourName || ""}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${paxList.length}\n\nPlease confirm receipt. Thank you!`
     const phoneNumber = (booking.contactPhone || "").replace(/\D/g, "")
     const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
   }
 
   const handleSendEmail = (booking) => {
-    const passengers = booking.passengers.map((p) => `${p.name} (${p.city})`).join(", ")
-    const subject = `Journey Details - ${booking.invoiceNo}`
-    const body = `Hi ${booking.contactName},\n\nYour journey details:\n\nInvoice: ${booking.invoiceNo}\nTour: ${booking.tourName}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${booking.passengers.length}\n\nPlease confirm receipt.\n\nThank you!`
-    const mailUrl = `mailto:${booking.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    const paxList = Array.isArray(booking.passengers) ? booking.passengers : []
+    const passengers = paxList.map((p) => `${p.name} (${p.city || ""})`).join(", ")
+    const subject = `Journey Details - ${booking.invoiceNo || ""}`
+    const body = `Hi ${booking.contactName || ""},\n\nYour journey details:\n\nInvoice: ${booking.invoiceNo || ""}\nTour: ${booking.tourName || ""}\nDate: ${formatDisplayDate(booking.journeyDate)}\nPassengers: ${passengers}\nTotal: ${paxList.length}\n\nPlease confirm receipt.\n\nThank you!`
+    const mailUrl = `mailto:${booking.contactEmail || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     window.location.href = mailUrl
   }
 
@@ -369,8 +372,9 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
   }
 
   const getSortedSeatRows = (passengers) => {
-    const sorted = [...passengers].sort((a, b) =>
-      (a.seatId || "").localeCompare(b.seatId || "", undefined, { numeric: true }),
+    const list = Array.isArray(passengers) ? passengers : []
+    const sorted = [...list].sort((a, b) =>
+      (a?.seatId || "").localeCompare(b?.seatId || "", undefined, { numeric: true }),
     )
 
     const rows = []
@@ -549,7 +553,8 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
       {/* MODE 1: DEPARTURES GROUPED CARD VIEW                       */}
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "departures" && (
-        <div className="space-y-6">
+        <PanelErrorBoundary resetKey={viewMode} title="Coaches & Departures Error">
+          <div className="space-y-6">
           {filteredDepartures.length === 0 ? (
             <Card elevation="sm" padding="lg" className="text-center py-12">
               <Bus size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
@@ -671,13 +676,15 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
             </div>
           )}
         </div>
+        </PanelErrorBoundary>
       )}
 
       {/* ────────────────────────────────────────────────────────── */}
       {/* MODE 2: PASSENGER BOARDING MANIFEST                        */}
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "manifest" && (
-        <div className="space-y-6">
+        <PanelErrorBoundary resetKey={viewMode} title="Boarding Manifest Error">
+          <div className="space-y-6">
           {/* Active Departure Banner (if scoped) */}
           {activeDepartureObj && (
             <Card elevation="sm" padding="md" className="bg-brand-soft/50 border border-brand/20">
@@ -728,21 +735,21 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
             <StatCard
               label="Bookings Count"
               value={journeyBookings.length}
-              icon={Bus}
-              iconTone="brand"
+              icon={<Bus size={18} />}
+              tone="brand"
             />
             <StatCard
               label="Total Passengers"
               value={totalPassengers}
-              icon={Users}
-              iconTone="accent"
+              icon={<Users size={18} />}
+              tone="accent"
             />
             <StatCard
               label="Checked In / Boarded"
               value={`${totalCheckedIn}/${totalPassengers}`}
-              subtitle={`${totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete`}
-              icon={Check}
-              iconTone="success"
+              hint={`${totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete`}
+              icon={<Check size={18} />}
+              tone="success"
             />
           </div>
 
@@ -757,9 +764,10 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
             </Card>
           ) : (
             journeyBookings.map((booking) => {
-              const checkedInCount = (booking.passengers || []).filter((p) => p.checkedIn).length
-              const allCheckedIn = (booking.passengers || []).every((p) => p.checkedIn)
-              const noneCheckedIn = (booking.passengers || []).every((p) => !p.checkedIn)
+              const paxList = Array.isArray(booking.passengers) ? booking.passengers : []
+              const checkedInCount = paxList.filter((p) => p.checkedIn).length
+              const allCheckedIn = paxList.length > 0 && paxList.every((p) => p.checkedIn)
+              const noneCheckedIn = paxList.every((p) => !p.checkedIn)
               const isBatchProcessing = batchLoading === (booking._id || booking.id)
               const balanceDue = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
               const isFullyPaid = balanceDue === 0
@@ -784,19 +792,19 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                           role="progressbar"
                           aria-valuenow={checkedInCount}
                           aria-valuemin={0}
-                          aria-valuemax={booking.passengers.length}
-                          aria-label={`Boarding progress: ${checkedInCount} of ${booking.passengers.length} passengers boarded`}
+                          aria-valuemax={paxList.length}
+                          aria-label={`Boarding progress: ${checkedInCount} of ${paxList.length} passengers boarded`}
                           className="w-20 sm:w-24 h-2 bg-border-subtle rounded-full overflow-hidden"
                         >
                           <div
                             className="h-full bg-success transition-all"
                             style={{
-                              width: `${booking.passengers.length > 0 ? (checkedInCount / booking.passengers.length) * 100 : 0}%`,
+                              width: `${paxList.length > 0 ? (checkedInCount / paxList.length) * 100 : 0}%`,
                             }}
                           />
                         </div>
                         <span className="text-xs font-bold text-ink tabular-nums">
-                          {checkedInCount}/{booking.passengers.length}
+                          {checkedInCount}/{paxList.length}
                         </span>
                       </div>
                     </div>
@@ -812,7 +820,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                       </div>
                       <div>
                         <span className="text-ink-muted block">Passengers</span>
-                        <span className="font-semibold text-ink tabular-nums">{booking.passengers.length} PAX</span>
+                        <span className="font-semibold text-ink tabular-nums">{paxList.length} PAX</span>
                       </div>
                       <div>
                         <span className="text-ink-muted block">Payment</span>
@@ -833,7 +841,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                         className="min-h-11 sm:min-h-9"
                       >
                         <CheckCheck size={14} className="mr-1.5" />
-                        {isBatchProcessing ? "Boarding..." : `Board All (${booking.passengers.length})`}
+                        {isBatchProcessing ? "Boarding..." : `Board All (${paxList.length})`}
                       </Button>
                     )}
                     {!noneCheckedIn && (
@@ -859,7 +867,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                       className="min-h-11 sm:min-h-9"
                     >
                       <Ticket size={14} className="mr-1.5 text-brand" />
-                      <span>Boarding Passes ({booking.passengers.length})</span>
+                      <span>Boarding Passes ({paxList.length})</span>
                     </Button>
 
                     <div className="flex-1" />
@@ -897,7 +905,14 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {booking.passengers.map((passenger, idx) => {
+                        {paxList.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-6 text-xs text-ink-muted">
+                              No passenger details recorded for this booking.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          paxList.map((passenger, idx) => {
                           const isCheckedIn = Boolean(passenger.checkedIn)
                           const pId = passenger._id || idx
                           return (
@@ -974,14 +989,20 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                               </TableCell>
                             </TableRow>
                           )
-                        })}
-                      </TableBody>
+                        })
+                      )}
+                    </TableBody>
                     </Table>
                   </div>
 
                   {/* Passenger Roster: Mobile-first Stacked Checklist (<md) */}
                   <div className="md:hidden divide-y divide-border-subtle">
-                    {booking.passengers.map((passenger, idx) => {
+                    {paxList.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-ink-muted">
+                        No passenger details recorded for this booking.
+                      </div>
+                    ) : (
+                      paxList.map((passenger, idx) => {
                       const isCheckedIn = Boolean(passenger.checkedIn)
                       const pId = passenger._id || idx
                       return (
@@ -1053,8 +1074,9 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                           </div>
                         </div>
                       )
-                    })}
-                  </div>
+                    })
+                  )}
+                </div>
 
                   {/* Customer Communication Footer (no-print) */}
                   <div className="p-3 sm:px-5 bg-surface-muted/40 border-t border-border-subtle flex flex-wrap items-center justify-end gap-2 no-print">
@@ -1087,7 +1109,8 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
           {/* Printable Manifest (Untouched layout for physical printing) */}
           <div className="print-only hidden">
             {journeyBookings.map((booking) => {
-              const seatRows = getSortedSeatRows(booking.passengers)
+              const printPax = Array.isArray(booking.passengers) ? booking.passengers : []
+              const seatRows = getSortedSeatRows(printPax)
               return (
                 <div key={booking.id || booking._id} className="page-break-after py-10">
                   <div className="max-w-6xl mx-auto bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xl">
@@ -1109,7 +1132,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                         </div>
                         <div className="rounded-3xl bg-white/10 p-4">
                           <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Passengers</div>
-                          <div className="mt-2 text-lg font-black">{booking.passengers.length} PAX</div>
+                          <div className="mt-2 text-lg font-black">{printPax.length} PAX</div>
                         </div>
                         <div className="rounded-3xl bg-white/10 p-4">
                           <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Coach Config</div>
@@ -1159,7 +1182,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                             </tr>
                           </thead>
                           <tbody>
-                            {booking.passengers.map((p, idx) => (
+                            {printPax.map((p, idx) => (
                               <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
                                 <td className="px-4 py-3 text-sm font-bold text-slate-500">{idx + 1}</td>
                                 <td className="px-4 py-3 text-sm font-black text-slate-900">{p.name}</td>
@@ -1183,6 +1206,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
             })}
           </div>
         </div>
+        </PanelErrorBoundary>
       )}
 
       {/* Accessible Seat Swap Modal */}

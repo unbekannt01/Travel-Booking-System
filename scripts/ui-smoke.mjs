@@ -63,6 +63,7 @@ async function run() {
   const consoleEntries = []
   const failedRequests = []
   const overflowFindings = []
+  const fallbackFindings = []
   const groupedAxeViolations = new Map()
 
   page.on("console", (msg) => {
@@ -177,84 +178,145 @@ async function run() {
         await page.setViewportSize({ width: vp.width, height: vp.height })
         await page.waitForTimeout(300)
 
-        // Check horizontal overflow
-        const overflow = await page.evaluate(() => {
-          const docEl = document.documentElement
-          return {
-            scrollWidth: docEl.scrollWidth,
-            clientWidth: docEl.clientWidth,
-            hasOverflow: docEl.scrollWidth > docEl.clientWidth + 1, // 1px rounding tolerance
-          }
-        })
+        // Query tabs present on the active screen
+        const tabLocators = page.locator('[role="tab"]')
+        const tabCount = await tabLocators.count().catch(() => 0)
+        const tabsToCrawl = []
 
-        if (overflow.hasOverflow) {
-          overflowFindings.push({
-            screen: screen.label,
-            viewport: vp.width,
-            theme,
-            scrollWidth: overflow.scrollWidth,
-            clientWidth: overflow.clientWidth,
-          })
+        if (tabCount === 0) {
+          tabsToCrawl.push({ id: "main", label: "Main", locator: null })
+        } else {
+          for (let i = 0; i < tabCount; i++) {
+            const tabLoc = tabLocators.nth(i)
+            const raw = (await tabLoc.innerText().catch(() => "")) || ""
+            const clean =
+              raw
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "") || `tab-${i + 1}`
+            tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc })
+          }
         }
 
-        // Run axe-core accessibility analysis
-        try {
-          const axeResults = await new AxeBuilder({ page })
-            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
-            .analyze()
-
-          if (axeResults.violations && axeResults.violations.length > 0) {
-            for (const v of axeResults.violations) {
-              for (const node of v.nodes) {
-                const targetSelector = Array.isArray(node.target)
-                  ? node.target.join(" ")
-                  : String(node.target || "")
-                const groupKey = `${v.id}::${targetSelector}`
-
-                if (!groupedAxeViolations.has(groupKey)) {
-                  const cleanHtml = (node.html || "")
-                    .replace(/\r?\n/g, " ")
-                    .replace(/\s+/g, " ")
-                    .trim()
-                  const snippet =
-                    cleanHtml.length > 200 ? `${cleanHtml.slice(0, 197)}...` : cleanHtml
-                  const safeSnippet = snippet.replace(/\|/g, "\\|")
-
-                  const cleanSummary = (node.failureSummary || "")
-                    .replace(/\r?\n/g, " ")
-                    .replace(/\s+/g, " ")
-                    .trim()
-                    .replace(/\|/g, "\\|")
-
-                  groupedAxeViolations.set(groupKey, {
-                    id: v.id,
-                    impact: v.impact || "moderate",
-                    help: v.help,
-                    helpUrl: v.helpUrl || "",
-                    selector: targetSelector,
-                    snippet: safeSnippet,
-                    failureSummary: cleanSummary,
-                    occurrences: [],
-                  })
-                }
-
-                groupedAxeViolations
-                  .get(groupKey)
-                  .occurrences.push(`${screen.label} (${vp.width}px, ${theme})`)
-              }
+        for (const t of tabsToCrawl) {
+          if (t.locator) {
+            try {
+              await t.locator.click({ timeout: 3000 })
+              await page.waitForTimeout(350)
+            } catch (clickErr) {
+              console.warn(`[ui:smoke] Could not click tab "${t.label}": ${clickErr.message}`)
             }
           }
-        } catch (axeErr) {
-          console.warn(`[ui:smoke] axe analysis skipped for ${screen.id} @ ${vp.width}px: ${axeErr.message}`)
-        }
 
-        // Capture screenshot
-        const screenshotPath = path.join(
-          SCREENSHOTS_DIR,
-          `${screen.id}-${vp.width}-${theme}.png`
-        )
-        await page.screenshot({ path: screenshotPath, fullPage: false })
-        totalScreenshots++
+          // Error fallback detection: check if screen or panel rendered error boundary cards
+          const fallbackIndicator = await page.evaluate(() => {
+            const body = document.body ? document.body.innerText || "" : ""
+            const errorPhrases = [
+              "Could not load this page",
+              "Something went wrong in this panel",
+              "Section Unavailable",
+            ]
+            for (const phrase of errorPhrases) {
+              if (body.includes(phrase)) return phrase
+            }
+            return null
+          })
+
+          if (fallbackIndicator) {
+            console.error(
+              `[ui:smoke] ERROR FALLBACK DETECTED: "${fallbackIndicator}" on screen "${screen.label}", tab "${t.label}" (${vp.width}px, ${theme})`,
+            )
+            fallbackFindings.push({
+              screen: screen.label,
+              tab: t.label,
+              viewport: vp.width,
+              theme,
+              indicator: fallbackIndicator,
+            })
+          }
+
+          // Check horizontal overflow
+          const overflow = await page.evaluate(() => {
+            const docEl = document.documentElement
+            return {
+              scrollWidth: docEl.scrollWidth,
+              clientWidth: docEl.clientWidth,
+              hasOverflow: docEl.scrollWidth > docEl.clientWidth + 1, // 1px rounding tolerance
+            }
+          })
+
+          if (overflow.hasOverflow) {
+            overflowFindings.push({
+              screen: `${screen.label} > ${t.label}`,
+              viewport: vp.width,
+              theme,
+              scrollWidth: overflow.scrollWidth,
+              clientWidth: overflow.clientWidth,
+            })
+          }
+
+          // Run axe-core accessibility analysis
+          try {
+            const axeResults = await new AxeBuilder({ page })
+              .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+              .analyze()
+
+            if (axeResults.violations && axeResults.violations.length > 0) {
+              for (const v of axeResults.violations) {
+                for (const node of v.nodes) {
+                  const targetSelector = Array.isArray(node.target)
+                    ? node.target.join(" ")
+                    : String(node.target || "")
+                  const groupKey = `${v.id}::${targetSelector}`
+
+                  if (!groupedAxeViolations.has(groupKey)) {
+                    const cleanHtml = (node.html || "")
+                      .replace(/\r?\n/g, " ")
+                      .replace(/\s+/g, " ")
+                      .trim()
+                    const snippet =
+                      cleanHtml.length > 200 ? `${cleanHtml.slice(0, 197)}...` : cleanHtml
+                    const safeSnippet = snippet.replace(/\|/g, "\\|")
+
+                    const cleanSummary = (node.failureSummary || "")
+                      .replace(/\r?\n/g, " ")
+                      .replace(/\s+/g, " ")
+                      .trim()
+                      .replace(/\|/g, "\\|")
+
+                    groupedAxeViolations.set(groupKey, {
+                      id: v.id,
+                      impact: v.impact || "moderate",
+                      help: v.help,
+                      helpUrl: v.helpUrl || "",
+                      selector: targetSelector,
+                      snippet: safeSnippet,
+                      failureSummary: cleanSummary,
+                      occurrences: [],
+                    })
+                  }
+
+                  groupedAxeViolations
+                    .get(groupKey)
+                    .occurrences.push(`${screen.label} > ${t.label} (${vp.width}px, ${theme})`)
+                }
+              }
+            }
+          } catch (axeErr) {
+            console.warn(
+              `[ui:smoke] axe analysis skipped for ${screen.id} > ${t.id} @ ${vp.width}px: ${axeErr.message}`,
+            )
+          }
+
+          // Capture screenshot with <screen>-<tab>-<width>-<theme>.png format
+          const screenshotPath = path.join(
+            SCREENSHOTS_DIR,
+            `${screen.id}-${t.id}-${vp.width}-${theme}.png`,
+          )
+          await page.screenshot({ path: screenshotPath, fullPage: false })
+          totalScreenshots++
+        }
       }
     }
   }
@@ -353,12 +415,32 @@ async function run() {
     }
   }
 
+  reportLines.push("")
+  reportLines.push("## 4. UI Error Fallback Checks")
+  if (fallbackFindings.length === 0) {
+    reportLines.push("✅ **Zero UI error fallbacks triggered across all screens, tabs, and viewports.**")
+  } else {
+    reportLines.push(`❌ **${fallbackFindings.length} UI error fallbacks detected:**`)
+    reportLines.push("| Screen | Tab | Viewport | Theme | Triggered Error |")
+    reportLines.push("| :--- | :--- | :---: | :---: | :--- |")
+    for (const fb of fallbackFindings) {
+      reportLines.push(
+        `| ${fb.screen} | ${fb.tab} | ${fb.viewport}px | ${fb.theme} | ${fb.indicator} |`,
+      )
+    }
+  }
+
   fs.writeFileSync(reportPath, reportLines.join("\n"), "utf8")
   console.log(`[ui:smoke] Summary report written to ${reportPath}`)
 
-  const hasFailures = overflowFindings.length > 0 || groupedAxeViolations.size > 0
+  const hasFailures =
+    overflowFindings.length > 0 ||
+    groupedAxeViolations.size > 0 ||
+    fallbackFindings.length > 0
   if (hasFailures) {
-    console.error("[ui:smoke] FAILED: Issues found in horizontal overflow or accessibility.")
+    console.error(
+      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, or UI error fallbacks.",
+    )
     process.exit(1)
   } else {
     console.log("[ui:smoke] SUCCESS: All checks passed cleanly.")

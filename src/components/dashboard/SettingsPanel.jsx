@@ -18,6 +18,7 @@ import {
 import { useToast } from "../common/ToastContext"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { TICKET_TEMPLATES } from "../tickets/ticketRegistry"
+import { PanelErrorBoundary } from "../common/PanelErrorBoundary"
 import {
   Tabs,
   Button,
@@ -35,17 +36,18 @@ const InvoiceStudio = lazy(() => import("./InvoiceStudio"))
 
 export default function SettingsPanel({
   user,
-  companySettings,
-  setCompanySettings,
-  isEditingCompany,
-  setIsEditingCompany,
-  handleUpdateCompany,
-  setShow2FASetup,
-  setShow2FADisable,
-  formatIndianPhone,
+  companySettings: companySettingsProp,
+  setCompanySettings = () => {},
+  isEditingCompany = false,
+  setIsEditingCompany = () => {},
+  handleUpdateCompany = () => {},
+  setShow2FASetup = () => {},
+  setShow2FADisable = () => {},
+  formatIndianPhone = (p) => p || "",
 }) {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("company")
+  const companySettings = companySettingsProp || user?.companySettings || {}
 
   const handleDiscard = () => {
     setIsEditingCompany(false)
@@ -852,11 +854,15 @@ export default function SettingsPanel({
                 size="sm"
                 icon={<Plus size={14} />}
                 onClick={() => {
-                  const newTC = [...(companySettings.termsAndConditions || [])]
-                  newTC.push("")
+                  const rawTerms = companySettings.termsAndConditions
+                  const termsList = Array.isArray(rawTerms)
+                    ? rawTerms
+                    : typeof rawTerms === "string"
+                    ? rawTerms.split("\n").map((s) => s.trim()).filter(Boolean)
+                    : []
                   setCompanySettings({
                     ...companySettings,
-                    termsAndConditions: newTC,
+                    termsAndConditions: [...termsList, ""],
                   })
                 }}
               >
@@ -866,50 +872,62 @@ export default function SettingsPanel({
           </div>
 
           <div className="space-y-3">
-            {(companySettings.termsAndConditions || []).map((term, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <span className="text-xs font-bold text-(--yh-text-muted) w-6 text-right shrink-0">
-                  {index + 1}.
-                </span>
-                <Input
-                  type="text"
-                  placeholder="Enter policy rule or requirement"
-                  value={term}
-                  onChange={(e) => {
-                    const newTC = [...(companySettings.termsAndConditions || [])]
-                    newTC[index] = e.target.value
-                    setCompanySettings({
-                      ...companySettings,
-                      termsAndConditions: newTC,
-                    })
-                  }}
-                  disabled={!isEditingCompany}
-                  className="flex-1 text-xs"
-                />
-                {isEditingCompany && (
-                  <IconButton
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    icon={<X size={15} />}
-                    label="Remove policy"
-                    onClick={() => {
-                      const newTC = [...(companySettings.termsAndConditions || [])]
-                      newTC.splice(index, 1)
-                      setCompanySettings({
-                        ...companySettings,
-                        termsAndConditions: newTC,
-                      })
-                    }}
-                  />
-                )}
-              </div>
-            ))}
-            {(!companySettings.termsAndConditions || companySettings.termsAndConditions.length === 0) && (
-              <p className="text-xs text-(--yh-text-muted) italic py-2">
-                No terms configured yet. Click &quot;Add Policy Line&quot; to define booking conditions.
-              </p>
-            )}
+            {(() => {
+              const rawTerms = companySettings.termsAndConditions
+              const termsList = Array.isArray(rawTerms)
+                ? rawTerms
+                : typeof rawTerms === "string"
+                ? rawTerms.split("\n").map((s) => s.trim()).filter(Boolean)
+                : []
+              return (
+                <>
+                  {termsList.map((term, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <span className="text-xs font-bold text-(--yh-text-muted) w-6 text-right shrink-0">
+                        {index + 1}.
+                      </span>
+                      <Input
+                        type="text"
+                        placeholder="Enter policy rule or requirement"
+                        value={term}
+                        onChange={(e) => {
+                          const newTC = [...termsList]
+                          newTC[index] = e.target.value
+                          setCompanySettings({
+                            ...companySettings,
+                            termsAndConditions: newTC,
+                          })
+                        }}
+                        disabled={!isEditingCompany}
+                        className="flex-1 text-xs"
+                      />
+                      {isEditingCompany && (
+                        <IconButton
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          icon={<X size={15} />}
+                          label="Remove policy"
+                          onClick={() => {
+                            const newTC = [...termsList]
+                            newTC.splice(index, 1)
+                            setCompanySettings({
+                              ...companySettings,
+                              termsAndConditions: newTC,
+                            })
+                          }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  {termsList.length === 0 && (
+                    <p className="text-xs text-(--yh-text-muted) italic py-2">
+                      No terms configured yet. Click &quot;Add Policy Line&quot; to define booking conditions.
+                    </p>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </Card>
       ),
@@ -998,7 +1016,14 @@ export default function SettingsPanel({
 
       {/* Tabs Layout */}
       <Tabs
-        items={tabItems}
+        items={tabItems.map((item) => ({
+          ...item,
+          content: (
+            <PanelErrorBoundary resetKey={activeTab} title={`${item.label} Settings Error`}>
+              {item.content}
+            </PanelErrorBoundary>
+          ),
+        }))}
         value={activeTab}
         onChange={setActiveTab}
         ariaLabel="Settings Navigation"

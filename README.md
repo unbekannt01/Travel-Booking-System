@@ -69,8 +69,11 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (244 tests across 59 suites)
+# Run all unit, security, crypto, and business logic tests (255 tests across 65 suites)
 npm test
+
+# Run component test safety net (22 tests across 9 Vitest suites)
+npm run test:ui
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
 npm run lint
@@ -82,7 +85,9 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**244 tests across 59 test suites / 25 test files**):
+### Test Coverage Summary (**255 unit tests + 22 component tests across 74 total suites**):
+0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
+   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Analytics, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
 1. **Invoice Studio, Presets & Document Renderer** (`tests/invoice-studio.test.js`):
    - Layout architecture validation, 6 built-in presets (`classic-bus`, `modern-minimal`, `gujarat-heritage`, `pilgrim-simple`, `thermal-compact`, `corporate-blue`), relative luminance and WCAG 2.1 AA contrast ratio calculator (4.5:1 threshold), NPCI UPI URI generator, pure zero-Aadhaar document HTML renderer, CSP meta tag enforcement, multi-copy sheets with page breaks, thermal receipt styling, automatic VOID watermark, and binary magic-byte validation (PNG, JPEG, WebP allowed, SVG rejected).
 2. **Multiple Document Types, Snapshots & Credit Notes** (`tests/document-management.test.js`):

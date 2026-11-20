@@ -39,7 +39,7 @@ import {
   buildUpiPaymentUri,
 } from "../../../shared/invoiceTemplate.js"
 import { renderDocumentHtml } from "../../../shared/documentRenderer.js"
-import { DOCUMENT_TYPES, DOCUMENT_TYPE_IDS, getType } from "../../../shared/documentTypes.js"
+import { DOCUMENT_TYPES, DOCUMENT_TYPE_IDS, DOCUMENT_TYPE_LIST, getType } from "../../../shared/documentTypes.js"
 import {
   listTemplates,
   createTemplate,
@@ -61,6 +61,7 @@ export default function InvoiceStudio({ user }) {
   // Template collection state
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [selectedId, setSelectedId] = useState("builtin-classic-bus")
   const [templateName, setTemplateName] = useState("Classic Yatra Bus")
   const [currentConfig, setCurrentConfig] = useState(DEFAULT_TEMPLATE_CONFIG)
@@ -98,6 +99,7 @@ export default function InvoiceStudio({ user }) {
   const loadTemplatesAndSettings = async () => {
     try {
       setLoading(true)
+      setLoadError(null)
       const [tplList, settings] = await Promise.all([
         listTemplates(),
         getDocumentSettings().catch(() => ({})),
@@ -110,7 +112,7 @@ export default function InvoiceStudio({ user }) {
       }
     } catch (err) {
       console.error("Failed to load invoice templates:", err)
-      toast.error("Failed to load templates: " + (err.message || "Unknown error"))
+      setLoadError(err.message || "Failed to load templates")
     } finally {
       setLoading(false)
     }
@@ -467,6 +469,35 @@ export default function InvoiceStudio({ user }) {
     return (
       <div className="flex h-96 items-center justify-center">
         <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  if (loadError && templates.length === 0) {
+    return (
+      <div className="max-w-xl mx-auto my-12 p-4">
+        <Card elevation="sm" padding="lg" className="text-center space-y-4">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger-text mx-auto">
+            <AlertTriangle size={24} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-ink">Unable to Load Invoice Templates</h3>
+            <p className="text-xs text-ink-muted mt-1.5 max-w-sm mx-auto leading-relaxed">
+              {loadError.includes("401")
+                ? "Your authentication session is missing or expired. Please sign in again or retry."
+                : loadError}
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={loadTemplatesAndSettings}
+            >
+              Retry
+            </Button>
+          </div>
+        </Card>
       </div>
     )
   }
@@ -1120,7 +1151,7 @@ export default function InvoiceStudio({ user }) {
                   onChange={(e) => setPreviewDocType(e.target.value)}
                   aria-label="Preview document type"
                 >
-                  {DOCUMENT_TYPES.map((t) => (
+                  {DOCUMENT_TYPE_LIST.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.label}
                     </option>

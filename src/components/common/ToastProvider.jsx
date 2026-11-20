@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useRef } from "react"
 import { Toast, ToastContainer } from "../ui"
 import { ToastContext } from "./useToast"
 
@@ -8,6 +8,7 @@ import { ToastContext } from "./useToast"
  */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const recentToastsRef = useRef(new Map())
 
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -15,6 +16,24 @@ export function ToastProvider({ children }) {
 
   const showToast = useCallback(
     (message, type = "info", options = {}) => {
+      // 3-second de-duplication: suppress identical (type, message) within 3000ms
+      const dedupeKey = `${type}::${typeof message === "string" ? message : String(message)}`
+      const now = Date.now()
+      const lastShown = recentToastsRef.current.get(dedupeKey) || 0
+      if (now - lastShown < 3000) {
+        return null
+      }
+      recentToastsRef.current.set(dedupeKey, now)
+
+      // Prune old entries to prevent memory leak
+      if (recentToastsRef.current.size > 50) {
+        for (const [key, timestamp] of recentToastsRef.current.entries()) {
+          if (now - timestamp > 10000) {
+            recentToastsRef.current.delete(key)
+          }
+        }
+      }
+
       const id = Date.now() + Math.random().toString(36).slice(2, 11)
       const duration =
         options.duration !== undefined ? options.duration : options.action ? 8000 : 4000

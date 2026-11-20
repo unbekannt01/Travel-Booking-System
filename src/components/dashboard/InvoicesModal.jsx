@@ -24,6 +24,7 @@ import { formatINR } from "../../utils/formatters"
 import { cn } from "../../utils/cn"
 import {
   DOCUMENT_TYPES,
+  DOCUMENT_TYPE_LIST,
   getType,
   listDocuments,
   issueDocument,
@@ -170,7 +171,7 @@ export default function InvoicesModal({
                 }
                 aria-label="Select document type"
               >
-                {DOCUMENT_TYPES.filter((t) => t.id !== "credit-note").map((t) => (
+                {DOCUMENT_TYPE_LIST.filter((t) => t.id !== "credit-note").map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>

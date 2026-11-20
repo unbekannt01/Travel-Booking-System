@@ -234,6 +234,10 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
 - **Lazy Loading & Error Recovery**:
   - `Auth` and `Dashboard` (`AppShell`) load eagerly. All 7 tab screens (`DashboardHome`, `BookingForm`, `PassengerManagement`, `TourInventory`, `JourneyManager`, `TourAnalytics`, `SettingsPanel`), full-screen views (`InvoiceView`, `TwoFactorSetup`, `TwoFactorVerify`, `ResetPassword`, `Recover2FA`), and on-demand modals (`Disable2FAModal`, `InvoicesModal`, `CancelBookingModal`) load via `React.lazy` with page-shaped `PageSkeleton` fallbacks.
   - `ChunkErrorBoundary.jsx` wraps lazy views with a friendly "Could not load this page" card and **Retry** / **Reload App** actions, resetting automatically when switching tabs so the shell remains usable.
+  - `PanelErrorBoundary.jsx` (`src/components/common/PanelErrorBoundary.jsx`): Granular error boundary wrapping individual sub-panels (e.g. Journeys "Coaches & Departures" vs "Boarding Manifest", Settings tabs). If a runtime crash occurs inside a specific panel, it renders a scoped inline error card ("Something went wrong in this panel") with "Retry" and "Reload App" buttons, leaving the surrounding screen, top bar, and navigation tabs completely functional. Resets automatically on tab change via `resetKey`.
+- **Toast Notifications & StrictMode Deduplication (`src/components/common/ToastProvider.jsx`)**:
+  - Maintained with a 3-second deduplication cache (`recentToastsRef`) to suppress duplicate `(type, message)` alerts emitted within 3000ms. Eliminates double-toast flashes triggered by React 19 DEV `StrictMode` double-invocation of effects.
+  - `ToastContainer` anchored to `bottom-[calc(4.5rem+env(safe-area-inset-bottom))] lg:bottom-5` to ensure notifications never occlude `MobileBottomNav` on mobile and tablet viewports.
 - **Vendor Chunk Splitting (`vite.config.js`)**: `build.rollupOptions.output.manualChunks` separates `vendor-react`, `vendor-recharts` (loaded only on Analytics), `vendor-icons`, `vendor-ui`, and `vendor-misc`, reducing the main entry chunk from `1,123 kB` to `~80 kB` with zero chunks exceeding 500 kB.
 
 ---
@@ -428,3 +432,20 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Integrated as a lazy-loaded tab inside Settings (`SettingsPanel.jsx`) with its own Vite bundle chunk (`InvoiceStudio-*.js`).
   - Left column designer controls: Layout & Presets, Colors with live WCAG contrast warning, Logo & Signatures uploader, Section toggles, Paper & Copies, Typography & Languages.
   - Right column live preview: Sandboxed iframe `<iframe sandbox="" srcDoc={previewHtml} />` with document type switcher (testing Tax Invoice, Bill of Supply, Quotation, Credit Note), zoom controls, and "Print Test Page" button.
+
+---
+
+## 16. UI Resilience, Defensive Null-Safety & Component Safety Net (Part 3.7d)
+
+- **Pure Shape Guarantee for Document Types (`shared/documentTypes.js`)**:
+  - `DOCUMENT_TYPES`: Deeply frozen object mapping type ID keys (`"tax-invoice"`, `"bill-of-supply"`, etc.) to metadata for fast O(1) keyed lookups.
+  - `DOCUMENT_TYPE_LIST`: Explicitly frozen array of all 6 document types (`Object.freeze(Object.values(DOCUMENT_TYPES))`). Consumed across all UI dropdowns and filters (`DOCUMENT_TYPE_LIST.map(...)` and `DOCUMENT_TYPE_LIST.filter(...)`) to eliminate runtime `TypeError: DOCUMENT_TYPES.map is not a function`.
+- **Defensive Component Polymorphism & Legacy Null-Safety**:
+  - `StatCard.jsx`: Handles both React elements (`icon={<Bus size={18} />}`) and component functions (`icon={Bus}`) without invoking elements as functions. Normalizes `subtitle || hint` and `iconTone || tone`.
+  - `JourneyManager.jsx`: Defensive null-safety on legacy bookings lacking a `passengers` array (`b.passengers || []`). Boarding Manifest renders a dedicated empty state row when zero passengers are booked, preventing index/property crashes.
+  - `Button.jsx` & `IconButton.jsx`: Explicitly consumes `isLoading` and `label` props, preventing React unknown DOM attribute warnings.
+- **Calm Inline Error Handling**:
+  - In `InvoiceStudio.jsx`, 401 Unauthorized or network errors render a scoped, calm inline error card ("Unable to Load Invoice Templates") with an inline "Retry" button rather than just a fleeting toast.
+- **Component Test Safety Net (`npm run test:ui`)**:
+  - Powered by Vitest v5, `@testing-library/react` v16, and `jsdom` v25 (Node 22 LTS compatible).
+  - 9 test files covering 22 test scenarios across all main views with mock data fixtures and strict `console.error` failure traps. Runs in ~9 seconds with 0 production vulnerabilities.

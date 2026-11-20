@@ -14,10 +14,13 @@ import { Spinner } from "./Spinner"
  */
 export const IconButton = forwardRef(function IconButton(
   {
-    "aria-label": ariaLabel,
+    "aria-label": ariaLabelProp,
+    label,
+    icon,
     variant = "ghost",
     size = "md",
     loading = false,
+    isLoading = false,
     disabled,
     type = "button",
     className,
@@ -26,6 +29,9 @@ export const IconButton = forwardRef(function IconButton(
   },
   ref,
 ) {
+  const ariaLabel = ariaLabelProp || label
+  const isBusy = Boolean(loading || isLoading)
+
   if (import.meta.env?.DEV && !ariaLabel) {
     console.warn("IconButton requires a non-empty aria-label for screen-reader accessibility.")
   }
@@ -35,16 +41,16 @@ export const IconButton = forwardRef(function IconButton(
       ref={ref}
       type={type}
       aria-label={ariaLabel}
-      disabled={Boolean(disabled || loading)}
-      aria-busy={loading || undefined}
+      disabled={Boolean(disabled || isBusy)}
+      aria-busy={isBusy || undefined}
       className={cn(iconButtonVariants({ variant, size }), className)}
       {...rest}
     >
-      {loading ? (
+      {isBusy ? (
         <Spinner size="sm" label={ariaLabel || "Loading"} />
       ) : (
         <span className="inline-flex items-center justify-center" aria-hidden="true">
-          {children}
+          {children || icon}
         </span>
       )}
     </button>

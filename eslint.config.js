@@ -31,12 +31,31 @@ export default defineConfig([
     },
   },
   {
-    files: ['backend/**/*.js', 'tests/**/*.js'],
+    files: ['backend/**/*.js', 'tests/*.test.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.node,
       sourceType: 'module',
+    },
+    rules: {
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+    },
+  },
+  {
+    files: ['tests/components/**/*.{js,jsx}', 'tests/setup.js', 'tests/testUtils.jsx', 'tests/fixtures/**/*.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
