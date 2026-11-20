@@ -342,4 +342,57 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Enforced `maskBookingPaxAadhaar(booking)` across all single/batch passenger updates and status routes (`checkin`, `batch-checkin`, `toggle-payment`, `cancel`, `restore`) to eliminate ciphertext leakage.
 - **Dependency & Audit Baseline**:
   - Zero vulnerabilities across root and backend npm dependencies (`npm audit` and `npm audit --omit=dev` reporting 0 vulnerabilities).
-  - 191 automated test cases passing across 46 TAP test suites covering business logic, pricing, crypto, tokens, auth, and UI states.
+  - 223 automated test cases passing across 58 TAP test suites covering business logic, pricing, crypto, tokens, auth, UI states, and document management.
+
+---
+
+## 14. Multiple Document Types, Snapshots & Credit Notes (Part 3.7a)
+
+- **Pure Document Type Registry (`shared/documentTypes.js`)**:
+  - Zero-dependency ESM module shared across frontend and backend.
+  - Registers 6 standard Indian tour operator document types:
+    1. `tax-invoice`: Default prefix `INV` / `YHB`, full GST breakup, sequential accounting invoice.
+    2. `bill-of-supply`: Default prefix `BOS`, for composition or exempt passenger transportation.
+    3. `quotation`: Default prefix `QTN`, price estimate, supports `validityDays` (default 30 days).
+    4. `proforma`: Default prefix `PRF`, proforma invoice for corporate/advance billing.
+    5. `booking-confirmation`: Default prefix `BKC`, customer itinerary & booking receipt voucher.
+    6. `credit-note`: Default prefix `CN`, issued exclusively for cancelled bookings, credit amount matches cancellation refund.
+  - `financialYearOf(date)`: Accurately computes Indian fiscal year (1 April to 31 March) with robust leap-year and boundary date handling (31 Mar belongs to prior FY, 1 Apr to new FY).
+  - `formatNumber`: Flexible numbering templating supporting prefix, FY, sequence, and digit padding (`${prefix}-${fy}-${seq}`, etc.).
+  - `getDefaultDocumentSettings`: Generates default configurations for all 6 types with custom terms, notes, padding, and reset policies.
+
+- **Additive User Document Settings (`backend/models/User.js` & `backend/utils/documentValidation.js`)**:
+  - Stored under `user.documentSettings` with strict Zod validation (`documentSettingsUpdateSchema`, `singleDocumentSettingSchema`).
+  - Operators can customize prefix (1–6 alphanumeric chars), document title, include FY flag, sequence padding (3–6 digits), reset policy (`never` vs `yearly`), custom terms (up to 1000 chars), and custom notes (up to 500 chars).
+  - API endpoint `PUT /api/auth/update-company` and `PUT /api/documents/settings/all` strictly validate unknown keys and protect data integrity.
+
+- **Immutable Document Snapshots (`backend/models/IssuedDocument.js`)**:
+  - Independent collection `issued_documents` decoupled from booking mutability.
+  - Freezes immutable point-in-time snapshots upon document issuance:
+    - `amounts`: baseAmount, discount, taxAmount, gstRate, isTaxInclusive, totalAmount, advanceReceived, balance, cancellationFee, refundAmount.
+    - `company`: companyName, companyTagline, headquarters, phone, gstin, pan, bankDetails.
+    - `customer`: contactName, phone, email (**strictly zero Aadhaar**).
+    - `lineItems`: passenger name, seatId, city, age, gender (**strictly zero Aadhaar**).
+    - `settings`: title, prefix, terms, notes, showGstBreakup.
+  - Indexing: Compound unique index `{ userId: 1, type: 1, number: 1 }` guarantees zero duplicate numbers per operator; partial unique index `{ bookingId: 1, type: 1 }` on `status: "issued"` guarantees atomic idempotency for Credit Notes.
+
+- **Per-Type Numbering & Seamless Continuity (`backend/utils/documentNumbering.js`)**:
+  - Atomic sequence increments using `Counter` collection key `doc:<typeId>[:<fy>]`.
+  - Seamless continuity for `tax-invoice`: If an operator already has existing invoices (e.g. up to #108), the system inspects legacy counters and existing `booking.invoiceNo` values to seed the new counter at highest existing (`seq = 108`), ensuring the next invoice is #109 without gaps, duplicates, or counter resets.
+  - Concurrency-safe: Parallel requests allocate strictly ascending, non-colliding document numbers.
+
+- **Credit Note Flow & Validation Rules (`backend/routes/documents.js`)**:
+  - Guarded: Allowed strictly for bookings where `status === "Cancelled"`. Active/confirmed bookings return HTTP 400.
+  - Credit amount is strictly derived from `calculateCancellationRefund(booking)` and cannot exceed the original booking total.
+  - Linked to original invoice via `linkedDocumentId`.
+  - Idempotent: Calling issue credit note twice on the same cancelled booking safely returns the existing active credit note (HTTP 200) without duplicating records or consuming counter numbers.
+
+- **Document Voiding & Audit Trail**:
+  - Documents cannot be deleted; operators may only void active documents via `POST /api/documents/:id/void` with a mandatory reason (minimum 3 characters).
+  - Updates status to `void`, recording `voidReason`, `voidedAt`, and `voidedBy`.
+  - Creates an audit log entry in `AuditLog` collection.
+  - Voiding an already voided document is strictly rejected (HTTP 400).
+
+- **UI Integration & Print Layout Preservation**:
+  - `src/components/dashboard/InvoicesModal.jsx`: Added inline expandable document management drawer per booking row (both desktop Table and mobile stacked cards). Displays issued documents list with type badges, document numbers, status pills, and action buttons (`View`, `Void`). Includes document type selector with `Issue Document` action and dedicated `Issue Credit Note` button for cancelled reservations.
+  - `src/components/InvoiceView.jsx`: Supports both legacy raw booking objects and `{ booking, document }` snapshots. Renders custom document title, formatted number, valid until date, custom terms, custom notes, and conditional GST breakup. Void documents display an prominent, non-obstructive VOID alert banner. Print HTML CSS layout, margins, and paper sizing remain strictly preserved with zero regression.

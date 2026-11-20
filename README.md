@@ -69,7 +69,7 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (191 tests across 46 suites)
+# Run all unit, security, crypto, and business logic tests (223 tests across 58 suites)
 npm test
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -82,40 +82,42 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**191 tests across 46 test suites / 23 test files**):
-1. **Masked Aadhaar Edit Round-Trip & PII Reconciliation** (`tests/aadhaar-edit-roundtrip.test.js`):
+### Test Coverage Summary (**223 tests across 58 test suites / 24 test files**):
+1. **Multiple Document Types, Snapshots & Credit Notes** (`tests/document-management.test.js`):
+   - Pure document registry for 6 document types, Indian fiscal year boundary calculation, number formatting, Zod schema validation, numbering continuity from legacy invoice counters, parallel allocation simulation, zero-Aadhaar PII snapshots, credit note flow & idempotency, void audit trail, and snapshot immutability.
+2. **Masked Aadhaar Edit Round-Trip & PII Reconciliation** (`tests/aadhaar-edit-roundtrip.test.js`):
    - Frontend and backend masked Aadhaar detection, preservation of AES-256-GCM ciphertext on edit, non-inheritance, and granular single-passenger reconciliation.
-2. **Remaining Screens, Auth & Theme Toggle** (`tests/remaining-screens-and-auth.test.js`):
+3. **Remaining Screens, Auth & Theme Toggle** (`tests/remaining-screens-and-auth.test.js`):
    - Password complexity policy, auth error formatting, API status event bus, shell heading ownership, and dark mode print isolation.
-3. **Operational Modals & Journeys Screen** (`tests/operational-modals-journey.test.js`):
+4. **Operational Modals & Journeys Screen** (`tests/operational-modals-journey.test.js`):
    - Sleeper berth label/list parsing, boarding math, progress bar calculations, cancellation refund presets, and invoice filtering.
-4. **Overview & Stepped Booking Form** (`tests/overview-and-booking-form.test.js`):
+5. **Overview & Stepped Booking Form** (`tests/overview-and-booking-form.test.js`):
    - Bus capacities, payment status & urgency classification, 4-step booking form validation, and server error presentation.
-5. **App Shell & Navigation Configuration** (`tests/app-shell.test.js`):
+6. **App Shell & Navigation Configuration** (`tests/app-shell.test.js`):
    - Canonical navigation routes, metadata resolution, skeleton variants, and persistent collapsed sidebar state.
-6. **UI Foundation & Design Tokens** (`tests/ui-foundation.test.js`):
+7. **UI Foundation & Design Tokens** (`tests/ui-foundation.test.js`):
    - `formatINR` Indian rupee currency formatting (lakhs/crores), theme resolution (`system`/`light`/`dark`), and CVA variants.
-7. **XSS Neutralization & CSP** (`tests/xss-escaping.test.js`):
+8. **XSS Neutralization & CSP** (`tests/xss-escaping.test.js`):
    - Strict output escaping across all 6 ticket templates and CSP meta tag embedding.
-8. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):
+9. **Double-Booking & Seat Conflicts** (`tests/double-booking.test.js`):
    - Internal duplicate seat rejection (`400 Bad Request`) and cross-booking collision rejection (`409 Conflict`).
-9. **Single-Source Invoice Numbers** (`tests/invoice-generation.test.js`):
-   - Tour code acronyms (`DSX`, `CDX`), month codes, and zero-collision sequential counters.
-10. **Payment Ledger & Calculations** (`tests/payment-calculations.test.js`):
+10. **Single-Source Invoice Numbers** (`tests/invoice-generation.test.js`):
+    - Tour code acronyms (`DSX`, `CDX`), month codes, and zero-collision sequential counters.
+11. **Payment Ledger & Calculations** (`tests/payment-calculations.test.js`):
     - Multi-installment payment recording, overpayment bounds, and ledger voiding.
-11. **Pricing & GST Calculations** (`tests/pricing-calculations.test.js`):
+12. **Pricing & GST Calculations** (`tests/pricing-calculations.test.js`):
     - Exclusive/inclusive 5% GST, fixed/percentage discounts, and 2-decimal rupee rounding.
-12. **Cancellation & Refunds** (`tests/cancellation-ledger.test.js`):
+13. **Cancellation & Refunds** (`tests/cancellation-ledger.test.js`):
     - Real-time refund calculation and retention fee bounds checking.
-13. **Multi-language Documents (en, hi, gu)** (`tests/i18n-documents.test.js`):
+14. **Multi-language Documents (en, hi, gu)** (`tests/i18n-documents.test.js`):
     - Complete dictionary parity across English, Hindi, and Gujarati.
-14. **Ticket Templates Registry** (`tests/ticket-templates.test.js`):
+15. **Ticket Templates Registry** (`tests/ticket-templates.test.js`):
     - Validation for all 6 modular ticket templates (`classic`, `modern`, `heritage`, `corporate`, `thermal`, `transit`).
-15. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
+16. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
     - 2x1 and 2x2 sleeper coach mapping with separate Upper and Lower deck page breaks.
-16. **CSV Export Utility** (`tests/csv-export.test.js`):
+17. **CSV Export Utility** (`tests/csv-export.test.js`):
     - RFC4180 compliance, UTF-8 BOM, and spreadsheet formula injection protection (`=`, `+`, `-`, `@`).
-17. **Validators & Security Hardening** (`tests/validators.test.js`, `tests/auth-security.test.js`, `tests/server-pricing.test.js`):
+18. **Validators & Security Hardening** (`tests/validators.test.js`, `tests/auth-security.test.js`, `tests/server-pricing.test.js`):
     - Indian mobile validation, Aadhaar Verhoeff checksums, AES-256-GCM encryption, session revocation, and brute-force lockout.
 9. **Coach Seat Layout & Manifest** (`tests/seat-layout.test.js`):
    - 2x1 (36 berths) and 2x2 (40 berths) coach mapping, booked passenger assignment, unbooked seats marked Available, cancelled booking release, Upper & Lower deck separation.

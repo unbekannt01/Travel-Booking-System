@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 46 test suites (191 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 58 test suites (223 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -17,10 +17,11 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ---
 
-## 2. Test Suites & Coverage Map (191 Tests / 23 Test Files / 46 TAP Suites)
+## 2. Test Suites & Coverage Map (223 Tests / 24 Test Files / 58 TAP Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/document-management.test.js`** | 32 | **Multiple Document Types, Snapshots & Credit Notes (Part 3.7a)**: 6 document types registry validation; `financialYearOf` Indian fiscal year boundary calculation (31 Mar vs 1 Apr); `formatNumber` pattern formatting; default settings map; Zod validation (`singleDocumentSettingSchema`, `documentSettingsUpdateSchema`, `issueDocumentInputSchema`, `voidDocumentInputSchema`); document numbering continuity from legacy invoice counters without gaps/duplicates; atomic parallel generation simulation; zero-Aadhaar PII snapshot verification; Credit Note rules (reject non-cancelled, match cancellation refund, idempotency); void flow recording reason and audit details; snapshot immutability against live user profile changes. |
 | **`tests/remaining-screens-and-auth.test.js`** | 19 | **Remaining Screens, Auth & Theme Toggle (Part 3.5)**: Password complexity policy (`checkPasswordCriteria` test matrix for length, case, number, symbol); user-friendly auth error mapping (`formatAuthError` for 401, 403, 429, network, and fallback); API status event subscription and emission (`API_STATUS_EVENT`, `subscribeApiStatus`, `emitApiStatus`); `SHOW_THEME_TOGGLE` is explicitly true; all 6 navigation items (`dashboard`, `passengers`, `journey`, `tours`, `analytics`, `settings`) have `hasOwnHeading: false`; `resolvePageMeta` returns non-empty title and description for all tabs; print styles isolate dark mode. |
 | **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === false`, `tours.hasOwnHeading === false`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
 | **`tests/aadhaar-edit-roundtrip.test.js`** | 8 | **Masked Aadhaar Edit Round-Trip (SEC-012 & Task 0)**: Frontend validator detection of masked Aadhaar and `[UNCHANGED]` sentinel token; `isValidAadhaar` with `{ allowMasked: true }`; backend `isMaskedOrUnchangedAadhaar` verification; `BookingForm` Step 1 validation with masked Aadhaar; backend reconciliation preserving existing AES-256-GCM ciphertext on edit; re-encryption of new 12-digit Aadhaar when replaced; explicit clearance of Aadhaar; non-inheritance of Aadhaar by new passengers; guarantees raw masked strings are never persisted; single passenger update (`PUT /:bookingId/passengers/:passengerIdentifier`) reconciliation and encryption. |
@@ -51,10 +52,10 @@ All tests run in ESM mode with zero transpilation overhead.
 
 ```
 TAP version 13
-1..48
-# tests 191
-# suites 46
-# pass 191
+1..54
+# tests 223
+# suites 58
+# pass 223
 # fail 0
 # cancelled 0
 # skipped 0
@@ -206,9 +207,22 @@ npm run ui:smoke
 
 ---
 
+## 3.6 Manual Verification Checklist — Part 3.7a Document Management & Credit Notes
+
+- [ ] **Document Types Dropdown**: Open Invoices modal from Overview; expand any booking row via the Document icon; verify dropdown lists: `Tax Invoice`, `Bill of Supply`, `Quotation`, `Proforma Invoice`, `Booking Confirmation`.
+- [ ] **Issue Document**: Select `Quotation`; click `Issue Document`; verify toast notification confirms issuance and document appears in nested list with `QTN-001` (or custom format) and `Issued` pill.
+- [ ] **Credit Note Dedicated Flow**: Locate a cancelled booking in Invoices modal; expand row; observe red `Issue Credit Note` button; click it; verify Credit Note is generated with amount equal to cancellation refund.
+- [ ] **Credit Note Idempotency**: Click `Issue Credit Note` again on the same booking; verify existing active Credit Note is returned without duplicate record or counter increment.
+- [ ] **Active Booking Credit Note Guard**: On a confirmed/active booking, observe `Issue Credit Note` button is not offered.
+- [ ] **View Document**: In the issued documents list, click `View` on any document; verify `InvoiceView` preview renders the specific document title (e.g. `QUOTATION`, `CREDIT NOTE`), document number, and valid until date without layout distortion.
+- [ ] **Void Document**: In the issued documents list, click `Void` on an active document; enter reason when prompted; verify status pill updates to `Void` and void reason is displayed. Click `View`; verify prominent red VOID watermark banner appears at the top.
+- [ ] **Numbering Continuity**: Verify existing legacy booking invoices continue numbering seamlessly from the highest sequence without restarting at 1.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-With 191 unit & regression tests passing across 46 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 223 unit & regression tests passing across 58 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.
