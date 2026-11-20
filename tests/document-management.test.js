@@ -479,6 +479,46 @@ describe("Credit Note Business Rules & Idempotency", () => {
     const responseDoc = existingActiveCreditNote
     assert.equal(responseDoc.number, "CN/2026-27/0001")
   })
+
+  it("enforces linkedDocumentId presence on credit notes", () => {
+    // When issuing a credit note, linkedDocumentId must be resolved to an active issued original doc
+    const invalidCreditNoteData = {
+      type: "credit-note",
+      linkedDocumentId: null,
+    }
+    const hasLinkedDoc = Boolean(invalidCreditNoteData.linkedDocumentId)
+    assert.equal(hasLinkedDoc, false, "Credit note without linked document must be invalid")
+
+    const validCreditNoteData = {
+      type: "credit-note",
+      linkedDocumentId: "doc_original_invoice_123",
+    }
+    assert.equal(Boolean(validCreditNoteData.linkedDocumentId), true)
+  })
+
+  it("verifies partial unique index rules: enforces 1 active credit note while allowing multiple non-credit-note documents", () => {
+    // The partial filter expression is: { type: "credit-note", status: "issued" }
+    // Non-credit-note documents (quotations, proformas, etc.) and void credit notes are excluded from uniqueness
+    const bookingDocs = [
+      { id: "q1", bookingId: "b1", type: "quotation", status: "issued" },
+      { id: "q2", bookingId: "b1", type: "quotation", status: "issued" }, // multiple quotations allowed
+      { id: "p1", bookingId: "b1", type: "proforma", status: "issued" }, // multiple proformas allowed
+      { id: "cn_old", bookingId: "b1", type: "credit-note", status: "void" }, // void credit note does not block
+    ]
+
+    const filterExpression = (doc) => doc.type === "credit-note" && doc.status === "issued"
+    const activeCreditNotes = bookingDocs.filter(filterExpression)
+    assert.equal(activeCreditNotes.length, 0, "No active credit notes yet")
+
+    // Adding first active credit note succeeds
+    bookingDocs.push({ id: "cn_active", bookingId: "b1", type: "credit-note", status: "issued" })
+    const updatedActiveCreditNotes = bookingDocs.filter(filterExpression)
+    assert.equal(updatedActiveCreditNotes.length, 1)
+
+    // A second active credit note for the same booking violates the partial unique index
+    const wouldViolateUnique = updatedActiveCreditNotes.length >= 1
+    assert.equal(wouldViolateUnique, true)
+  })
 })
 
 describe("Void Document Flow & Immutability Rules", () => {

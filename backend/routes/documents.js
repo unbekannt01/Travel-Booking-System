@@ -228,6 +228,12 @@ router.post("/", verifyToken, documentWriteLimiter, async (req, res) => {
         resolvedLinkedDocId = originalDoc._id
       }
 
+      if (!resolvedLinkedDocId) {
+        return res.status(400).json({
+          message: "Credit note requires a linked issued document for this booking",
+        })
+      }
+
       // Compute refund amount from shared business logic
       const totalPaid = Number(booking.advanceReceived) || 0
       const cancellationCharge = Number(booking.cancellationCharge) || 0

@@ -16,6 +16,8 @@ import {
   Button,
   EmptyState,
   Spinner,
+  Textarea,
+  Field,
 } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { formatINR } from "../../utils/formatters"
@@ -56,6 +58,9 @@ export default function InvoicesModal({
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [selectedDocTypes, setSelectedDocTypes] = useState({}) // { [bookingId]: docType }
   const [isIssuing, setIsIssuing] = useState(false)
+  const [voidingDoc, setVoidingDoc] = useState(null)
+  const [voidReason, setVoidReason] = useState("")
+  const [isVoiding, setIsVoiding] = useState(false)
 
   const toggleExpandBooking = async (b) => {
     const bId = b.id || b._id
@@ -99,20 +104,34 @@ export default function InvoicesModal({
     }
   }
 
-  const handleVoidDoc = async (doc) => {
-    const reason = window.prompt("Please enter a reason for voiding this document:")
-    if (!reason || !reason.trim()) return
+  const openVoidModal = (doc) => {
+    setVoidingDoc(doc)
+    setVoidReason("")
+  }
+
+  const handleConfirmVoid = async () => {
+    if (!voidingDoc) return
+    const trimmed = voidReason.trim()
+    if (!trimmed || trimmed.length < 3) {
+      toast.error("Please enter a valid void reason (at least 3 characters)")
+      return
+    }
     try {
-      const updated = await voidDocument(doc.id || doc._id, reason.trim())
-      toast.success(`Document #${doc.number} voided successfully`)
+      setIsVoiding(true)
+      const updated = await voidDocument(voidingDoc.id || voidingDoc._id, trimmed)
+      toast.success(`Document #${voidingDoc.number} voided successfully`)
       setDocsMap((prev) => ({
         ...prev,
-        [doc.bookingId]: (prev[doc.bookingId] || []).map((d) =>
-          (d.id || d._id) === (doc.id || doc._id) ? updated : d
+        [voidingDoc.bookingId]: (prev[voidingDoc.bookingId] || []).map((d) =>
+          (d.id || d._id) === (voidingDoc.id || voidingDoc._id) ? updated : d
         ),
       }))
+      setVoidingDoc(null)
+      setVoidReason("")
     } catch (err) {
       toast.error(err.message || "Failed to void document")
+    } finally {
+      setIsVoiding(false)
     }
   }
 
@@ -255,7 +274,7 @@ export default function InvoicesModal({
                             size="xs"
                             variant="ghost"
                             className="text-status-danger-text hover:bg-status-danger-bg"
-                            onClick={() => handleVoidDoc(doc)}
+                            onClick={() => openVoidModal(doc)}
                           >
                             Void
                           </Button>
@@ -306,7 +325,8 @@ export default function InvoicesModal({
   }
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={handleClose}
       size="xl"
@@ -668,5 +688,63 @@ export default function InvoicesModal({
         )}
       </div>
     </Modal>
+
+    {/* Accessible Void Document Modal (replaces window.prompt) */}
+    <Modal
+      isOpen={Boolean(voidingDoc)}
+      onClose={() => {
+        if (!isVoiding) {
+          setVoidingDoc(null)
+          setVoidReason("")
+        }
+      }}
+      title="Void Document"
+      size="sm"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-ink-muted">
+          Are you sure you want to void document{" "}
+          <span className="font-bold text-ink">#{voidingDoc?.number}</span>? This action is permanent and cannot be undone.
+        </p>
+
+        <Field
+          label="Reason for Voiding"
+          required
+          helperText="Minimum 3 characters. This will be permanently recorded in the audit trail."
+        >
+          <Textarea
+            value={voidReason}
+            onChange={(e) => setVoidReason(e.target.value)}
+            placeholder="e.g., Typographical error, booking cancelled, incorrect amount"
+            rows={3}
+            maxLength={250}
+            disabled={isVoiding}
+            autoFocus
+          />
+        </Field>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setVoidingDoc(null)
+              setVoidReason("")
+            }}
+            disabled={isVoiding}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleConfirmVoid}
+            isLoading={isVoiding}
+            disabled={!voidReason.trim() || voidReason.trim().length < 3 || isVoiding}
+          >
+            Void Document
+          </Button>
+        </div>
+      </div>
+    </Modal>
+    </>
   )
 }

@@ -22,7 +22,20 @@ const issuedDocumentSchema = new mongoose.Schema(
     voidReason: { type: String, default: "" },
     voidedAt: { type: Date, default: null },
     voidedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
-    linkedDocumentId: { type: mongoose.Schema.Types.ObjectId, ref: "IssuedDocument", default: null },
+    linkedDocumentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IssuedDocument",
+      default: null,
+      validate: {
+        validator: function (val) {
+          if (this.type === "credit-note") {
+            return val !== null && val !== undefined
+          }
+          return true
+        },
+        message: "Credit note requires a linked issued document",
+      },
+    },
     validUntil: { type: Date, default: null },
 
     // Immutable pricing & financials snapshot at issue time
