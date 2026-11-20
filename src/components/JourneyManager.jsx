@@ -427,7 +427,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
         </div>
 
         {/* Print / Export Action Menu */}
-        <div className="relative self-end sm:self-auto">
+        <div className="relative self-end sm:self-auto shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -435,10 +435,12 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
             onClick={() => setShowExportOptions(!showExportOptions)}
             aria-expanded={showExportOptions}
             aria-haspopup="true"
+            aria-label="Print Manifest"
+            leftIcon={<Printer size={14} />}
+            rightIcon={<ChevronDown size={14} className="opacity-70" />}
+            className="whitespace-nowrap shrink-0 inline-flex items-center"
           >
-            <Printer size={14} className="mr-1.5" />
-            Print Manifest
-            <ChevronDown size={14} className="ml-1 opacity-70" />
+            <span>Print Manifest</span>
           </Button>
           {showExportOptions && (
             <div className="absolute right-0 top-full mt-1.5 w-60 rounded-[var(--yh-radius-lg)] bg-surface-elevated border border-border-subtle shadow-[var(--yh-shadow-overlay)] z-[var(--yh-z-dropdown)] overflow-hidden py-1">

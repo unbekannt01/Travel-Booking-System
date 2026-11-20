@@ -193,7 +193,7 @@ export default function SeatLayoutModal({
                                 {formatSeatLabel(seat.id)}
                               </span>
                               {isBooked ? (
-                                <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
+                                <span role="img" className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
                               ) : (
                                 <span className="text-[9px] font-medium text-ink-muted">Free</span>
                               )}
@@ -242,7 +242,7 @@ export default function SeatLayoutModal({
                                 {formatSeatLabel(seat.id)}
                               </span>
                               {isBooked ? (
-                                <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
+                                <span role="img" className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
                               ) : (
                                 <span className="text-[9px] font-medium text-ink-muted">Free</span>
                               )}

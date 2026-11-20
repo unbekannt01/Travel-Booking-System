@@ -119,7 +119,7 @@ export function AppTopBar({
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-label="Account menu"
+              aria-label={`${displayName} - Account menu`}
               onClick={() => setMenuOpen((prev) => !prev)}
               className={cn(
                 "inline-flex items-center gap-2 min-h-11 sm:min-h-9 px-2 rounded-[var(--yh-radius-md)]",
@@ -127,7 +127,7 @@ export function AppTopBar({
                 FOCUS_RING_CLASS,
               )}
             >
-              <Avatar name={displayName} size="sm" tone="primary" />
+              <Avatar name={displayName} size="sm" tone="primary" aria-hidden="true" />
               <span className="hidden xl:inline text-xs font-semibold text-ink max-w-[120px] truncate">
                 {displayName}
               </span>

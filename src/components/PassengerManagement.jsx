@@ -748,7 +748,7 @@ export default function PassengerManagement({
         </div>
       </Modal>
 
-      <style jsx global>{`
+      <style>{`
         @media print {
           body * {
             visibility: hidden;

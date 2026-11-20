@@ -60,14 +60,19 @@ async function run() {
   const context = await browser.newContext()
   const page = await context.newPage()
 
-  const consoleErrors = []
+  const consoleEntries = []
   const failedRequests = []
   const overflowFindings = []
-  const axeFindings = []
+  const groupedAxeViolations = new Map()
 
   page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      consoleErrors.push(msg.text())
+    const type = msg.type()
+    if (type === "error" || type === "warning") {
+      consoleEntries.push({
+        type,
+        text: msg.text(),
+        url: page.url(),
+      })
     }
   })
 
@@ -198,22 +203,46 @@ async function run() {
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
             .analyze()
 
-          const seriousOrCritical = axeResults.violations.filter(
-            (v) => v.impact === "serious" || v.impact === "critical"
-          )
+          if (axeResults.violations && axeResults.violations.length > 0) {
+            for (const v of axeResults.violations) {
+              for (const node of v.nodes) {
+                const targetSelector = Array.isArray(node.target)
+                  ? node.target.join(" ")
+                  : String(node.target || "")
+                const groupKey = `${v.id}::${targetSelector}`
 
-          if (seriousOrCritical.length > 0) {
-            axeFindings.push({
-              screen: screen.label,
-              viewport: vp.width,
-              theme,
-              violations: seriousOrCritical.map((v) => ({
-                id: v.id,
-                impact: v.impact,
-                help: v.help,
-                nodeCount: v.nodes.length,
-              })),
-            })
+                if (!groupedAxeViolations.has(groupKey)) {
+                  const cleanHtml = (node.html || "")
+                    .replace(/\r?\n/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                  const snippet =
+                    cleanHtml.length > 200 ? `${cleanHtml.slice(0, 197)}...` : cleanHtml
+                  const safeSnippet = snippet.replace(/\|/g, "\\|")
+
+                  const cleanSummary = (node.failureSummary || "")
+                    .replace(/\r?\n/g, " ")
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .replace(/\|/g, "\\|")
+
+                  groupedAxeViolations.set(groupKey, {
+                    id: v.id,
+                    impact: v.impact || "moderate",
+                    help: v.help,
+                    helpUrl: v.helpUrl || "",
+                    selector: targetSelector,
+                    snippet: safeSnippet,
+                    failureSummary: cleanSummary,
+                    occurrences: [],
+                  })
+                }
+
+                groupedAxeViolations
+                  .get(groupKey)
+                  .occurrences.push(`${screen.label} (${vp.width}px, ${theme})`)
+              }
+            }
           }
         } catch (axeErr) {
           console.warn(`[ui:smoke] axe analysis skipped for ${screen.id} @ ${vp.width}px: ${axeErr.message}`)
@@ -257,25 +286,64 @@ async function run() {
   }
 
   reportLines.push("")
-  reportLines.push("## 2. Accessibility (axe-core Serious & Critical Violations)")
-  if (axeFindings.length === 0) {
-    reportLines.push("✅ **Zero serious or critical axe violations detected.**")
+  reportLines.push("## 2. Accessibility (axe-core WCAG Violations)")
+  if (groupedAxeViolations.size === 0) {
+    reportLines.push("✅ **Zero accessibility violations detected across all screens, viewports, and themes.**")
   } else {
-    reportLines.push(`⚠️ **${axeFindings.length} screen configurations reported serious/critical violations:**`)
-    for (const af of axeFindings) {
-      reportLines.push(`### ${af.screen} (${af.viewport}px - ${af.theme})`)
-      for (const v of af.violations) {
-        reportLines.push(`- **[${v.impact.toUpperCase()}] ${v.id}**: ${v.help} (${v.nodeCount} nodes)`)
+    reportLines.push(`⚠️ **${groupedAxeViolations.size} unique accessibility violations detected:**\n`)
+    let vIdx = 1
+    for (const [, v] of groupedAxeViolations) {
+      const uniqueOccurrences = Array.from(new Set(v.occurrences))
+      reportLines.push(`### ${vIdx}. [${v.impact.toUpperCase()}] ${v.id}: ${v.help}`)
+      if (v.helpUrl) {
+        reportLines.push(`- **Rule Reference**: [${v.id}](${v.helpUrl})`)
       }
+      reportLines.push(`- **Target Selector**: \`${v.selector}\``)
+      reportLines.push(`- **Occurrences (${uniqueOccurrences.length})**: ${uniqueOccurrences.join(", ")}`)
+      if (v.failureSummary) {
+        reportLines.push(`- **Failure Summary**: \`${v.failureSummary}\``)
+      }
+      reportLines.push("- **HTML Snippet**:")
+      reportLines.push("  ```html")
+      reportLines.push(`  ${v.snippet}`)
+      reportLines.push("  ```")
+      reportLines.push("")
+      vIdx++
     }
   }
 
   reportLines.push("")
-  reportLines.push("## 3. Console Errors & Network Failures")
-  reportLines.push(`- **Console Errors**: ${consoleErrors.length}`)
-  if (consoleErrors.length > 0) {
-    for (const err of consoleErrors.slice(0, 10)) {
-      reportLines.push(`  - \`${err}\``)
+  reportLines.push("## 3. Console Errors & Warnings")
+  const errorsOnly = consoleEntries.filter((c) => c.type === "error")
+  const warningsOnly = consoleEntries.filter((c) => c.type === "warning")
+  reportLines.push(`- **Console Errors**: ${errorsOnly.length}`)
+  if (errorsOnly.length > 0) {
+    const groupedErrors = new Map()
+    for (const err of errorsOnly) {
+      const key = err.text
+      if (!groupedErrors.has(key)) {
+        groupedErrors.set(key, { text: err.text, urls: new Set() })
+      }
+      groupedErrors.get(key).urls.add(err.url)
+    }
+    for (const [, err] of groupedErrors) {
+      reportLines.push(`  - **Error**: \`${err.text}\``)
+      reportLines.push(`    - **Pages**: ${Array.from(err.urls).join(", ")}`)
+    }
+  }
+  reportLines.push(`- **Console Warnings**: ${warningsOnly.length}`)
+  if (warningsOnly.length > 0) {
+    const groupedWarnings = new Map()
+    for (const w of warningsOnly) {
+      const key = w.text
+      if (!groupedWarnings.has(key)) {
+        groupedWarnings.set(key, { text: w.text, urls: new Set() })
+      }
+      groupedWarnings.get(key).urls.add(w.url)
+    }
+    for (const [, w] of groupedWarnings) {
+      reportLines.push(`  - **Warning**: \`${w.text}\``)
+      reportLines.push(`    - **Pages**: ${Array.from(w.urls).join(", ")}`)
     }
   }
   reportLines.push(`- **Failed Requests**: ${failedRequests.length}`)
@@ -288,7 +356,7 @@ async function run() {
   fs.writeFileSync(reportPath, reportLines.join("\n"), "utf8")
   console.log(`[ui:smoke] Summary report written to ${reportPath}`)
 
-  const hasFailures = overflowFindings.length > 0 || axeFindings.length > 0
+  const hasFailures = overflowFindings.length > 0 || groupedAxeViolations.size > 0
   if (hasFailures) {
     console.error("[ui:smoke] FAILED: Issues found in horizontal overflow or accessibility.")
     process.exit(1)

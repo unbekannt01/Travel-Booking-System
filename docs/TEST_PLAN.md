@@ -233,6 +233,23 @@ npm run ui:smoke
 
 ---
 
+## 3.8 Smoke Fixes & Responsive Polish Verification Checklist (Part 3.7c)
+
+- [ ] **Actionable UI Smoke Report (`scripts/ui-smoke.mjs`)**:
+  - Run `npm run ui:smoke` with valid operator credentials.
+  - Inspect `docs/screenshots/report.md`: verify every axe violation includes rule ID, impact, help URL, target CSS selector, trimmed HTML snippet (max 200 chars), failure summary, and occurrences grouped across viewports and themes.
+  - Verify console errors and warnings list their exact messages and URLs.
+- [ ] **Axe Shell Violations Resolved**:
+  - `aria-prohibited-attr`: Verify `ToastContainer` has `role="region"`, dashboard metric skeleton has `role="status"`, and seat layout indicators have `role="img"`.
+  - `label-content-name-mismatch`: Verify `Avatar` supports `aria-hidden="true"`, user menu button has `aria-label="${displayName} - Account menu"`, ensuring accessible name starts with visible text.
+- [ ] **React Styled JSX Cleanliness**:
+  - Inspect `src/components/PassengerManagement.jsx:751`; verify plain `<style>` tag is used with zero React non-boolean `jsx` or `global` console warnings.
+- [ ] **Responsive Stepper & Print Manifest Polish**:
+  - At `360px` and `768px`, verify BookingForm stepper labels display concise titles ("Tour", "Passengers", "Pricing", "Review") without truncation (`...`).
+  - On Journeys screen at `360px`, `768px`, and `1024px`, verify "Print Manifest" button stays single-line `inline-flex` (`whitespace-nowrap`) with no awkward 3-line text wrapping.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
 With 244 unit & regression tests passing across 59 TAP test suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:

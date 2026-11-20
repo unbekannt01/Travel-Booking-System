@@ -97,6 +97,7 @@ export function Toast({ type = "info", message, action, onDismiss, className }) 
 export function ToastContainer({ children, className }) {
   return (
     <div
+      role="region"
       aria-label="Notifications"
       className={cn(
         "fixed bottom-5 right-5 z-[var(--yh-z-toast)] flex flex-col gap-2.5 max-w-md w-[calc(100%-2.5rem)] pointer-events-none",

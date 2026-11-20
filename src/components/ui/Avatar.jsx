@@ -25,9 +25,19 @@ const TONE_CLASSES = {
  *   size?: "sm" | "md" | "lg",
  *   tone?: "primary" | "accent" | "success" | "info" | "neutral",
  *   className?: string,
+ *   "aria-hidden"?: boolean | "true" | "false",
  * }} props
  */
-export function Avatar({ name = "", src, alt, size = "md", tone, className }) {
+export function Avatar({
+  name = "",
+  src,
+  alt,
+  size = "md",
+  tone,
+  className,
+  "aria-hidden": ariaHidden,
+  ...rest
+}) {
   const [imgFailed, setImgFailed] = useState(false)
   const resolvedTone = tone || getAvatarTone(name)
   const initials = getInitials(name)
@@ -37,27 +47,31 @@ export function Avatar({ name = "", src, alt, size = "md", tone, className }) {
     return (
       <img
         src={src}
-        alt={accessibleLabel}
+        alt={ariaHidden ? "" : accessibleLabel}
+        aria-hidden={ariaHidden}
         onError={() => setImgFailed(true)}
         className={cn(
           "inline-block shrink-0 rounded-full object-cover border border-border-subtle",
           SIZE_CLASSES[size] || SIZE_CLASSES.md,
           className,
         )}
+        {...rest}
       />
     )
   }
 
   return (
     <span
-      role="img"
-      aria-label={accessibleLabel}
+      role={ariaHidden ? undefined : "img"}
+      aria-label={ariaHidden ? undefined : accessibleLabel}
+      aria-hidden={ariaHidden}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full border font-bold select-none",
         SIZE_CLASSES[size] || SIZE_CLASSES.md,
         TONE_CLASSES[resolvedTone] || TONE_CLASSES.neutral,
         className,
       )}
+      {...rest}
     >
       {initials}
     </span>

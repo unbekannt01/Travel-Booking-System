@@ -902,7 +902,10 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                   >
                     {isCompleted && !isActive ? <Check size={13} strokeWidth={2.75} /> : step.id + 1}
                   </span>
-                  <span className="text-xs sm:text-sm truncate">{step.label}</span>
+                  <span className="text-xs sm:text-sm font-medium truncate" title={step.label}>
+                    <span className="inline lg:hidden">{step.shortLabel}</span>
+                    <span className="hidden lg:inline">{step.label}</span>
+                  </span>
                 </button>
               </li>
             )

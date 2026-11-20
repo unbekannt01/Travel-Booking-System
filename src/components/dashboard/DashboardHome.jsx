@@ -278,7 +278,7 @@ export default function DashboardHome({
 
       {/* ── KPI Metric Row ── */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4" aria-busy="true" aria-label="Loading overview metrics">
+        <div role="status" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4" aria-busy="true" aria-label="Loading overview metrics">
           {Array.from({ length: 4 }).map((_, idx) => (
             <Card key={idx} elevation="sm" padding="md" className="space-y-3">
               <Skeleton shape="text" className="w-24 h-3.5" />
