@@ -533,3 +533,21 @@ export async function deleteExpense(id) {
   })
 }
 
+export async function getTourPnl(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/reports/tour-pnl${qs}`)
+  return res || {
+    success: false,
+    summary: {},
+    tours: [],
+    departures: [],
+    generalExpenses: [],
+  }
+}
+

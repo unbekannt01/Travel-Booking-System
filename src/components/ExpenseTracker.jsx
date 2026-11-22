@@ -72,6 +72,7 @@ import {
   groupByCategory,
   round2,
 } from "../../shared/expenses"
+import { calculateProfitLoss, parseTourRef, toDateKey } from "../../shared/profitLoss"
 import {
   listExpenses,
   getExpenseSummary,
@@ -152,14 +153,20 @@ function normalizeIncomingExpense(exp) {
     const normalized = String(category).toLowerCase().replace(/\s+/g, "-")
     category = EXPENSE_CATEGORY_IDS.includes(normalized) ? normalized : "other"
   }
+  const parsed = parseTourRef(exp.tourRef || exp.departureKey || exp.tourName)
+  const tourName = exp.tourName || parsed.tourName || ""
+  const departureKey = exp.departureKey || (parsed.isDeparture ? parsed.departureKey : "") || ""
+
   return {
     _id: id,
     id,
     date: exp.date ? new Date(exp.date).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
     category,
     amount: round2(Number(exp.amount) || 0),
-    tourRef: exp.tourRef || exp.tourId || "",
-    tourLabel: exp.tourLabel || "",
+    tourRef: exp.tourRef || exp.tourId || departureKey || tourName || "",
+    tourName,
+    departureKey,
+    tourLabel: exp.tourLabel || (parsed.isDeparture ? `${tourName} (${parsed.dateKey})` : tourName) || "",
     vendor: exp.vendor || "",
     paymentMode: exp.paymentMode || "cash",
     status: exp.status || "paid",
@@ -211,6 +218,8 @@ export default function ExpenseTracker({
     category: "fuel",
     amount: "",
     tourRef: "",
+    tourName: "",
+    departureKey: "",
     tourLabel: "",
     vendor: "",
     paymentMode: "cash",
@@ -374,11 +383,20 @@ export default function ExpenseTracker({
     const categoryGroups = groupByCategory(filteredList).filter((c) => c.total > 0)
     const topCategory = categoryGroups.length > 0 ? categoryGroups[0] : null
 
-    // Net profit vs revenue analysis (legacy feature compatibility)
-    const totalRevenue = (bookings || []).reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0)
-    const netProfit = totalRevenue - totalExpenses
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0
-    const expenseRatio = totalRevenue > 0 ? (totalExpenses / totalRevenue) * 100 : 0
+    // Net profit vs revenue analysis computed with shared P&L engine
+    const pnl = calculateProfitLoss({
+      bookings,
+      expenses: filteredList,
+      filters: {
+        from: activeDates.from,
+        to: activeDates.to,
+        tourName: tourFilter !== "all" ? tourFilter : undefined,
+      },
+    })
+    const totalRevenue = pnl.summary.bookedRevenue
+    const netProfit = pnl.summary.tourProfitBooked
+    const profitMargin = pnl.summary.tourMarginPercent ?? 0
+    const expenseRatio = totalRevenue > 0 ? round2((totalExpenses / totalRevenue) * 100) : 0
 
     // Chart data for PieChart
     const chartData = categoryGroups.map((c) => ({
@@ -401,7 +419,7 @@ export default function ExpenseTracker({
       profitMargin,
       expenseRatio,
     }
-  }, [filteredList, bookings, getCategoryLabel])
+  }, [filteredList, bookings, getCategoryLabel, activeDates.from, activeDates.to, tourFilter])
 
   // Open modal for new expense
   const handleOpenAddModal = () => {
@@ -424,11 +442,16 @@ export default function ExpenseTracker({
   // Open modal for duplicate ("Add similar")
   const handleAddSimilar = (exp) => {
     setEditingExpenseId(null)
+    const parsed = parseTourRef(exp.tourRef || exp.departureKey || exp.tourName)
+    const tourName = exp.tourName || parsed.tourName || ""
+    const departureKey = exp.departureKey || (parsed.isDeparture ? parsed.departureKey : "") || ""
     setFormData({
       date: new Date().toISOString().split("T")[0],
       category: exp.category || "fuel",
       amount: String(exp.amount || ""),
       tourRef: exp.tourRef || "",
+      tourName,
+      departureKey,
       tourLabel: exp.tourLabel || "",
       vendor: exp.vendor || "",
       paymentMode: exp.paymentMode || "cash",
@@ -442,11 +465,16 @@ export default function ExpenseTracker({
   // Open modal for editing
   const handleEditExpense = (exp) => {
     setEditingExpenseId(exp._id || exp.id)
+    const parsed = parseTourRef(exp.tourRef || exp.departureKey || exp.tourName)
+    const tourName = exp.tourName || parsed.tourName || ""
+    const departureKey = exp.departureKey || (parsed.isDeparture ? parsed.departureKey : "") || ""
     setFormData({
       date: exp.date ? exp.date.slice(0, 10) : new Date().toISOString().split("T")[0],
       category: exp.category || "fuel",
       amount: String(exp.amount || ""),
       tourRef: exp.tourRef || "",
+      tourName,
+      departureKey,
       tourLabel: exp.tourLabel || "",
       vendor: exp.vendor || "",
       paymentMode: exp.paymentMode || "cash",
@@ -456,6 +484,28 @@ export default function ExpenseTracker({
     setFormErrors({})
     setIsModalOpen(true)
   }
+
+  // Available departures for currently selected tour in the modal
+  const availableDepartures = useMemo(() => {
+    if (!formData.tourName) return []
+    const depMap = new Map()
+    for (const b of bookings || []) {
+      if (b.tourName === formData.tourName && b.status !== "Cancelled" && b.status !== "cancelled") {
+        const dKey = toDateKey(b.journeyDate || b.date)
+        const bus = b.busType || "2x1 Sleeper Luxury"
+        const depKey = `${b.tourName}___${dKey}___${bus}`
+        if (!depMap.has(depKey)) {
+          depMap.set(depKey, {
+            key: depKey,
+            dateStr: dKey,
+            busType: bus,
+            label: `${dKey} — ${bus}`,
+          })
+        }
+      }
+    }
+    return Array.from(depMap.values()).sort((a, b) => (b.dateStr || "").localeCompare(a.dateStr || ""))
+  }, [formData.tourName, bookings])
 
   // Validate form before save
   const validateForm = () => {
@@ -498,8 +548,10 @@ export default function ExpenseTracker({
         date: formData.date,
         category: formData.category,
         amount: round2(Number(formData.amount)),
-        tourRef: formData.tourRef || null,
-        tourLabel: formData.tourRef ? formData.tourRef : null,
+        tourRef: formData.departureKey || formData.tourName || formData.tourRef || null,
+        tourName: formData.tourName || null,
+        departureKey: formData.departureKey || null,
+        tourLabel: formData.tourLabel || (formData.tourName ? formData.tourName : null),
         vendor: formData.vendor.trim() || undefined,
         paymentMode: formData.paymentMode,
         status: formData.status,
@@ -1303,13 +1355,15 @@ export default function ExpenseTracker({
               >
                 <Select
                   id="expense-input-tour"
-                  value={formData.tourRef}
+                  value={formData.tourName || formData.tourRef}
                   onChange={(e) => {
                     const val = e.target.value
                     setFormData({
                       ...formData,
-                      tourRef: val,
-                      tourLabel: val || "",
+                      tourName: val,
+                      departureKey: "",
+                      tourRef: val || "",
+                      tourLabel: val || "General",
                     })
                   }}
                 >
@@ -1322,6 +1376,35 @@ export default function ExpenseTracker({
                 </Select>
               </Field>
             </div>
+
+            {formData.tourName && availableDepartures.length > 0 && (
+              <Field
+                label="Specific Departure (Optional)"
+                htmlFor="expense-input-departure"
+              >
+                <Select
+                  id="expense-input-departure"
+                  value={formData.departureKey}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    const dep = availableDepartures.find((d) => d.key === val)
+                    setFormData({
+                      ...formData,
+                      departureKey: val,
+                      tourRef: val || formData.tourName,
+                      tourLabel: dep ? `${formData.tourName} (${dep.dateStr})` : formData.tourName,
+                    })
+                  }}
+                >
+                  <option value="">Entire Tour (All Departures)</option>
+                  {availableDepartures.map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {d.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field

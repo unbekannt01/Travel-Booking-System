@@ -12,6 +12,7 @@ import paymentRoutes from "./routes/payments.js"
 import documentRoutes from "./routes/documents.js"
 import documentTemplateRoutes from "./routes/documentTemplates.js"
 import expenseRoutes from "./routes/expenses.js"
+import reportRoutes from "./routes/reports.js"
 
 const app = express()
 
@@ -61,6 +62,7 @@ app.use("/api/payments", paymentRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/expenses", expenseRoutes)
+app.use("/api/reports", reportRoutes)
 
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {
@@ -86,21 +88,26 @@ import Booking from "./models/Booking.js"
 const PORT = process.env.PORT || 5000
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/yatrahub"
 
-mongoose
-  .connect(MONGODB_URI)
-  .then(async () => {
-    console.log("Connected to MongoDB")
-    try {
-      const indexes = await Booking.collection.indexes()
-      const oldIdx = indexes.find((i) => i.name === "invoiceNo_1" && i.unique)
-      if (oldIdx) {
-        await Booking.collection.dropIndex("invoiceNo_1")
-        console.log("Dropped legacy global unique invoiceNo_1 index")
+if (process.env.NODE_ENV !== "test") {
+  mongoose
+    .connect(MONGODB_URI)
+    .then(async () => {
+      console.log("Connected to MongoDB")
+      try {
+        const indexes = await Booking.collection.indexes()
+        const oldIdx = indexes.find((i) => i.name === "invoiceNo_1" && i.unique)
+        if (oldIdx) {
+          await Booking.collection.dropIndex("invoiceNo_1")
+          console.log("Dropped legacy global unique invoiceNo_1 index")
+        }
+        await Booking.syncIndexes()
+      } catch {
+        // Ignore if collection does not exist yet
       }
-      await Booking.syncIndexes()
-    } catch {
-      // Ignore if collection does not exist yet
-    }
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
-  })
-  .catch((err) => console.error("MongoDB connection error:", err))
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+    })
+    .catch((err) => console.error("MongoDB connection error:", err))
+}
+
+export { app }
+export default app

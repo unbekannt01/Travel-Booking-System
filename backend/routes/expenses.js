@@ -60,10 +60,24 @@ function buildExpenseFilter(userId, filters) {
   // Tour reference filter
   if (filters.tourRef && filters.tourRef !== "all") {
     if (filters.tourRef === "general") {
-      query.$or = [{ tourRef: null }, { tourRef: "" }]
+      query.$or = [{ tourRef: null }, { tourRef: "" }, { tourName: null }]
     } else {
-      query.tourRef = filters.tourRef
+      query.$or = [{ tourRef: filters.tourRef }, { tourName: filters.tourRef }]
     }
+  }
+
+  // Explicit Tour Name filter
+  if (filters.tourName && filters.tourName !== "all") {
+    if (filters.tourName === "general") {
+      query.$or = [{ tourRef: null }, { tourRef: "" }, { tourName: null }]
+    } else {
+      query.$or = [{ tourName: filters.tourName }, { tourRef: filters.tourName }]
+    }
+  }
+
+  // Explicit Departure Key filter
+  if (filters.departureKey && filters.departureKey !== "all") {
+    query.$or = [{ departureKey: filters.departureKey }, { tourRef: filters.departureKey }]
   }
 
   // Payment mode filter

@@ -29,6 +29,18 @@ const expenseSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    tourName: {
+      type: String,
+      default: null,
+      trim: true,
+      maxLength: 120,
+    },
+    departureKey: {
+      type: String,
+      default: null,
+      trim: true,
+      maxLength: 160,
+    },
     tourLabel: {
       type: String,
       default: "",
@@ -88,6 +100,8 @@ const expenseSchema = new mongoose.Schema(
 expenseSchema.index({ userId: 1, date: -1 })
 expenseSchema.index({ userId: 1, category: 1, date: -1 })
 expenseSchema.index({ userId: 1, tourRef: 1, date: -1 })
+expenseSchema.index({ userId: 1, tourName: 1, date: -1 })
+expenseSchema.index({ userId: 1, departureKey: 1, date: -1 })
 expenseSchema.index({ userId: 1, deletedAt: 1, date: -1 })
 
 export default mongoose.model("Expense", expenseSchema)

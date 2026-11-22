@@ -27,6 +27,7 @@ const TONE_ICON_STYLES = {
  */
 export function StatCard({
   label,
+  title,
   value,
   hint,
   subtitle,
@@ -35,6 +36,7 @@ export function StatCard({
   iconTone,
   className,
 }) {
+  const resolvedLabel = label || title
   const resolvedTone = iconTone || tone
   const resolvedHint = hint || subtitle
 
@@ -54,7 +56,7 @@ export function StatCard({
     <Card elevation="sm" padding="md" className={cn("flex items-start justify-between gap-3", className)}>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider truncate">
-          {label}
+          {resolvedLabel}
         </p>
         <p className="mt-1.5 text-2xl font-bold text-ink tabular-nums tracking-tight leading-none">
           {value}

@@ -24,16 +24,17 @@ import {
 import { escapeCsvValue, toCsvString } from "../src/utils/csv.js"
 
 describe("Shared Expenses Pure Helpers (shared/expenses.js)", () => {
-  it("exports EXPENSE_CATEGORIES as a frozen array of 13 built-in categories", () => {
+  it("exports EXPENSE_CATEGORIES as a frozen array of built-in categories (including Part 4b additions)", () => {
     assert.equal(Array.isArray(EXPENSE_CATEGORIES), true)
     assert.equal(Object.isFrozen(EXPENSE_CATEGORIES), true)
-    assert.equal(EXPENSE_CATEGORIES.length, 13)
+    assert.equal(EXPENSE_CATEGORIES.length, 15)
 
     const expectedIds = [
       "fuel",
       "toll",
       "driver-allowance",
       "bus-hire",
+      "bus_rent",
       "food",
       "accommodation",
       "permit-tax",
@@ -42,6 +43,7 @@ describe("Shared Expenses Pure Helpers (shared/expenses.js)", () => {
       "advertising",
       "office",
       "salary",
+      "staff_salary",
       "other",
     ]
     assert.deepEqual(EXPENSE_CATEGORY_IDS, expectedIds)
@@ -102,7 +104,7 @@ describe("Shared Expenses Pure Helpers (shared/expenses.js)", () => {
     ]
 
     const grouped = groupByCategory(expenses)
-    assert.equal(grouped.length, 13) // Returns all 13 categories
+    assert.equal(grouped.length, 15) // Returns all 15 categories
 
     // Sorted descending by total
     assert.equal(grouped[0].id, "fuel")

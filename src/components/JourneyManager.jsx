@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   MapPin,
   Check,
@@ -17,9 +17,14 @@ import {
   Ticket,
   Layers,
   ChevronDown,
+  Plus,
+  TrendingUp,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
+import { listExpenses, createExpense } from "../data/expenses"
+import { calculateProfitLoss } from "../../shared/profitLoss"
+import { EXPENSE_CATEGORIES, round2 } from "../../shared/expenses"
 import { useToast } from "./common/ToastContext"
 import { PanelErrorBoundary } from "./common/PanelErrorBoundary"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
@@ -68,7 +73,7 @@ const generateAllSeats = (busType) => {
   return seats
 }
 
-export default function JourneyManager({ bookings = [], onUpdateBooking, user }) {
+export default function JourneyManager({ bookings = [], onUpdateBooking, user, expenses: initialExpenses = [] }) {
   const { toast } = useToast()
   const [boardingPassTarget, setBoardingPassTarget] = useState(null)
   const todayStr = useMemo(() => toDateInputValue(new Date()), [])
@@ -91,6 +96,34 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [includeAadhar, setIncludeAadhar] = useState(true)
+
+  // Trip expenses & financials state
+  const [tripExpenses, setTripExpenses] = useState(initialExpenses)
+  const [isTripExpenseModalOpen, setIsTripExpenseModalOpen] = useState(false)
+  const [tripExpenseDep, setTripExpenseDep] = useState(null)
+  const [tripExpenseForm, setTripExpenseForm] = useState({
+    amount: "",
+    category: "fuel",
+    vendor: "",
+    paymentMode: "cash",
+    status: "paid",
+    note: "",
+  })
+  const [tripExpenseLoading, setTripExpenseLoading] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    listExpenses({ limit: 100 })
+      .then((res) => {
+        if (mounted && res && res.expenses) {
+          setTripExpenses(res.expenses)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // Seat swap modal state
   const [swappingSeat, setSwappingSeat] = useState(null) // { bookingId, passengerId, passengerName, currentSeatId }
@@ -235,6 +268,70 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
   ])
 
   const totalPassengers = journeyBookings.reduce((sum, b) => sum + (b.passengers?.length || 0), 0)
+
+  // Pure P&L calculations for departure cards
+  const pnlReport = useMemo(() => {
+    return calculateProfitLoss({
+      bookings,
+      expenses: tripExpenses,
+    })
+  }, [bookings, tripExpenses])
+
+  const departureFinancialsMap = useMemo(() => {
+    const map = new Map()
+    for (const d of pnlReport.departures || []) {
+      map.set(d.departureKey, d)
+    }
+    return map
+  }, [pnlReport])
+
+  const handleOpenAddTripExpense = (dep) => {
+    setTripExpenseDep(dep)
+    setTripExpenseForm({
+      amount: "",
+      category: "fuel",
+      vendor: "",
+      paymentMode: "cash",
+      status: "paid",
+      note: "",
+    })
+    setIsTripExpenseModalOpen(true)
+  }
+
+  const handleSaveTripExpense = async (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    const amt = Number(tripExpenseForm.amount)
+    if (!tripExpenseForm.amount || isNaN(amt) || amt <= 0) {
+      toast.error("Enter a valid amount greater than ₹0")
+      return
+    }
+    if (!tripExpenseDep) return
+
+    setTripExpenseLoading(true)
+    try {
+      const payload = {
+        date: tripExpenseDep.dateStr || new Date().toISOString().split("T")[0],
+        category: tripExpenseForm.category,
+        amount: round2(amt),
+        tourRef: tripExpenseDep.key,
+        tourName: tripExpenseDep.tourName,
+        departureKey: tripExpenseDep.key,
+        tourLabel: `${tripExpenseDep.tourName} (${tripExpenseDep.dateStr || formatDisplayDate(tripExpenseDep.journeyDate)})`,
+        vendor: tripExpenseForm.vendor.trim() || undefined,
+        paymentMode: tripExpenseForm.paymentMode,
+        status: tripExpenseForm.status,
+        note: tripExpenseForm.note.trim() || undefined,
+      }
+      const saved = await createExpense(payload)
+      setTripExpenses((prev) => [saved.expense || saved, ...prev])
+      toast.success("Trip expense recorded successfully")
+      setIsTripExpenseModalOpen(false)
+    } catch (err) {
+      toast.error("Failed to record expense: " + err.message)
+    } finally {
+      setTripExpenseLoading(false)
+    }
+  }
   const totalCheckedIn = journeyBookings.reduce(
     (sum, b) => sum + (b.passengers?.filter((p) => p.checkedIn)?.length || 0),
     0,
@@ -640,6 +737,55 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
                         </p>
                       </div>
                     </div>
+
+                    {/* Compact Trip Financials & P&L Section */}
+                    {(() => {
+                      const fin = departureFinancialsMap.get(dep.key) || {
+                        bookedRevenue: dep.totalAmount || 0,
+                        collected: dep.advanceReceived || 0,
+                        expensesTotal: 0,
+                        profitBooked: dep.totalAmount || 0,
+                        marginPercent: null,
+                        breakEvenSeats: null,
+                        seatsToBreakEvenRemaining: null,
+                      }
+                      const isLoss = (fin.profitBooked || 0) < 0
+                      return (
+                        <div className="p-2.5 bg-surface-muted/50 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold text-ink-muted">Trip Financials</span>
+                            <span className={`font-bold tabular-nums text-xs ${isLoss ? "text-danger-text" : "text-success-text"}`}>
+                              {isLoss ? `Loss ${formatINR(Math.abs(fin.profitBooked), 0)}` : `Profit ${formatINR(fin.profitBooked, 0)}`}
+                              {fin.marginPercent !== null ? ` (${fin.marginPercent}%)` : ""}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1 text-[11px] text-ink-muted tabular-nums">
+                            <div>Rev: <strong className="text-ink">{formatINR(fin.bookedRevenue, 0)}</strong></div>
+                            <div>Exp: <strong className="text-(--yh-color-danger)">{formatINR(fin.expensesTotal, 0)}</strong></div>
+                            <div>BE: <strong className="text-ink">{fin.breakEvenSeats !== null ? `${fin.breakEvenSeats}p` : "—"}</strong></div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-border-subtle text-[10px]">
+                            <span className="text-ink-muted truncate">
+                              {fin.seatsToBreakEvenRemaining !== null && fin.seatsToBreakEvenRemaining > 0
+                                ? `${fin.seatsToBreakEvenRemaining} seats to break even`
+                                : fin.breakEvenSeats !== null
+                                  ? "Target achieved"
+                                  : "No trip expenses recorded"}
+                            </span>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="ghost"
+                              className="text-brand hover:text-brand-dark p-0 h-auto font-semibold shrink-0"
+                              onClick={() => handleOpenAddTripExpense(dep)}
+                              icon={<Plus size={11} />}
+                            >
+                              Add trip expense
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Card Actions */}
@@ -1372,6 +1518,126 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user })
           onClose={() => setBoardingPassTarget(null)}
         />
       )}
+
+      {/* Add Trip Expense Modal */}
+      <Modal
+        isOpen={isTripExpenseModalOpen}
+        onClose={() => setIsTripExpenseModalOpen(false)}
+        size="md"
+        title={
+          <div>
+            <div className="text-base font-bold text-ink flex items-center gap-2">
+              <Bus size={18} className="text-brand" />
+              Add Trip Expense
+            </div>
+            {tripExpenseDep && (
+              <p className="text-xs text-ink-muted font-normal mt-0.5">
+                {tripExpenseDep.tourName} • {tripExpenseDep.dateStr || formatDisplayDate(tripExpenseDep.journeyDate)} ({tripExpenseDep.busType})
+              </p>
+            )}
+          </div>
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsTripExpenseModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={tripExpenseLoading}
+              onClick={handleSaveTripExpense}
+            >
+              {tripExpenseLoading ? "Saving..." : "Save Expense"}
+            </Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleSaveTripExpense} noValidate className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field id="trip-exp-amount" label="Amount (₹)" required htmlFor="trip-exp-amount">
+              <Input
+                id="trip-exp-amount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                max="10000000"
+                placeholder="0.00"
+                value={tripExpenseForm.amount}
+                onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, amount: e.target.value })}
+                required
+              />
+            </Field>
+
+            <Field id="trip-exp-cat" label="Category" required htmlFor="trip-exp-cat">
+              <Select
+                id="trip-exp-cat"
+                value={tripExpenseForm.category}
+                onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, category: e.target.value })}
+              >
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field id="trip-exp-vendor" label="Vendor / Payee (Optional)" htmlFor="trip-exp-vendor">
+              <Input
+                id="trip-exp-vendor"
+                type="text"
+                placeholder="e.g. Bharat Petroleum, Toll plaza"
+                value={tripExpenseForm.vendor}
+                onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, vendor: e.target.value })}
+              />
+            </Field>
+
+            <Field id="trip-exp-mode" label="Payment Mode" htmlFor="trip-exp-mode">
+              <Select
+                id="trip-exp-mode"
+                value={tripExpenseForm.paymentMode}
+                onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, paymentMode: e.target.value })}
+              >
+                <option value="cash">Cash</option>
+                <option value="upi">UPI / QR</option>
+                <option value="bank">Bank Transfer</option>
+                <option value="card">Card</option>
+                <option value="cheque">Cheque</option>
+              </Select>
+            </Field>
+          </div>
+
+          <Field id="trip-exp-status" label="Payment Status" htmlFor="trip-exp-status">
+            <Select
+              id="trip-exp-status"
+              value={tripExpenseForm.status}
+              onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, status: e.target.value })}
+            >
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+            </Select>
+          </Field>
+
+          <Field id="trip-exp-notes" label="Notes / Trip Details (Optional)" htmlFor="trip-exp-notes">
+            <Input
+              id="trip-exp-notes"
+              type="text"
+              placeholder="e.g. Diesel 60L on NH8, toll slip #4521"
+              value={tripExpenseForm.note}
+              onChange={(e) => setTripExpenseForm({ ...tripExpenseForm, note: e.target.value })}
+            />
+          </Field>
+        </form>
+      </Modal>
 
       {/* Passenger Seat Layout Modal */}
       {showSeatLayoutModal && (

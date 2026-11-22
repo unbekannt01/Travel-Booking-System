@@ -16,6 +16,7 @@ import { cn } from "../../utils/cn"
  */
 export function Field({
   id,
+  htmlFor,
   label,
   hint,
   error,
@@ -24,7 +25,7 @@ export function Field({
   children,
 }) {
   const autoId = useId()
-  const fieldId = id || autoId
+  const fieldId = id || htmlFor || autoId
   const hintId = `${fieldId}-hint`
   const errorId = `${fieldId}-error`
 

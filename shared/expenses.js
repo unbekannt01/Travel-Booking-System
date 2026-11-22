@@ -55,6 +55,14 @@ export const EXPENSE_CATEGORIES = Object.freeze([
     description: "Third-party coach leasing, backup bus hiring, and tempo rent",
   },
   {
+    id: "bus_rent",
+    label: "Bus / Vehicle Rent",
+    labelHi: "बस / वाहन किराया (किराया)",
+    labelGu: "બસ / વાહન ભાડું",
+    icon: "Bus",
+    description: "Hired bus/vehicle rent, outsourced coach leasing, tempo rent",
+  },
+  {
     id: "food",
     label: "Food & Pilgrim Meals",
     labelHi: "खान-पान / भोजन",
@@ -117,6 +125,14 @@ export const EXPENSE_CATEGORIES = Object.freeze([
     labelGu: "સ્ટાફ પગાર",
     icon: "Users",
     description: "Monthly staff wages, cleaners, helpers, and office staff",
+  },
+  {
+    id: "staff_salary",
+    label: "Staff Salary",
+    labelHi: "कर्मचारी वेतन (मासिक)",
+    labelGu: "સ્ટાફ પગાર",
+    icon: "Users",
+    description: "Monthly staff salary and operating wages",
   },
   {
     id: "other",
@@ -372,3 +388,6 @@ export function filterExpenses(expenses = [], filters = {}) {
     return true
   })
 }
+
+export { parseTourRef } from "./profitLoss.js"
+

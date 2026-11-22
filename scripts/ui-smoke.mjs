@@ -49,6 +49,7 @@ const SCREENS = [
   { id: "tours", label: "Destinations", tabId: "tours" },
   { id: "expenses", label: "Expenses", tabId: "expenses" },
   { id: "analytics", label: "Analytics", tabId: "analytics" },
+  { id: "profit-loss", label: "Profit & Loss", isAnalyticsTab: "pnl" },
   { id: "settings", label: "Settings", tabId: "settings" },
   { id: "invoice-studio", label: "Invoice Studio", isSettingsTab: "studio" },
   { id: "new-booking", label: "New Booking", isAction: "new-booking" },
@@ -139,6 +140,21 @@ async function run() {
       const studioTab = await page.$('button:has-text("Invoice Studio")')
       if (studioTab) {
         await studioTab.click()
+        await page.waitForTimeout(600)
+      }
+    } else if (screen.isAnalyticsTab) {
+      if (page.url().includes("#/ui-kit")) {
+        await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" })
+        await page.waitForTimeout(600)
+      }
+      const analyticsNav = await page.$('button:has-text("Analytics")')
+      if (analyticsNav) {
+        await analyticsNav.click()
+        await page.waitForTimeout(600)
+      }
+      const pnlTab = await page.$('button:has-text("Profit & Loss")')
+      if (pnlTab) {
+        await pnlTab.click()
         await page.waitForTimeout(600)
       }
     } else if (screen.isAction === "new-booking") {

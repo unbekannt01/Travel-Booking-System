@@ -40,6 +40,20 @@ export const createExpenseSchema = z
       .optional()
       .default(null)
       .transform((val) => (val ? val.trim() : null)),
+    tourName: z
+      .string()
+      .max(120, "Tour name cannot exceed 120 characters")
+      .nullable()
+      .optional()
+      .default(null)
+      .transform((val) => (val ? val.trim() : null)),
+    departureKey: z
+      .string()
+      .max(160, "Departure key cannot exceed 160 characters")
+      .nullable()
+      .optional()
+      .default(null)
+      .transform((val) => (val ? val.trim() : null)),
     tourLabel: z
       .string()
       .max(100, "Tour label cannot exceed 100 characters")
@@ -103,6 +117,18 @@ export const updateExpenseSchema = z
       .nullable()
       .optional()
       .transform((val) => (val !== undefined ? (val ? val.trim() : null) : undefined)),
+    tourName: z
+      .string()
+      .max(120, "Tour name cannot exceed 120 characters")
+      .nullable()
+      .optional()
+      .transform((val) => (val !== undefined ? (val ? val.trim() : null) : undefined)),
+    departureKey: z
+      .string()
+      .max(160, "Departure key cannot exceed 160 characters")
+      .nullable()
+      .optional()
+      .transform((val) => (val !== undefined ? (val ? val.trim() : null) : undefined)),
     tourLabel: z
       .string()
       .max(100, "Tour label cannot exceed 100 characters")
@@ -153,6 +179,8 @@ export const listExpenseQuerySchema = z
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid to date format (YYYY-MM-DD)").optional(),
     category: z.string().max(40).optional(),
     tourRef: z.string().max(120).optional(),
+    tourName: z.string().max(120).optional(),
+    departureKey: z.string().max(160).optional(),
     paymentMode: z.string().max(30).optional(),
     status: z.enum(["paid", "pending", "all"]).optional().default("all"),
     q: z.string().max(100).optional().default(""),

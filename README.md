@@ -183,12 +183,19 @@ npm run ui:smoke
 - 1-click batch boarding ("Board All" / "Unboard All"), seat swap modal, and quick balance collection at coach steps.
 
 ### 5. Expense Management & Coach Operations Cost Tracking
-- **13 Specialized Categories**: Fuel & Diesel, Toll & Fastag, Driver/Conductor Allowance (Bhatta), Coach Hire, Food & Pilgrim Meals, Accommodation & Dharamshala, Permits & Road Taxes, Vehicle Maintenance & Repairs, Booking Commissions, Marketing & Outreach, Office Expenses, Staff Salaries, and Miscellaneous.
-- **KPI Metrics & Analytics**: Total Expenses, Paid Bills, Pending Dues, Top Category, and live Tour Operating Margin (Net Profit, Margin %, Expense Ratio) calculated against booking collections.
+- **15 Specialized Categories**: Fuel & Diesel, Toll & Fastag, Driver/Conductor Allowance (Bhatta), Coach Hire, Food & Pilgrim Meals, Accommodation & Dharamshala, Permits & Road Taxes, Vehicle Maintenance & Repairs, Booking Commissions, Marketing & Outreach, Office Expenses, Staff Salaries, Bus Rent, and Miscellaneous.
+- **KPI Metrics & Analytics**: Total Expenses, Paid Bills, Pending Dues, Top Category, and live Tour Operating Margin calculated against booking collections.
 - **Category Distribution (Recharts)**: Visual pie chart breakdown and ranked list by expense volume with percentages.
 - **Collapsible Filter Bar**: Quick date presets (This Month, Last Month, This FY, All Time, Custom Range), Category, Tour association, Payment Mode, Status, and real-time Search.
 - **Rapid Operations Workflows**: "Add Similar" (1-click duplicate for recurring fuel or toll slips), Edit, and soft delete with `ConfirmDialog` and recovery support.
 - **Secure CSV Export**: Formula injection sanitized (prefixing dangerous trigger characters with `'`) and UTF-8 BOM encoded for Excel compatibility.
+
+### 6. Tour-wise & Departure-wise Profit/Loss Analytics
+- **Dual-Basis Accounting Engine**: Pure ESM module (`shared/profitLoss.js`) with integer paise accounting computing both **Accrual (Booked)** margin (`bookedRevenue - expenses`) and **Cash-basis** margin (`collected - paidExpenses`).
+- **Unit Economics & Break-Even Analysis**: Automatically computes Average Ticket Price, Cost Per Passenger, Break-Even Seats needed (`Math.ceil(expenses / avgFare)`), and remaining seats to break-even.
+- **Interactive Tour Analytics Tab**: Switch between **Analytics Overview** and **Profit & Loss** with Recharts bar chart comparisons, an accessible data-table view toggle, and a detailed performance table.
+- **Zero-PII Financial Ledger Drawer**: Inspect invoice numbers, Pax counts, and linked trip expenses in a slide-out drawer with guaranteed exclusion of customer PII (names, phone numbers, Aadhaar).
+- **Coach Departure Financial Badges**: Compact "Trip Financials" badges on each Journey coach card with 1-click "Add trip expense" modal prefilled with trip context.
 
 ---
 

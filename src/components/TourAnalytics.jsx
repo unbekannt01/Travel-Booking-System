@@ -38,10 +38,13 @@ import {
   TableCell,
   EmptyState,
   Badge,
+  Tabs,
 } from "./ui/index"
 import { formatINR } from "../utils/formatters"
+import ProfitLossTab from "./analytics/ProfitLossTab"
 
-export default function TourAnalytics({ bookings = [] }) {
+export default function TourAnalytics({ bookings = [], tours = [], user = null }) {
+  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState("overview")
   const [timeRange, setTimeRange] = useState("all")
   const [selectedTour, setSelectedTour] = useState("all")
 
@@ -132,15 +135,18 @@ export default function TourAnalytics({ bookings = [] }) {
     return ["all", ...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
   }, [bookings])
 
-  if (bookings.length === 0) {
-    return (
-      <EmptyState
-        icon={<TrendingUp className="w-8 h-8 text-(--yh-text-muted)" />}
-        title="No analytics data available"
-        description="Booking records, passenger trends, and revenue metrics will automatically appear here once bookings are recorded."
-      />
-    )
-  }
+  const analyticsTabItems = [
+    {
+      id: "overview",
+      label: "Analytics Overview",
+      icon: <BarChart2 className="w-4 h-4" />,
+    },
+    {
+      id: "pnl",
+      label: "Profit & Loss",
+      icon: <TrendingUp className="w-4 h-4" />,
+    },
+  ]
 
   // Custom tooltip styling using CSS custom properties for dark/light theme compatibility
   const tooltipContentStyle = {
@@ -155,8 +161,29 @@ export default function TourAnalytics({ bookings = [] }) {
 
   return (
     <div className="space-y-6">
-      {/* Top Filter Controls */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <Tabs
+        items={analyticsTabItems}
+        value={activeAnalyticsTab}
+        onChange={setActiveAnalyticsTab}
+        ariaLabel="Analytics View Options"
+      />
+
+      {activeAnalyticsTab === "pnl" && (
+        <ProfitLossTab bookings={bookings} tours={tours} user={user} />
+      )}
+
+      {activeAnalyticsTab === "overview" && bookings.length === 0 && (
+        <EmptyState
+          icon={<TrendingUp className="w-8 h-8 text-(--yh-text-muted)" />}
+          title="No analytics data available"
+          description="Booking records, passenger trends, and revenue metrics will automatically appear here once bookings are recorded."
+        />
+      )}
+
+      {activeAnalyticsTab === "overview" && bookings.length > 0 && (
+        <div className="space-y-6">
+          {/* Top Filter Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <p className="text-xs text-(--yh-text-muted) font-medium">
           Showing analytics for <strong className="text-(--yh-text-primary)">{analytics.totalBookings}</strong> bookings
         </p>
@@ -512,6 +539,8 @@ export default function TourAnalytics({ bookings = [] }) {
           )}
         </div>
       </Card>
+        </div>
+      )}
     </div>
   )
 }

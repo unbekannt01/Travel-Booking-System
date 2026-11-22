@@ -582,7 +582,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} user={user} />
             )}
 
-            {activeTab === "analytics" && <TourAnalytics bookings={bookings} />}
+            {activeTab === "analytics" && <TourAnalytics bookings={bookings} tours={tours} user={user} />}
 
             {activeTab === "settings" && (
               <SettingsPanel
@@ -599,7 +599,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               />
             )}
 
-            {!["dashboard", "form", "passengers", "tours", "journey", "analytics", "settings"].includes(activeTab) && (
+            {!["dashboard", "form", "passengers", "tours", "journey", "analytics", "settings", "expenses"].includes(activeTab) && (
               <NotFoundPage onGoOverview={() => setActiveTab("dashboard")} />
             )}
           </Suspense>

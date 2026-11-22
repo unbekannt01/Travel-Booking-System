@@ -489,3 +489,57 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - Formula injection protection: all fields starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with a single quote (`'`).
   - UTF-8 Byte Order Mark (`\uFEFF`) included to preserve Devanagari and Gujarati Unicode scripts in Microsoft Excel.
 
+---
+
+## 18. Tour-wise & Departure-wise Profit/Loss Architecture (Part 4b)
+
+- **Pure Shared Calculation Engine (`shared/profitLoss.js`)**:
+  - Zero-dependency ESM pure module shared seamlessly between browser client and Node.js backend.
+  - **Integer Paise Accounting**: Converts all currency figures to integer paise (`Math.round(amt * 100)`) before summation and divides by 100 on output, eliminating JavaScript IEEE-754 floating-point drift.
+  - **Dual Margin Accounting**:
+    - *Accrual Basis (Booked)*: `bookedRevenue - expensesTotal`. Revenue recognized when bookings are confirmed; cancelled bookings excluded from passenger counts and ticket sales.
+    - *Cash Basis*: `collectedRevenue - paidExpenses`. Reflects actual liquid cash collected in advance/balance minus expenses paid out.
+  - **Cancellation Financial Treatment**:
+    - Cancelled bookings (`status === "Cancelled"` or `"cancelled"`) contribute 0 to `bookedRevenue` and 0 to `passengers`.
+    - Advance received on cancelled bookings is treated as retained cancellation fee (`cancellationFeesRetained`), accounted toward business revenue.
+  - **Unit Economics & Break-Even Metrics**:
+    - Average Ticket Price: `bookedRevenue / passengers`.
+    - Cost Per Passenger: `expensesTotal / passengers`.
+    - Break-Even Seats: `Math.ceil(expensesTotal / avgTicketPrice)` (seats needed at prevailing average fare to cover all trip expenses).
+    - Remaining Seats to Break-Even: `Math.max(0, breakEvenSeats - passengers)` (`0` or "Achieved" when occupancy exceeds break-even).
+    - Operating Margin %: `round2((profitBooked / bookedRevenue) * 100)` (returns `null` when revenue is 0, avoiding divide-by-zero artifacts).
+  - **Hierarchical Roll-Ups**:
+    - *Overall Business Summary*: aggregates all booked revenue, collections, outstanding dues, retained cancellation fees, all expenses (paid and pending), and overall net profit.
+    - *Tour-Wise Roll-Up*: groups departures and direct tour expenses by `tourName`, computing tour-level operating margins, passenger totals, and capacity.
+    - *Departure-Wise Roll-Up*: groups individual coach trips by compound departure key (`${tourName}___${date}___${bus}`), calculating trip-specific P&L and break-even seats.
+    - *General / Unallocated Bucket*: captures overheads and general fleet costs unlinked to any specific tour.
+
+- **Expense Data Model & Validation Enhancements**:
+  - `backend/models/Expense.js`: Added optional `tourName` (string, max 120 chars) and `departureKey` (string, max 200 chars) with compound indexes:
+    - `{ userId: 1, tourName: 1, date: -1 }`
+    - `{ userId: 1, departureKey: 1, date: -1 }`
+  - Backward-compatible `parseTourRef(value)` helper in `shared/profitLoss.js`: parses legacy `tourRef` strings (delimited with `___` into departure keys, non-delimited into tour names, empty into general unallocated).
+  - Migration script: `scripts/migrate-expense-tourref.mjs` with `--dry-run` safety flag for safe operator maintenance.
+
+- **Authoritative Backend Report Route (`backend/routes/reports.js`)**:
+  - `GET /api/reports/tour-pnl`:
+    - Strict query validation using Zod (`tourPnlQuerySchema`): validates `from`, `to` (ISO dates), `tourName`, `groupBy` (`"tour"` | `"departure"`).
+    - Middleware: `verifyToken`, rate limited via `reportLimiter` (60 requests / 15 minutes per user).
+    - Tenant isolation: queries both `Booking` and `Expense` strictly scoped to `req.user.id`.
+    - **Zero PII Exposure**: Backend projections return financial numbers, dates, coach types, invoice numbers, and passenger counts. Customer names, phone numbers, email addresses, and Aadhaar identifiers are strictly excluded from report payloads.
+
+- **UI & Analytics Integration**:
+  - `src/components/TourAnalytics.jsx`: Integrated `<Tabs>` switching between "Analytics Overview" and "Profit & Loss".
+  - `src/components/analytics/ProfitLossTab.jsx`:
+    - Quick date range presets (This FY with Indian April 1–March 31 boundaries, This Month, Last Month, All Time, Custom).
+    - Filter bar: Tour filter (including General unlinked expenses) and Group By (`tour` vs `departure`).
+    - 4 primary StatCards (Booked Revenue, Cash Collected, Total Expenses, Overall Net Profit / Loss with distinct danger/loss styling).
+    - Recharts bar chart showing Revenue vs Expenses vs Profit with accessible data-table view toggle for screen readers.
+    - Comprehensive performance table with sortable columns (PAX, Occupancy %, Revenue, Collected, Expenses, Net Profit, Margin %, Break-Even).
+    - Detail `<Drawer>` displaying full income/expense ledger without customer PII and unit economics breakdown.
+    - General / Unallocated fleet expenses card with category breakdown.
+    - RFC4180 CSV Export with formula injection sanitization and UTF-8 BOM.
+  - `src/components/JourneyManager.jsx`:
+    - Integrated compact "Trip Financials" card on each coach departure card (Rev, Exp, Net Profit/Loss, Margin %, Break-Even seats, seats remaining).
+    - "Add trip expense" button on departure cards pre-filling date, tour name, and departure key in expense modal.
+
