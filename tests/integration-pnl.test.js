@@ -55,10 +55,8 @@ describe("Integration Harness: Real Express App against yatrahub_test", () => {
     Booking = bookingMod.default
     Expense = expenseMod.default
 
-    // Clear test collections
-    await User.deleteMany({})
-    await Booking.deleteMany({})
-    await Expense.deleteMany({})
+    // Clear test collections for our test operators only
+    await User.deleteMany({ email: { $in: ["operatorA@test.com", "operatorB@test.com"] } })
 
     // Create User A
     const hashedPass = await bcrypt.hash("Password123!#", 8)
@@ -100,16 +98,21 @@ describe("Integration Harness: Real Express App against yatrahub_test", () => {
 
   after(async () => {
     if (server) {
+      if (typeof server.closeAllConnections === "function") {
+        server.closeAllConnections()
+      }
       await new Promise((resolve) => server.close(resolve))
     }
     if (isMongoAvailable) {
       try {
-        await User.deleteMany({})
-        await Booking.deleteMany({})
-        await Expense.deleteMany({})
+        await User.deleteMany({ email: { $in: ["operatorA@test.com", "operatorB@test.com"] } })
+        if (userAId && userBId) {
+          await Booking.deleteMany({ userId: { $in: [userAId, userBId] } })
+          await Expense.deleteMany({ userId: { $in: [userAId, userBId] } })
+        }
         await mongoose.disconnect()
       } catch {
-        // Disconnect gracefully
+        // Cleanup gracefully
       }
     }
   })

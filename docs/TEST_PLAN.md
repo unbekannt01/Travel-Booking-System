@@ -36,6 +36,7 @@ npm run test:ui
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
 | **`tests/components/profit-loss.test.jsx`** | 4 | **Tour Analytics & Profit/Loss (Part 4b)**: Switches between Analytics Overview and Profit & Loss tabs; verifies 4 KPI StatCards and P&L heading; toggles between Recharts bar chart view and accessible table alternative; opens Detail Drawer on clicking a row and verifies income/expense ledger strictly without customer PII; renders JourneyManager departure card with compact Trip Financials and opens Add Trip Expense modal with prefilled context. |
+| **`tests/components/customers.test.jsx`** | 4 | **Customer Directory & Drawer (Part 5a)**: Renders Customer Directory with StatCards, filters, and customer rows; opens Add Customer modal on button click and validates fields; opens CustomerDrawer on row click and displays contact profile and booking history without Aadhaar PII; renders calm inline RateLimitNotice when listCustomers encounters HTTP 429. |
 | **`tests/components/expenses.test.jsx`** | 5 | Renders ExpenseTracker with data, StatCards, and table rows; renders EmptyState cleanly when no expenses exist; renders calm inline error card with Retry button when loading fails; opens Add Expense modal and validates required fields; allows interacting with filter chips and search input. |
 | **`tests/components/overview.test.jsx`** | 2 | Renders KPI metrics and recent bookings with full mock data; renders cleanly with empty state when bookings/tours array is empty. |
 | **`tests/components/travelers.test.jsx`** | 2 | Renders passenger manifest, search input, filter chips, and masked Aadhaar numbers; renders empty state cleanly. |
@@ -51,6 +52,9 @@ npm run test:ui
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/customers-pure.test.js`** | 8 | **Customer Master Pure Logic (Part 5a)**: `normalizeIndianMobile` stripping prefix/spaces/symbols and rejecting invalid inputs; `isValidEmail` format validation; `pickDisplayName` candidate selection; `CUSTOMER_TAGS` and `CUSTOMER_LANGUAGES` frozen arrays; `summarizeCustomer` accounting metrics calculation matching `shared/profitLoss.js` integer paise rules without float drift; graceful handling of cancelled/empty bookings. |
+| **`tests/customers-backend.test.js`** | 7 | **Customer Master Backend Validation & Pure Accounting (Part 5a)**: Zod schemas (`createCustomerSchema`, `updateCustomerSchema`, `customerQuerySchema`) rejecting invalid mobile, tag limit (>5), invalid GSTIN, unknown keys; coerces query params with defaults; verifies customer summary financial rules against cancellation fees and refunds. |
+| **`tests/integration-customers.test.js`** | 6 | **Customer Master Express + MongoDB Integration Harness (Part 5a)**: Rejects unauthenticated requests with HTTP 401; creates customer via `POST /api/customers` with CSRF defense and tenant isolation; prevents duplicate phone collision for same tenant (409 Conflict); verifies cross-tenant isolation (different users can register same phone); verifies lookup endpoint `GET /api/customers/lookup?phone=` returns profile strictly without Aadhaar; verifies soft deletion and subsequent re-registration of phone number. |
 | **`tests/profit-loss-backend.test.js`** | 10 | **Pure Profit & Loss Engine & Validation (Part 4b)**: `parseTourRef` classifying departure keys, tour names, and general unallocated; `isBookingCancelled` case-insensitive verification; exact accrual vs cash P&L calculations; cancellation financial treatment (advance counted as retained fee, 0 passengers); break-even seats ceiling math and seats remaining; unallocated fleet expenses categorization; Indian FY date boundary resolution (1 Apr - 31 Mar); integer paise accounting avoiding float drift; Zod `tourPnlQuerySchema` validation (rejecting invalid dates, unknown params, non-ISO formats); null margin when revenue is zero. |
 | **`tests/integration-pnl.test.js`** | 4 | **Real Express P&L Integration Harness (Part 4b)**: Rejects unauthenticated requests with HTTP 401; verifies strict multi-tenant isolation between User A and User B (no data bleed); asserts strictly zero PII fields in server report payloads; graceful skipping when MongoDB test database is offline. |
 | **`tests/expenses-backend.test.js`** | 21 | **Expense Management & Backend Validation (Part 4a & 4b)**: 15 built-in categories frozen array (including `bus_rent` and `staff_salary`) and lookup map; payment modes and statuses frozen arrays; `round2` 2-decimal rupee rounding; `sumAmounts` integer paise accumulation without float drift; `groupByCategory` ranking and percentages; `groupByMonth` Indian FY calendar grouping; `filterExpenses` multi-criteria in-memory filtering; Zod schema validation (`createExpenseSchema`, `updateExpenseSchema`, `listExpenseQuerySchema`) rejecting unknown keys, non-positive amounts, invalid categories, out-of-range dates, and oversize text; CSV formula injection protection (`escapeCsvValue` prefixing with single quote) and UTF-8 BOM encoding; tenant isolation by `userId`; soft delete hiding rows while preserving DB records; summary fixture exact calculation; audit logging contract for expense create/update/delete. |
@@ -382,6 +386,35 @@ npm run ui:smoke -- --quick
   - On Profit & Loss tab, click "Export CSV".
   - Verify downloaded CSV has columns for Tour/Departure, Date, PAX, Capacity, Occupancy, Booked Revenue, Collected, Expenses, Net Profit, Margin %, and Break-Even seats.
   - Verify formula injection protection: any field beginning with `=`, `+`, `-`, `@` is prefixed with a single quote (`'`).
+
+## 3.12 Manual Verification Checklist — Part 5a Customer Master
+- [ ] **Customer Directory Navigation & Layout**:
+  - In sidebar (and mobile More drawer), verify "Customers" appears with the `Contact` icon.
+  - Navigate to `/customers`; verify page title displays "Customer Directory" and subtitle "Manage traveler contact details, repeat pilgrims, booking history, and balance tracking."
+  - Verify 3 primary StatCards: Total Customers, Repeat Travelers, With Outstanding.
+  - If unlinked legacy bookings exist, verify "N bookings need attention" banner renders with prompt to run backfill.
+- [ ] **Add / Edit Customer Modal**:
+  - Click "Add Customer" button; verify modal opens with Name, 10-digit Mobile, Email, City, Address, GSTIN, Language, Tags, Notes, and WhatsApp Opt-out.
+  - Enter invalid phone (e.g., `12345`); verify inline validation error "Valid 10-digit Indian mobile number required (starts with 6-9)".
+  - Enter duplicate mobile for this operator; verify 409 conflict error banner appears cleanly.
+  - Save valid customer; verify success toast, modal closes, and customer appears in directory.
+- [ ] **Customer Detail Drawer**:
+  - Click any customer row; verify slide-over drawer opens smoothly.
+  - Verify contact details: Phone (with Copy to clipboard button), Email, City, Address, GSTIN, Language badge, Tags.
+  - Verify financial summary StatCards (Booked Revenue, Outstanding, Collected, Passengers) match authoritative booking calculations.
+  - Verify Booking History table lists all past trips with Invoice #, Tour, Date, Amount, Paid, Balance, and Status.
+  - Click "New Booking for this Customer"; verify app navigates to Booking Form with primary contact name and phone prefilled.
+- [ ] **Booking Form Non-Blocking Phone Lookup**:
+  - Open New Booking form; enter registered customer phone in primary contact.
+  - Verify subtle suggestion card appears: "Existing customer found: <Name>. Use customer details".
+  - Click "Use customer details"; verify name, email, city, and address prefill instantly.
+- [ ] **Backfill CLI Script**:
+  - Run `node scripts/backfill-customers.mjs` in PowerShell; verify dry-run output reports scanned bookings and proposed customer creations without modifying MongoDB.
+  - Run `node scripts/backfill-customers.mjs --apply`; verify bookings link to customer profiles and console logs contain zero raw PII.
+- [ ] **CSV Export**:
+  - In Customer Directory, click "Export CSV".
+  - Verify exported CSV contains Customer Name, Phone, Email, City, Language, Tags, Total Bookings, Booked Revenue, Collected, Outstanding, and First/Last Booking dates.
+  - Verify formula injection sanitization prefixes hostile characters with a single quote (`'`).
 
 ---
 

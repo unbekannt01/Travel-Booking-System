@@ -4,6 +4,7 @@ import User from "../models/User.js"
 import Payment from "../models/Payment.js"
 import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
+import Customer from "../models/Customer.js"
 import { logAudit } from "../models/AuditLog.js"
 import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff, isMaskedOrUnchangedAadhaar } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
@@ -20,6 +21,7 @@ import {
   calculateCancellationRefund,
   calculatePricing,
 } from "../../shared/businessLogic.js"
+import { normalizeIndianMobile } from "../../shared/customers.js"
 
 export {
   generateTourCode,
@@ -260,6 +262,55 @@ router.get("/", verifyToken, async (req, res) => {
   }
 })
 
+// Non-blocking helper to find or create a Customer record from booking contact info
+export async function upsertCustomerForBooking(userId, { contactName, contactPhone, contactEmail }) {
+  if (!contactPhone || !userId) return null
+  try {
+    const { valid, normalized } = normalizeIndianMobile(contactPhone)
+    if (!valid || !normalized) return null
+
+    const cleanName = (contactName || "").trim() || "Customer"
+    const cleanEmail = (contactEmail || "").trim()
+
+    const customer = await Customer.findOneAndUpdate(
+      { userId, phone: normalized, deletedAt: null },
+      {
+        $setOnInsert: {
+          userId,
+          phone: normalized,
+          name: cleanName,
+          email: cleanEmail,
+          language: "en",
+          tags: [],
+          notes: "",
+          whatsappOptOut: false,
+          aliases: [],
+          source: "booking",
+          deletedAt: null,
+        },
+        $addToSet: {
+          aliases: cleanName,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    )
+
+    if (customer && customer.aliases && customer.aliases.length > 5) {
+      customer.aliases = customer.aliases.slice(0, 5)
+      await customer.save().catch(() => {})
+    }
+
+    return customer
+  } catch (err) {
+    console.warn("[CustomerUpsert] Non-blocking customer link failed:", err.message)
+    return null
+  }
+}
+
 // POST /api/bookings
 router.post("/", verifyToken, async (req, res) => {
   try {
@@ -389,8 +440,20 @@ router.post("/", verifyToken, async (req, res) => {
           ]
         : []
 
+    let linkedCustomer = null
+    try {
+      linkedCustomer = await upsertCustomerForBooking(req.user.id, {
+        contactName,
+        contactPhone,
+        contactEmail,
+      })
+    } catch (custErr) {
+      console.warn("[CustomerUpsert] Non-blocking customer link failed:", custErr.message)
+    }
+
     const newBooking = new Booking({
       invoiceNo: "PENDING",
+      customerId: linkedCustomer ? linkedCustomer._id : null,
       date: req.body.date ? new Date(req.body.date) : new Date(),
       tourName,
       journeyDate: normalizedJourneyDate,
@@ -604,6 +667,21 @@ router.put("/:id", verifyToken, async (req, res) => {
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         booking[field] = req.body[field]
+      }
+    }
+
+    if (req.body.contactPhone || req.body.contactName) {
+      try {
+        const linkedCustomer = await upsertCustomerForBooking(req.user.id, {
+          contactName: booking.contactName,
+          contactPhone: booking.contactPhone,
+          contactEmail: booking.contactEmail,
+        })
+        if (linkedCustomer && linkedCustomer._id) {
+          booking.customerId = linkedCustomer._id
+        }
+      } catch (custErr) {
+        console.warn("[CustomerUpsert] Non-blocking customer update failed:", custErr.message)
       }
     }
 

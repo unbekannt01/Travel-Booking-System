@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 import {
   ArrowLeft,
   ArrowRight,
@@ -28,6 +28,7 @@ import { calculatePricing } from "../utils/pricing"
 import { autoAssignSeats } from "../utils/seatAssignment"
 import { formatINR, maskAadhaar } from "../utils/formatters"
 import { isMaskedAadhaar } from "../utils/validators"
+import { lookupCustomerByPhone } from "../data/customers"
 import { cn } from "../utils/cn"
 import {
   BOOKING_STEPS,
@@ -451,6 +452,30 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
   const [showAutoAssignModal, setShowAutoAssignModal] = useState(false)
   const [deckPreference, setDeckPreference] = useState("any")
   const [tempAssignments, setTempAssignments] = useState([])
+  const [customerLookupResult, setCustomerLookupResult] = useState(null)
+
+  useEffect(() => {
+    const raw = formData.contactPhone
+    if (!raw || raw.length !== 10 || !/^[6-9]/.test(raw)) {
+      setCustomerLookupResult(null)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await lookupCustomerByPhone(raw)
+        if (res?.found && res?.customer) {
+          setCustomerLookupResult(res.customer)
+        } else {
+          setCustomerLookupResult(null)
+        }
+      } catch {
+        setCustomerLookupResult(null)
+      }
+    }, 350)
+
+    return () => clearTimeout(timer)
+  }, [formData.contactPhone])
 
   const formTopRef = useRef(null)
   const serverErrorRef = useRef(null)
@@ -1156,6 +1181,45 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                       />
                     )}
                   </Field>
+
+                  {customerLookupResult && (
+                    <div
+                      role="status"
+                      className="sm:col-span-2 p-3 rounded-[var(--yh-radius-md)] bg-brand-soft border border-brand/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 text-ink">
+                        <Users className="w-4 h-4 text-brand shrink-0" />
+                        <span>
+                          Existing customer found: <strong className="font-bold">{customerLookupResult.name}</strong>
+                          {customerLookupResult.city ? ` (${customerLookupResult.city})` : ""}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => {
+                          setFormData((prev) => {
+                            const next = {
+                              ...prev,
+                              contactName: customerLookupResult.name,
+                              contactEmail: customerLookupResult.email || prev.contactEmail,
+                            }
+                            if (customerLookupResult.city && prev.passengers?.length > 0 && !prev.passengers[0].city) {
+                              const updatedPax = [...prev.passengers]
+                              updatedPax[0] = { ...updatedPax[0], city: customerLookupResult.city }
+                              next.passengers = updatedPax
+                            }
+                            return next
+                          })
+                          clearFieldError("contactName")
+                          setCustomerLookupResult(null)
+                        }}
+                      >
+                        Use customer details
+                      </Button>
+                    </div>
+                  )}
 
                   <Field
                     id="contactEmail"

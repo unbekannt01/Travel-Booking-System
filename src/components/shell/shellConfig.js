@@ -34,6 +34,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: true,
   },
   {
+    id: "customers",
+    label: "Customers",
+    title: "Customer Directory",
+    description: "Manage traveler profiles, repeat pilgrim history, and outstanding balances.",
+    iconName: "Contact",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "journey",
     label: "Journeys",
     title: "Journeys",
@@ -187,6 +196,7 @@ export function getSkeletonVariant(activeTab) {
     case "analytics":
       return "analytics"
     case "passengers":
+    case "customers":
     case "tours":
     case "journey":
     case "expenses":

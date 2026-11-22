@@ -551,3 +551,64 @@ export async function getTourPnl(params = {}, options = {}) {
   }
 }
 
+// --- CUSTOMERS ---
+function normalizeCustomer(c) {
+  if (!c) return null
+  return {
+    ...c,
+    id: c._id || c.id,
+  }
+}
+
+export async function listCustomers(params = {}, options = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/customers${qs}`, options)
+  return {
+    customers: (res?.customers || []).map(normalizeCustomer),
+    pagination: res?.pagination || { page: 1, limit: 25, total: 0, totalPages: 1 },
+    counts: res?.counts || { total: 0, repeat: 0, withOutstanding: 0, unlinkedBookingsCount: 0 },
+  }
+}
+
+export async function lookupCustomerByPhone(phone, options = {}) {
+  if (!phone) return { found: false, customer: null }
+  const res = await request(`/api/customers/lookup?phone=${encodeURIComponent(phone)}`, options)
+  return res || { found: false, customer: null }
+}
+
+export async function getCustomer(id, options = {}) {
+  const res = await request(`/api/customers/${id}`, options)
+  return {
+    ...res,
+    customer: normalizeCustomer(res?.customer),
+  }
+}
+
+export async function createCustomer(data) {
+  const res = await request("/api/customers", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  return normalizeCustomer(res?.customer || res)
+}
+
+export async function updateCustomer(id, data) {
+  const res = await request(`/api/customers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+  return normalizeCustomer(res?.customer || res)
+}
+
+export async function deleteCustomer(id) {
+  return request(`/api/customers/${id}`, {
+    method: "DELETE",
+  })
+}
+

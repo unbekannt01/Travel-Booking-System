@@ -567,3 +567,54 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
     - Integrated compact "Trip Financials" card on each coach departure card (Rev, Exp, Net Profit/Loss, Margin %, Break-Even seats, seats remaining).
     - "Add trip expense" button on departure cards pre-filling date, tour name, and departure key in expense modal.
 
+## 19. Customer Master & CRM Architecture (Part 5a)
+
+- **Pure Business Logic Module (`shared/customers.js`)**:
+  - `normalizeIndianMobile(raw)`: Normalizes 10-digit Indian mobile numbers (stripping `+91`, leading `0`, spaces, dashes, parentheses). Rejects invalid formats (must be exactly 10 digits starting with [6-9]).
+  - `isValidEmail(email)`: Safe format validator (max 120 chars, standard regex).
+  - `pickDisplayName(candidates)`: Resolves longest clean candidate name for customer profile display while maintaining shorter versions as aliases.
+  - `CUSTOMER_TAGS`: Frozen list `["vip", "senior-citizen", "group-leader", "agent", "frequent", "special-care"]`.
+  - `CUSTOMER_LANGUAGES`: Frozen list `["en", "hi", "gu"]`.
+  - `summarizeCustomer(bookings)`: Authoritative financial metrics engine strictly adhering to `shared/profitLoss.js` integer paise rules with zero P&L divergence (`totalBookings`, `totalPassengers`, `totalBookedRevenue`, `totalCollected`, `totalOutstanding`, `totalCancelledBookings`, `totalCancellationFees`, `firstBookingDate`, `lastBookingDate`, `isRepeat`, `destinations`).
+
+- **Customer Data Model (`backend/models/Customer.js`)**:
+  - Tenant-isolated schema containing: `userId`, `name`, `phone`, `email`, `city`, `address`, `gstin`, `language`, `tags`, `notes`, `whatsappOptOut`, `aliases`, `source` (`"booking_import"` | `"manual"` | `"backfill"`), `deletedAt`, `deletedBy`.
+  - Compound partial unique index: `{ userId: 1, phone: 1 }` with `{ unique: true, partialFilterExpression: { deletedAt: null } }`, allowing re-registration after soft deletion while strictly preventing duplicate active numbers per operator.
+
+- **Booking Integration & Non-Blocking Auto-Upsert**:
+  - Additive field on `Booking` model: `customerId: { type: ObjectId, ref: "Customer", default: null }` with index `{ userId: 1, customerId: 1 }`.
+  - `upsertCustomerForBooking(userId, bookingData)` helper in `backend/routes/bookings.js` wrapped in defensive try/catch:
+    - Normalizes booking primary contact phone.
+    - Atomically finds or creates customer profile.
+    - If customer exists, updates name if booking name is longer/cleaner and appends existing to `aliases`.
+    - Auto-links `customerId` onto the booking document without adding latency or blocking booking persistence if customer upsert encounters a non-fatal issue.
+
+- **Data Backfill Utility (`scripts/backfill-customers.mjs`)**:
+  - Safe CLI migration tool for historical bookings lacking `customerId`.
+  - Default execution runs in `--dry-run` mode, printing aggregation metrics without writing to MongoDB.
+  - Executing with `--apply` performs idempotent customer creation and links `booking.customerId`.
+  - Strict privacy protections: logs only counts, timings, and masked identifiers (zero raw phone/name PII in console output).
+
+- **REST API Endpoints (`backend/routes/customers.js`)**:
+  - Rate limiting: Read operations limited via `customerReadLimiter` (120 req/15min); state-changing writes limited via `customerWriteLimiter` (60 req/15min).
+  - `GET /api/customers`: Paginated customer directory with query parameters `q` (name/phone/city/email search), `tag`, `hasOutstanding` (`"true"` | `"false"`), `sort` (`recent_booking`, `name`, `bookings_desc`, `outstanding_desc`), `page`, and `limit`. Returns customer list with dynamic KPI counts (`total`, `repeat`, `withOutstanding`, `unlinkedBookingsCount`).
+  - `POST /api/customers`: Creates new customer with Zod validation (`createCustomerSchema`), normalizing mobile and preventing duplicate phone collisions (409 Conflict).
+  - `GET /api/customers/:id`: Fetches complete customer profile, authoritative financial summary via `summarizeCustomer`, and linked bookings history.
+  - `PUT /api/customers/:id`: Updates customer details with Zod validation (`updateCustomerSchema`).
+  - `DELETE /api/customers/:id`: Soft deletes customer setting `deletedAt` and `deletedBy`.
+  - `GET /api/customers/lookup?phone=`: Quick endpoint for booking form lookup returning matching customer profile without sensitive PII (Aadhaar is never returned).
+  - Audit logging: Creates structured `AuditLog` records for `customer_created`, `customer_updated`, and `customer_deleted`.
+
+- **User Interface Components**:
+  - `src/components/customers/CustomerManager.jsx`: Main Customer Directory screen featuring:
+    - Top StatCards (Total Customers, Repeat Travelers, With Outstanding).
+    - Unlinked bookings alert banner when legacy bookings need attention with dismiss toggle.
+    - Search input with 400ms debounce across name, phone, city, and email.
+    - Filter chips for customer tags, outstanding balance switch, and sorting selector.
+    - Accessible desktop table with tabular numeric alignment and mobile stacked card view (<768px).
+    - Pagination controls and RFC4180 CSV export with formula injection sanitization.
+  - `src/components/customers/CustomerModal.jsx`: Accessible modal dialog for creating and editing customer profiles with phone normalization, GSTIN auto-uppercasing, tag selection, and duplicate phone handling.
+  - `src/components/customers/CustomerDrawer.jsx`: Slide-over detail drawer displaying contact details, copy-to-clipboard mobile shortcut, authoritative financial KPIs, complete booking history table, and "New Booking for this Customer" prefill trigger.
+  - `src/components/BookingForm.jsx`: Non-blocking phone lookup: queries customer profile on 10-digit mobile entry and displays a subtle suggestion banner to auto-fill primary contact details with a single click.
+
+

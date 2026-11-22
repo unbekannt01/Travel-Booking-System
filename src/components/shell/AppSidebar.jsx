@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Users,
+  Contact,
   MapPin,
   Bus,
   TrendingUp,
@@ -18,6 +19,7 @@ import { NAV_ITEMS, isNavItemActive } from "./shellConfig"
 const ICON_MAP = {
   LayoutDashboard,
   Users,
+  Contact,
   MapPin,
   Bus,
   TrendingUp,

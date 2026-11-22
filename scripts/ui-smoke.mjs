@@ -100,6 +100,7 @@ if (isQuick) {
 const ALL_SCREENS = [
   { id: "dashboard", label: "Overview", tabId: "dashboard" },
   { id: "passengers", label: "Travelers", tabId: "passengers" },
+  { id: "customers", label: "Customers", tabId: "customers" },
   { id: "journey", label: "Journeys", tabId: "journey" },
   { id: "tours", label: "Destinations", tabId: "tours" },
   { id: "expenses", label: "Expenses", tabId: "expenses" },

@@ -26,6 +26,7 @@ const SCREEN_LOADERS = {
   dashboard: () => import("./dashboard/DashboardHome"),
   form: () => import("./BookingForm"),
   passengers: () => import("./PassengerManagement"),
+  customers: () => import("./customers/CustomerManager"),
   tours: () => import("./TourInventory"),
   expenses: () => import("./ExpenseTracker"),
   journey: () => import("./JourneyManager"),
@@ -36,6 +37,7 @@ const SCREEN_LOADERS = {
 const DashboardHome = lazy(SCREEN_LOADERS.dashboard)
 const BookingForm = lazy(SCREEN_LOADERS.form)
 const PassengerManagement = lazy(SCREEN_LOADERS.passengers)
+const CustomerManager = lazy(SCREEN_LOADERS.customers)
 const TourInventory = lazy(SCREEN_LOADERS.tours)
 const ExpenseTracker = lazy(SCREEN_LOADERS.expenses)
 const JourneyManager = lazy(SCREEN_LOADERS.journey)
@@ -559,6 +561,29 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                   setActiveTab("form")
                 }}
                 user={user}
+              />
+            )}
+
+            {activeTab === "customers" && (
+              <CustomerManager
+                onNewBooking={(customer) => {
+                  setEditingBooking({
+                    contactName: customer.name,
+                    contactPhone: customer.phone,
+                    contactEmail: customer.email,
+                    passengers: [
+                      {
+                        name: customer.name,
+                        city: customer.city || "",
+                        age: "",
+                        gender: "",
+                        seatId: "",
+                        aadhar: "",
+                      },
+                    ],
+                  })
+                  setActiveTab("form")
+                }}
               />
             )}
 

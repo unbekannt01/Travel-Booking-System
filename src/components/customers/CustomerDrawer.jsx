@@ -1,0 +1,416 @@
+import { useState, useEffect, useCallback } from "react"
+import {
+  Drawer,
+  Button,
+  Badge,
+  Card,
+  StatCard,
+  Spinner,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../ui"
+import { RateLimitNotice } from "../common/RateLimitNotice"
+import { getCustomer, deleteCustomer } from "../../data/customers"
+import { formatINR } from "../../utils/formatters"
+import { useToast } from "../common/ToastContext"
+import { useConfirm } from "../common/useConfirm"
+import {
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  IndianRupee,
+  Copy,
+  Check,
+  Edit2,
+  Trash2,
+  PlusCircle,
+  FileText,
+  AlertCircle,
+  MessageSquare,
+} from "lucide-react"
+
+const LANGUAGE_LABELS = {
+  en: "English",
+  hi: "Hindi",
+  gu: "Gujarati",
+}
+
+const TAG_VARIANTS = {
+  vip: "primary",
+  "group-leader": "success",
+  agent: "info",
+  corporate: "accent",
+  "pilgrim-group": "neutral",
+}
+
+export default function CustomerDrawer({
+  isOpen,
+  onClose,
+  customerId,
+  onEdit,
+  onNewBooking,
+  onDeleted,
+}) {
+  const toast = useToast()
+  const confirm = useConfirm()
+
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [isRateLimited, setIsRateLimited] = useState(false)
+  const [copiedPhone, setCopiedPhone] = useState(false)
+
+  const fetchCustomerDetails = useCallback(async () => {
+    if (!customerId) return
+    setLoading(true)
+    setError(null)
+    setIsRateLimited(false)
+    try {
+      const res = await getCustomer(customerId)
+      setData(res)
+    } catch (err) {
+      console.error("Failed to load customer details:", err)
+      if (err.status === 429) {
+        setIsRateLimited(true)
+      } else {
+        setError(err.message || "Failed to load customer details")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [customerId])
+
+  useEffect(() => {
+    if (isOpen && customerId) {
+      fetchCustomerDetails()
+    } else {
+      setData(null)
+      setError(null)
+      setIsRateLimited(false)
+    }
+  }, [isOpen, customerId, fetchCustomerDetails])
+
+  const handleCopyPhone = (phone) => {
+    if (!phone) return
+    navigator.clipboard?.writeText(phone)
+    setCopiedPhone(true)
+    toast.success(`Copied ${phone} to clipboard`)
+    setTimeout(() => setCopiedPhone(false), 2000)
+  }
+
+  const handleDelete = async () => {
+    if (!data?.customer) return
+    const cust = data.customer
+    const confirmed = await confirm({
+      title: "Delete Customer",
+      message: `Are you sure you want to delete ${cust.name}? Historical booking records will not be deleted, but this customer profile will be archived.`,
+      confirmText: "Delete Customer",
+      cancelText: "Cancel",
+      variant: "danger",
+    })
+
+    if (!confirmed) return
+
+    try {
+      await deleteCustomer(cust.id || cust._id)
+      toast.success(`Customer "${cust.name}" archived successfully`)
+      if (onDeleted) onDeleted(cust.id || cust._id)
+      onClose()
+    } catch (err) {
+      toast.error(err.message || "Failed to delete customer")
+    }
+  }
+
+  const customer = data?.customer
+  const summary = data?.summary
+  const bookings = data?.bookings || []
+
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title={customer?.name || "Customer Details"}
+      description={customer ? `Customer ID: ${customer.id || customer._id}` : "Loading traveler details..."}
+      size="lg"
+    >
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-20 space-y-3">
+          <Spinner size="lg" />
+          <p className="text-xs text-ink-muted">Loading customer history and metrics...</p>
+        </div>
+      )}
+
+      {isRateLimited && (
+        <RateLimitNotice
+          onRetry={fetchCustomerDetails}
+          title="Rate Limit Notice"
+          description="Too many requests. Please wait before refreshing customer details."
+        />
+      )}
+
+      {error && !isRateLimited && (
+        <div className="p-4 rounded-[var(--yh-radius-md)] bg-danger-soft text-danger border border-danger/30 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <h4 className="text-sm font-bold">Could not load customer</h4>
+          </div>
+          <p className="text-xs">{error}</p>
+          <Button variant="outline" size="sm" onClick={fetchCustomerDetails}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {!loading && customer && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-[var(--yh-radius-lg)] bg-surface-muted border border-border-subtle">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" size="md">
+                Language: {LANGUAGE_LABELS[customer.language] || customer.language}
+              </Badge>
+              {customer.tags?.map((t) => (
+                <Badge key={t} variant={TAG_VARIANTS[t] || "neutral"} size="md">
+                  {t}
+                </Badge>
+              ))}
+              {summary?.isRepeat && (
+                <Badge variant="success" size="md">
+                  Repeat Customer
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="accent"
+                size="sm"
+                leftIcon={<PlusCircle className="w-4 h-4" />}
+                onClick={() => {
+                  if (onNewBooking) onNewBooking(customer)
+                  onClose()
+                }}
+              >
+                New Booking
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Edit2 className="w-4 h-4" />}
+                onClick={() => {
+                  if (onEdit) onEdit(customer)
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger hover:bg-danger-soft"
+                leftIcon={<Trash2 className="w-4 h-4" />}
+                onClick={handleDelete}
+                aria-label={`Delete customer ${customer.name}`}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+
+          {/* Contact Details Card */}
+          <Card elevation="sm" padding="md" className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+              Contact & Profile Information
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center justify-between p-2.5 rounded-[var(--yh-radius-md)] bg-surface-subtle">
+                <div className="flex items-center gap-2 text-ink">
+                  <Phone className="w-4 h-4 text-brand" />
+                  <span className="font-semibold">{customer.phone}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyPhone(customer.phone)}
+                  aria-label="Copy mobile number"
+                  className="p-1 rounded text-ink-muted hover:text-ink hover:bg-surface-hover cursor-pointer transition-colors"
+                >
+                  {copiedPhone ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+
+              {customer.email ? (
+                <div className="flex items-center gap-2 p-2.5 rounded-[var(--yh-radius-md)] bg-surface-subtle text-ink">
+                  <Mail className="w-4 h-4 text-brand" />
+                  <span className="truncate">{customer.email}</span>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-surface-subtle text-xs text-ink-muted">
+                  No email provided
+                </div>
+              )}
+
+              {customer.city && (
+                <div className="flex items-center gap-2 p-2.5 rounded-[var(--yh-radius-md)] bg-surface-subtle text-ink">
+                  <MapPin className="w-4 h-4 text-brand" />
+                  <span>{customer.city}</span>
+                </div>
+              )}
+
+              {customer.gstin && (
+                <div className="flex items-center gap-2 p-2.5 rounded-[var(--yh-radius-md)] bg-surface-subtle text-ink font-tabular">
+                  <FileText className="w-4 h-4 text-brand" />
+                  <span>GSTIN: {customer.gstin}</span>
+                </div>
+              )}
+            </div>
+
+            {customer.address && (
+              <p className="text-xs text-ink-secondary pt-1">
+                <strong className="text-ink">Address:</strong> {customer.address}
+              </p>
+            )}
+
+            {customer.aliases && customer.aliases.length > 0 && (
+              <div className="pt-2 border-t border-border-subtle flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-ink-muted mr-1">Known Aliases:</span>
+                {customer.aliases.map((alias, idx) => (
+                  <Badge key={idx} variant="outline" size="sm">
+                    {alias}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 border-t border-border-subtle text-xs">
+              <span className="text-ink-muted flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" />
+                WhatsApp Reminders:
+              </span>
+              <span className={customer.whatsappOptOut ? "text-danger font-semibold" : "text-success font-semibold"}>
+                {customer.whatsappOptOut ? "Opted Out" : "Enabled"}
+              </span>
+            </div>
+
+            {customer.notes && (
+              <div className="p-3 rounded-[var(--yh-radius-md)] bg-surface-muted text-xs text-ink space-y-1">
+                <span className="font-bold text-ink-muted block uppercase tracking-wider text-[10px]">Operator Notes:</span>
+                <p className="whitespace-pre-wrap">{customer.notes}</p>
+              </div>
+            )}
+          </Card>
+
+          {/* Authoritative Financial & Booking Metrics */}
+          {summary && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard
+                icon={<IndianRupee className="w-4 h-4" />}
+                label="Booked Revenue"
+                value={formatINR(summary.totalBookedRevenue)}
+                description={`${summary.totalBookings} active trips`}
+                variant="primary"
+              />
+              <StatCard
+                icon={<Calendar className="w-4 h-4" />}
+                label="Outstanding"
+                value={formatINR(summary.totalOutstanding)}
+                description={summary.totalOutstanding > 0 ? "Payment due" : "Paid in full"}
+                variant={summary.totalOutstanding > 0 ? "warning" : "success"}
+              />
+              <StatCard
+                icon={<IndianRupee className="w-4 h-4" />}
+                label="Collected"
+                value={formatINR(summary.totalCollected)}
+                description="Cash / UPI received"
+                variant="neutral"
+              />
+              <StatCard
+                icon={<Calendar className="w-4 h-4" />}
+                label="Passengers"
+                value={summary.totalPassengers}
+                description="Berths booked"
+                variant="neutral"
+              />
+            </div>
+          )}
+
+          {/* Booking History Table */}
+          <Card elevation="sm" padding="md" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                Booking History ({bookings.length})
+              </h3>
+              {summary?.destinations?.length > 0 && (
+                <span className="text-xs text-ink-muted">
+                  Routes: {summary.destinations.join(", ")}
+                </span>
+              )}
+            </div>
+
+            {bookings.length === 0 ? (
+              <div className="py-8 text-center text-xs text-ink-muted">
+                No bookings recorded for this customer yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table ariaLabel="Customer booking history">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Tour Name</TableHead>
+                      <TableHead>Journey Date</TableHead>
+                      <TableHead align="right">Amount</TableHead>
+                      <TableHead align="right">Paid</TableHead>
+                      <TableHead align="right">Balance</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bookings.map((b) => {
+                      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+                      const isCancelled = b.status === "Cancelled"
+                      return (
+                        <TableRow key={b.id || b._id}>
+                          <TableCell className="font-semibold text-ink font-tabular">
+                            #{b.invoiceNo}
+                          </TableCell>
+                          <TableCell className="text-ink font-medium">
+                            {b.tourName}
+                          </TableCell>
+                          <TableCell className="text-xs text-ink-muted font-tabular">
+                            {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}
+                          </TableCell>
+                          <TableCell align="right" className="font-tabular">
+                            {formatINR(b.totalAmount)}
+                          </TableCell>
+                          <TableCell align="right" className="font-tabular text-success">
+                            {formatINR(b.advanceReceived)}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            className={`font-tabular font-bold ${
+                              !isCancelled && balance > 0 ? "text-warning" : "text-ink-muted"
+                            }`}
+                          >
+                            {isCancelled ? "₹0.00" : formatINR(balance)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
+                              {b.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+    </Drawer>
+  )
+}

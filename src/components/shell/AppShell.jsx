@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import {
   LayoutDashboard,
   Users,
+  Contact,
   MapPin,
   Bus,
   TrendingUp,
@@ -31,6 +32,7 @@ import { ThemeSwitcher } from "./ThemeSwitcher"
 const DRAWER_ICONS = {
   LayoutDashboard,
   Users,
+  Contact,
   MapPin,
   Bus,
   TrendingUp,

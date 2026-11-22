@@ -85,10 +85,12 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**293 unit tests + 34 component tests across 79 total suites**):
+### Test Coverage Summary (**313 unit tests + 42 component tests across 91 total suites**):
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
-   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
-1. **Expense Management & Backend Validation** (`tests/expenses-backend.test.js`):
+   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
+1. **Customer Master, Validation & Integration** (`tests/customers-pure.test.js`, `tests/customers-backend.test.js`, `tests/integration-customers.test.js`):
+   - Pure mobile normalization (`normalizeIndianMobile` stripping prefix/symbols), candidate display name resolution, zero-divergence financial summary matching `shared/profitLoss.js` integer paise rules, strict Zod schemas, duplicate mobile prevention (409 Conflict), tenant isolation, soft delete, and live Express integration harness.
+2. **Expense Management & Backend Validation** (`tests/expenses-backend.test.js`):
    - Pure helpers (13 categories trilingual registry, integer paise sum without drift, category & monthly FY aggregation, in-memory filters), strict Zod schemas (`createExpenseSchema`, `updateExpenseSchema`, `listExpenseQuerySchema`), CSV formula injection protection, tenant isolation, soft delete, and audit logging.
 1. **Invoice Studio, Presets & Document Renderer** (`tests/invoice-studio.test.js`):
    - Layout architecture validation, 6 built-in presets (`classic-bus`, `modern-minimal`, `gujarat-heritage`, `pilgrim-simple`, `thermal-compact`, `corporate-blue`), relative luminance and WCAG 2.1 AA contrast ratio calculator (4.5:1 threshold), NPCI UPI URI generator, pure zero-Aadhaar document HTML renderer, CSP meta tag enforcement, multi-copy sheets with page breaks, thermal receipt styling, automatic VOID watermark, and binary magic-byte validation (PNG, JPEG, WebP allowed, SVG rejected).
@@ -196,6 +198,15 @@ npm run ui:smoke
 - **Interactive Tour Analytics Tab**: Switch between **Analytics Overview** and **Profit & Loss** with Recharts bar chart comparisons, an accessible data-table view toggle, and a detailed performance table.
 - **Zero-PII Financial Ledger Drawer**: Inspect invoice numbers, Pax counts, and linked trip expenses in a slide-out drawer with guaranteed exclusion of customer PII (names, phone numbers, Aadhaar).
 - **Coach Departure Financial Badges**: Compact "Trip Financials" badges on each Journey coach card with 1-click "Add trip expense" modal prefilled with trip context.
+
+### 7. Customer Master & CRM Directory (Part 5a)
+- **Unified Customer Directory**: Centralized management of pilgrims and travelers with 10-digit Indian mobile numbers as natural keys per operator tenant.
+- **Non-Blocking Auto-Linking & Inline Lookup**: Automatic linking on booking creation and edit via non-blocking try/catch helper `upsertCustomerForBooking`; debounced phone lookup in BookingForm offering 1-click contact details prefill.
+- **Authoritative Financial Lifetime Metrics**: Slide-out Customer Detail Drawer displaying lifetime Booked Revenue, Collected, Outstanding Balance, and Passenger counts strictly matching P&L integer paise accounting rules with zero divergence.
+- **Booking History & Quick Actions**: View complete past trips table with invoices, journey dates, amounts, and payment statuses; copy mobile to clipboard; launch new prefilled booking with one click.
+- **Safe Backfill CLI Utility**: `node scripts/backfill-customers.mjs` safely scans historical bookings lacking customer linkage, defaulting to `--dry-run` and requiring `--apply` to persist changes, with strictly zero raw PII logged to the terminal.
+- **Security & Privacy Enforcement**: Compound partial unique index `{ userId: 1, phone: 1 }` allows re-registering soft-deleted numbers; Aadhaar numbers are never stored in the customer master and never exposed in customer API responses.
+
 
 ---
 
