@@ -135,19 +135,6 @@ export default function TourAnalytics({ bookings = [], tours = [], user = null }
     return ["all", ...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
   }, [bookings])
 
-  const analyticsTabItems = [
-    {
-      id: "overview",
-      label: "Analytics Overview",
-      icon: <BarChart2 className="w-4 h-4" />,
-    },
-    {
-      id: "pnl",
-      label: "Profit & Loss",
-      icon: <TrendingUp className="w-4 h-4" />,
-    },
-  ]
-
   // Custom tooltip styling using CSS custom properties for dark/light theme compatibility
   const tooltipContentStyle = {
     backgroundColor: "var(--yh-surface)",
@@ -159,29 +146,20 @@ export default function TourAnalytics({ bookings = [], tours = [], user = null }
     fontSize: "12px",
   }
 
-  return (
-    <div className="space-y-6">
-      <Tabs
-        items={analyticsTabItems}
-        value={activeAnalyticsTab}
-        onChange={setActiveAnalyticsTab}
-        ariaLabel="Analytics View Options"
-      />
-
-      {activeAnalyticsTab === "pnl" && (
-        <ProfitLossTab bookings={bookings} tours={tours} user={user} />
-      )}
-
-      {activeAnalyticsTab === "overview" && bookings.length === 0 && (
-        <EmptyState
-          icon={<TrendingUp className="w-8 h-8 text-(--yh-text-muted)" />}
-          title="No analytics data available"
-          description="Booking records, passenger trends, and revenue metrics will automatically appear here once bookings are recorded."
-        />
-      )}
-
-      {activeAnalyticsTab === "overview" && bookings.length > 0 && (
-        <div className="space-y-6">
+  const analyticsTabItems = [
+    {
+      id: "overview",
+      label: "Analytics Overview",
+      icon: <BarChart2 className="w-4 h-4" />,
+      content:
+        bookings.length === 0 ? (
+          <EmptyState
+            icon={<TrendingUp className="w-8 h-8 text-(--yh-text-muted)" />}
+            title="No analytics data available"
+            description="Booking records, passenger trends, and revenue metrics will automatically appear here once bookings are recorded."
+          />
+        ) : (
+          <div className="space-y-6">
           {/* Top Filter Controls */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <p className="text-xs text-(--yh-text-muted) font-medium">
@@ -539,8 +517,25 @@ export default function TourAnalytics({ bookings = [], tours = [], user = null }
           )}
         </div>
       </Card>
-        </div>
-      )}
+          </div>
+        ),
+    },
+    {
+      id: "pnl",
+      label: "Profit & Loss",
+      icon: <TrendingUp className="w-4 h-4" />,
+      content: <ProfitLossTab bookings={bookings} tours={tours} user={user} />,
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <Tabs
+        items={analyticsTabItems}
+        value={activeAnalyticsTab}
+        onChange={setActiveAnalyticsTab}
+        ariaLabel="Analytics View Options"
+      />
     </div>
   )
 }

@@ -70,7 +70,8 @@ export function Tabs({
         {items.map((item) => {
           const isSelected = item.id === activeId
           const tabId = `${baseId}-tab-${item.id}`
-          const panelId = `${baseId}-panel-${item.id}`
+          const panelId = item.panelId || `${baseId}-panel-${item.id}`
+          const hasPanel = isSelected && (item.content !== undefined || item.panelId !== undefined)
 
           return (
             <button
@@ -82,7 +83,7 @@ export function Tabs({
               type="button"
               role="tab"
               aria-selected={isSelected}
-              aria-controls={panelId}
+              aria-controls={hasPanel ? panelId : undefined}
               tabIndex={isSelected ? 0 : -1}
               disabled={item.disabled}
               onClick={() => !item.disabled && selectTab(item.id)}

@@ -103,8 +103,8 @@ describe("Expenses Screen (ExpenseTracker Component)", () => {
     expect(screen.getAllByText("Vehicle Maintenance & Repairs").length).toBeGreaterThan(0)
 
     // Verify Action buttons (Export CSV, Add Expense)
-    expect(screen.getByLabelText("Export filtered expenses to CSV")).toBeDefined()
-    expect(screen.getByLabelText("Add new expense")).toBeDefined()
+    expect(screen.getByLabelText("Export CSV")).toBeDefined()
+    expect(screen.getByLabelText("Add Expense")).toBeDefined()
 
     expect(container).toBeDefined()
     expect(consoleErrorSpy).not.toHaveBeenCalled()
@@ -200,11 +200,11 @@ describe("Expenses Screen (ExpenseTracker Component)", () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Add new expense")).toBeDefined()
+      expect(screen.getByLabelText("Add Expense")).toBeDefined()
     })
 
     // Click Add Expense button
-    fireEvent.click(screen.getByLabelText("Add new expense"))
+    fireEvent.click(screen.getByLabelText("Add Expense"))
 
     // Modal opens
     expect(screen.getByText("Record a coach operation cost, fuel refill, bhatta, or supplier payment.")).toBeDefined()

@@ -475,7 +475,7 @@ async function run() {
         const tabsToCrawl = []
 
         if (tabCount === 0) {
-          tabsToCrawl.push({ id: "main", label: "Main", locator: null })
+          tabsToCrawl.push({ id: "main", label: "Main", locator: null, disabled: false })
         } else {
           for (let i = 0; i < tabCount; i++) {
             const tabLoc = tabLocators.nth(i)
@@ -486,7 +486,10 @@ async function run() {
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, "-")
                 .replace(/^-|-$/g, "") || `tab-${i + 1}`
-            tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc })
+            const isDisabled = await tabLoc.evaluate((el) => {
+              return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true"
+            }).catch(() => false)
+            tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc, disabled: isDisabled })
           }
         }
 
@@ -498,11 +501,15 @@ async function run() {
           if (isInterrupted) break
 
           if (t.locator) {
+            if (t.disabled) {
+              console.log(`[ui:smoke] Skipped disabled tab "${t.label}"`)
+              continue
+            }
             try {
-              await t.locator.click({ timeout: 3000 })
+              await t.locator.click({ timeout: 5000 })
               await page.waitForTimeout(250)
             } catch (clickErr) {
-              console.warn(`[ui:smoke] Could not click tab "${t.label}": ${clickErr.message}`)
+              console.warn(`[ui:smoke] Could not click tab "${t.label}": ${clickErr.message.split("\n")[0]}`)
             }
           }
 

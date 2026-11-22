@@ -491,12 +491,22 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
         <div role="tablist" aria-label="Journey view mode" className="flex bg-surface-muted p-1 rounded-[var(--yh-radius-lg)] border border-border-subtle">
           <button
+            id="journey-tab-departures"
             type="button"
             role="tab"
             aria-selected={viewMode === "departures"}
+            aria-controls={viewMode === "departures" ? "journey-panel-departures" : undefined}
+            tabIndex={viewMode === "departures" ? 0 : -1}
             onClick={() => {
               setViewMode("departures")
               setSelectedDepartureKey(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault()
+                setViewMode("manifest")
+                document.getElementById("journey-tab-manifest")?.focus()
+              }
             }}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-10",
@@ -510,10 +520,20 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
             Coaches & Departures ({departures.length})
           </button>
           <button
+            id="journey-tab-manifest"
             type="button"
             role="tab"
             aria-selected={viewMode === "manifest"}
+            aria-controls={viewMode === "manifest" ? "journey-panel-manifest" : undefined}
+            tabIndex={viewMode === "manifest" ? 0 : -1}
             onClick={() => setViewMode("manifest")}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault()
+                setViewMode("departures")
+                document.getElementById("journey-tab-departures")?.focus()
+              }
+            }}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-10",
               viewMode === "manifest"
@@ -536,7 +556,6 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
             onClick={() => setShowExportOptions(!showExportOptions)}
             aria-expanded={showExportOptions}
             aria-haspopup="true"
-            aria-label="Print Manifest"
             leftIcon={<Printer size={14} />}
             rightIcon={<ChevronDown size={14} className="opacity-70" />}
             className="whitespace-nowrap shrink-0 inline-flex items-center"
@@ -651,7 +670,13 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "departures" && (
         <PanelErrorBoundary resetKey={viewMode} title="Coaches & Departures Error">
-          <div className="space-y-6">
+          <div
+            id="journey-panel-departures"
+            role="tabpanel"
+            aria-labelledby="journey-tab-departures"
+            tabIndex={0}
+            className="space-y-6 focus:outline-none"
+          >
           {filteredDepartures.length === 0 ? (
             <Card elevation="sm" padding="lg" className="text-center py-12">
               <Bus size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
@@ -830,7 +855,13 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
       {/* ────────────────────────────────────────────────────────── */}
       {viewMode === "manifest" && (
         <PanelErrorBoundary resetKey={viewMode} title="Boarding Manifest Error">
-          <div className="space-y-6">
+          <div
+            id="journey-panel-manifest"
+            role="tabpanel"
+            aria-labelledby="journey-tab-manifest"
+            tabIndex={0}
+            className="space-y-6 focus:outline-none"
+          >
           {/* Active Departure Banner (if scoped) */}
           {activeDepartureObj && (
             <Card elevation="sm" padding="md" className="bg-brand-soft/50 border border-brand/20">

@@ -708,7 +708,7 @@ export default function ExpenseTracker({
                 onClick={handleExportCSV}
                 disabled={loading || filteredList.length === 0}
                 className="gap-2"
-                aria-label="Export filtered expenses to CSV"
+                aria-label="Export CSV"
               >
                 <Download className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Export CSV</span>
@@ -718,7 +718,7 @@ export default function ExpenseTracker({
                 size="md"
                 onClick={handleOpenAddModal}
                 className="gap-2"
-                aria-label="Add new expense"
+                aria-label="Add Expense"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 <span>Add Expense</span>
