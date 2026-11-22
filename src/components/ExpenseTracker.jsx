@@ -31,6 +31,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts"
 import { useToast } from "./common/useToast"
 import { PanelErrorBoundary } from "./common/PanelErrorBoundary"
+import { RateLimitNotice } from "./common/RateLimitNotice"
 import {
   Button,
   IconButton,
@@ -205,6 +206,7 @@ export default function ExpenseTracker({
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [apiError, setApiError] = useState(null)
+  const [rateLimitState, setRateLimitState] = useState(null) // { retryAfter: number } | null
 
   // Expenses data
   const [expenseList, setExpenseList] = useState(() => (Array.isArray(expenses) ? expenses.map(normalizeIncomingExpense).filter(Boolean) : []))
@@ -309,9 +311,20 @@ export default function ExpenseTracker({
       const normalizedList = (listResult?.expenses || []).map(normalizeIncomingExpense).filter(Boolean)
       setExpenseList(normalizedList)
       setSummaryData(summaryResult)
+      setRateLimitState(null)
     } catch (err) {
       console.error("Error loading expenses:", err)
       setApiError(err.message || "Failed to load expenses")
+      if (
+        err.status === 429 ||
+        err.message?.includes("429") ||
+        err.message?.toLowerCase().includes("too many requests") ||
+        err.message?.toLowerCase().includes("rate limit")
+      ) {
+        setRateLimitState({
+          retryAfter: err.retryAfter || 60,
+        })
+      }
       // If expenses prop was passed, use it as fallback
       if (Array.isArray(expenses) && expenses.length > 0) {
         setExpenseList(expenses.map(normalizeIncomingExpense).filter(Boolean))
@@ -670,6 +683,19 @@ export default function ExpenseTracker({
   return (
     <PanelErrorBoundary resetKey="expenses-screen" title="Expense Management Error">
       <div className="space-y-6 pb-12 animate-in fade-in duration-300">
+        {/* Calm Inline 429 Rate Limit Alert */}
+        {rateLimitState && (
+          <RateLimitNotice
+            retryAfterSeconds={rateLimitState.retryAfter}
+            onRetry={() => {
+              setRateLimitState(null)
+              fetchExpenses(true)
+            }}
+            title="Expenses Rate Limit Active"
+            message="Too many expense requests. Please wait for the cooldown before retrying."
+          />
+        )}
+
         {/* Top Header */}
         <PageHeader
           title="Expense Management"

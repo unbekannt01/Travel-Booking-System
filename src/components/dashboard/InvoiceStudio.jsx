@@ -17,6 +17,7 @@ import {
   Eye,
 } from "lucide-react"
 import { useToast } from "../common/ToastContext"
+import { RateLimitNotice } from "../common/RateLimitNotice"
 import {
   Button,
   Select,
@@ -423,24 +424,33 @@ export default function InvoiceStudio({ user }) {
     [currentConfig, currentAssets]
   )
 
+  // Debounce live configuration changes by 200ms to prevent iframe churn
+  const [debouncedLiveConfig, setDebouncedLiveConfig] = useState(liveTemplateConfig)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedLiveConfig(liveTemplateConfig)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [liveTemplateConfig])
+
   // Render HTML for sandboxed iframe
   const previewHtml = useMemo(() => {
     return renderDocumentHtml({
       document: sampleDoc,
       booking: sampleBooking,
-      template: liveTemplateConfig,
+      template: debouncedLiveConfig,
       user,
       qrDataUrl,
       previewMode: true,
     })
-  }, [sampleDoc, sampleBooking, liveTemplateConfig, user, qrDataUrl])
+  }, [sampleDoc, sampleBooking, debouncedLiveConfig, user, qrDataUrl])
 
   // Test Print trigger
   const handlePrintTest = () => {
     const printHtml = renderDocumentHtml({
       document: sampleDoc,
       booking: sampleBooking,
-      template: liveTemplateConfig,
+      template: debouncedLiveConfig,
       user,
       qrDataUrl,
       previewMode: false,
@@ -474,6 +484,24 @@ export default function InvoiceStudio({ user }) {
   }
 
   if (loadError && templates.length === 0) {
+    const isRateLimited =
+      loadError.includes("429") ||
+      loadError.toLowerCase().includes("too many requests") ||
+      loadError.toLowerCase().includes("rate limit")
+
+    if (isRateLimited) {
+      return (
+        <div className="max-w-xl mx-auto my-12 p-4">
+          <RateLimitNotice
+            retryAfterSeconds={60}
+            onRetry={loadTemplatesAndSettings}
+            title="Invoice Studio Rate Limited"
+            message="Too many template requests were made. Please wait for the cooldown before retrying."
+          />
+        </div>
+      )
+    }
+
     return (
       <div className="max-w-xl mx-auto my-12 p-4">
         <Card elevation="sm" padding="lg" className="text-center space-y-4">

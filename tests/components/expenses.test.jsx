@@ -157,6 +157,27 @@ describe("Expenses Screen (ExpenseTracker Component)", () => {
     })
   })
 
+  it("renders calm inline RateLimitNotice when listExpenses encounters HTTP 429", async () => {
+    const error429 = new Error("Too many requests from this IP, please try again after 15 minutes")
+    error429.status = 429
+    error429.retryAfter = 60
+    vi.spyOn(expenseData, "listExpenses").mockRejectedValue(error429)
+    vi.spyOn(expenseData, "getExpenseSummary").mockRejectedValue(error429)
+
+    renderWithProviders(
+      <ExpenseTracker
+        bookings={mockBookings}
+        tours={mockTours}
+        user={mockUser}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText("Expenses Rate Limit Active")).toBeDefined()
+      expect(screen.getByRole("button", { name: /retry in/i })).toBeDefined()
+    })
+  })
+
   it("opens Add Expense modal and validates required fields", async () => {
     vi.spyOn(expenseData, "listExpenses").mockResolvedValue({
       expenses: mockExpensesList,

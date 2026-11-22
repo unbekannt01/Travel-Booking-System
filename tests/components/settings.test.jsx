@@ -91,4 +91,18 @@ describe("Settings Screen & Invoice Studio (SettingsPanel & InvoiceStudio)", () 
       expect(screen.getByText("Retry")).toBeDefined()
     })
   })
+
+  it("renders InvoiceStudio calm inline RateLimitNotice when loading encounters HTTP 429", async () => {
+    const error429 = new Error("Too many requests, please wait 60 seconds (status 429)")
+    error429.status = 429
+    vi.spyOn(docData, "listTemplates").mockRejectedValue(error429)
+    vi.spyOn(docData, "getDocumentSettings").mockRejectedValue(error429)
+
+    renderWithProviders(<InvoiceStudio user={mockUser} />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Invoice Studio Rate Limited")).toBeDefined()
+      expect(screen.getByRole("button", { name: /retry in/i })).toBeDefined()
+    })
+  })
 })

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import {
   TrendingUp,
   TrendingDown,
@@ -52,6 +52,7 @@ import {
   Spinner,
 } from "../ui/index"
 import { PanelErrorBoundary } from "../common/PanelErrorBoundary"
+import { RateLimitNotice } from "../common/RateLimitNotice"
 import { formatINR } from "../../utils/formatters"
 import { downloadCsv } from "../../utils/csv"
 import { calculateProfitLoss, toDateKey } from "../../../shared/profitLoss"
@@ -80,6 +81,12 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
   const [expenses, setExpenses] = useState([])
   const [loading, setLoading] = useState(false)
   const [apiReport, setApiReport] = useState(null)
+  const [rateLimitState, setRateLimitState] = useState(null) // { retryAfter: number } | null
+
+  // In-memory 60s cache and abort controller
+  const cacheRef = useRef(new Map())
+  const abortControllerRef = useRef(null)
+  const isInitialMount = useRef(true)
 
   // Compute active date boundaries
   const activeDates = useMemo(() => {
@@ -110,27 +117,64 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
     return { from: undefined, to: undefined }
   }, [dateRangeKey, customFrom, customTo])
 
-  // Fetch server P&L or expenses
-  const loadData = useCallback(async () => {
+  // Fetch server P&L or expenses with 60s cache and AbortController
+  const loadData = useCallback(async (force = false) => {
+    const cacheKey = `${activeDates.from || ""}|${activeDates.to || ""}|${selectedTour}|${groupBy}`
+
+    if (!force) {
+      const cached = cacheRef.current.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < 60000) {
+        setApiReport(cached.data)
+        setRateLimitState(null)
+        setLoading(false)
+        return
+      }
+    }
+
+    // Cancel in-flight requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setLoading(true)
     try {
-      // Attempt server authoritative report first
-      const pnlData = await getTourPnl({
-        from: activeDates.from,
-        to: activeDates.to,
-        tourName: selectedTour !== "all" ? selectedTour : undefined,
-        groupBy,
-      })
+      const pnlData = await getTourPnl(
+        {
+          from: activeDates.from,
+          to: activeDates.to,
+          tourName: selectedTour !== "all" ? selectedTour : undefined,
+          groupBy,
+        },
+        { signal: controller.signal }
+      )
 
       if (pnlData && pnlData.success && pnlData.summary) {
+        cacheRef.current.set(cacheKey, { data: pnlData, timestamp: Date.now() })
         setApiReport(pnlData)
+        setRateLimitState(null)
       } else {
         // Fallback to local expenses
         const expData = await listExpenses({ limit: 100 })
         setExpenses(expData.expenses || [])
         setApiReport(null)
+        setRateLimitState(null)
       }
-    } catch {
+    } catch (err) {
+      if (err.name === "AbortError") {
+        return
+      }
+      if (
+        err.status === 429 ||
+        err.message?.includes("429") ||
+        err.message?.toLowerCase().includes("too many requests") ||
+        err.message?.toLowerCase().includes("rate limit")
+      ) {
+        setRateLimitState({
+          retryAfter: err.retryAfter || 60,
+        })
+      }
       // Graceful fallback to client-side calculation
       try {
         const expData = await listExpenses({ limit: 100 })
@@ -144,8 +188,17 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
     }
   }, [activeDates, selectedTour, groupBy])
 
+  // Initial load runs immediately; subsequent filter changes debounce by 400ms
   useEffect(() => {
-    loadData()
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      loadData(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      loadData(false)
+    }, 400)
+    return () => clearTimeout(timer)
   }, [loadData])
 
   // Pure P&L report generation (uses API report if available, else shared client engine)
@@ -305,7 +358,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
             <Button
               size="sm"
               variant="ghost"
-              onClick={loadData}
+              onClick={() => loadData(true)}
               disabled={loading}
               icon={<RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />}
             >
@@ -313,6 +366,16 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
             </Button>
           </div>
         </div>
+
+        {/* Calm Inline 429 Rate Limit Alert */}
+        {rateLimitState && (
+          <RateLimitNotice
+            retryAfterSeconds={rateLimitState.retryAfter}
+            onRetry={() => loadData(true)}
+            title="Reports Rate Limit Active"
+            message="The analytics report rate limit was reached. Showing client-side calculation while waiting."
+          />
+        )}
 
         {/* Filter Bar */}
         <Card elevation="sm" padding="md" className="space-y-4">

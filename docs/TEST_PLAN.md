@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 68 test suites (290 tests), the Vitest component test safety net (`npm run test:ui`, 31 tests across 11 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 68 test suites (293 tests), the Vitest component test safety net (`npm run test:ui`, 34 tests across 11 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -237,7 +237,22 @@ npm run dev
 # (e.g. 'MyPass$123') to prevent PowerShell from expanding '$' as an empty variable.
 $env:UI_SMOKE_EMAIL="operator@yatrahub.local"
 $env:UI_SMOKE_PASSWORD='OperatorPassword123!'
+
+# Full smoke run across all screens, viewports, and themes:
 npm run ui:smoke
+
+# Fast smoke run (360px & 1440px, light theme only):
+npm run ui:smoke -- --quick
+
+# Target a single screen (e.g., profit-loss, settings, invoice-studio, expenses):
+npm run ui:smoke -- --only=profit-loss
+
+# Target specific viewports and skip axe-core checks for visual inspection:
+npm run ui:smoke -- --widths=360,1440 --themes=light --skip-axe
+
+# Custom per-step timeout (default is 20,000ms / 20s):
+$env:UI_SMOKE_STEP_TIMEOUT_MS="30000"
+npm run ui:smoke -- --quick
 ```
 
 ---
@@ -372,7 +387,7 @@ npm run ui:smoke
 
 ## 4. Current Testing Gaps & Roadmap
 
-With 290 unit & regression tests passing across 68 TAP test suites, 31 component tests passing across 11 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 293 unit & regression tests passing across 68 TAP test suites, 34 component tests passing across 11 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.

@@ -499,9 +499,33 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - **Dual Margin Accounting**:
     - *Accrual Basis (Booked)*: `bookedRevenue - expensesTotal`. Revenue recognized when bookings are confirmed; cancelled bookings excluded from passenger counts and ticket sales.
     - *Cash Basis*: `collectedRevenue - paidExpenses`. Reflects actual liquid cash collected in advance/balance minus expenses paid out.
-  - **Cancellation Financial Treatment**:
-    - Cancelled bookings (`status === "Cancelled"` or `"cancelled"`) contribute 0 to `bookedRevenue` and 0 to `passengers`.
-    - Advance received on cancelled bookings is treated as retained cancellation fee (`cancellationFeesRetained`), accounted toward business revenue.
+  - **Cancellation Financial Treatment & Payment Ledger Resolution (Part 4c)**:
+    - Cancelled bookings (`status === "Cancelled"` or `"cancelled"`) contribute `0` to `bookedRevenue`, `0` to `passengers`, and `0` to `outstanding` (the customer has no remaining balance due).
+    - Source of truth for retained cancellation fees is `calculateCancellationRefund({ totalPaid, cancellationCharge })` capped at `totalPaid`.
+    - Cash collected on a cancelled booking is strictly the net cash retained by the operator (`totalPaid - refundAmount = cancellationFeesRetained`). The refunded portion is returned to the traveler and never counted as operator revenue or cash collected.
+    - When `b.payments` contains non-void records, `computeLedgerTotals(b.payments)` serves as the authoritative payment source of truth, taking precedence over scalar `advanceReceived`.
+    - **Outstanding Dues Formula**: `outstanding` is calculated strictly across active (non-cancelled) bookings as `sum(Math.max(0, b.totalAmount - paid))`. Cancellation fees from cancelled bookings are never subtracted from active passenger dues.
+    - **Worked P&L Example**:
+      - Booking A (Cancelled): Total ₹10,000, advance paid ₹4,000, cancelled with ₹1,000 cancellation fee and ₹3,000 customer refund.
+        - `bookedRevenue`: ₹0
+        - `collected`: ₹1,000 (net cash retained)
+        - `cancellationFeesRetained`: ₹1,000
+        - `refundsPaid`: ₹3,000
+        - `outstanding`: ₹0
+        - `passengers`: 0
+      - Booking B (Active, same departure): Total ₹20,000, payments ₹5,000 + ₹3,000 = ₹8,000 advance received.
+        - `bookedRevenue`: ₹20,000
+        - `collected`: ₹8,000
+        - `outstanding`: ₹12,000 (₹20,000 - ₹8,000)
+      - Direct Departure Expenses: Fuel ₹6,000 (paid) + Toll ₹2,000 (pending) = ₹8,000 total.
+      - **Departure Metrics**:
+        - `bookedRevenue`: ₹20,000
+        - `collected`: ₹9,000 (₹8,000 from active + ₹1,000 retained fee)
+        - `outstanding`: ₹12,000
+        - `cancellationFeesRetained`: ₹1,000
+        - `expensesTotal`: ₹8,000 (paid ₹6,000, pending ₹2,000)
+        - `profitBooked`: (₹20,000 + ₹1,000) - ₹8,000 = **₹13,000**
+        - `profitCash`: ₹9,000 - ₹6,000 = **₹3,000**
   - **Unit Economics & Break-Even Metrics**:
     - Average Ticket Price: `bookedRevenue / passengers`.
     - Cost Per Passenger: `expensesTotal / passengers`.

@@ -179,7 +179,7 @@ describe("Shared Profit & Loss Engine (shared/profitLoss.js)", () => {
     assert.equal(report.summary.collected, 27000.5)
 
     // Outstanding = 37500.50 - 25000 (collected non-cancelled) = 12500
-    assert.equal(report.summary.outstanding, 10500)
+    assert.equal(report.summary.outstanding, 12500)
 
     // Cancellation fees retained = 2000
     assert.equal(report.summary.cancellationFeesRetained, 2000)
@@ -331,5 +331,213 @@ describe("Backend Tour P&L Validation & Sanitization (tourPnlQuerySchema)", () =
     const prevFy = getCurrentIndianFinancialYearRange(feb2026)
     assert.equal(prevFy.from, "2025-04-01")
     assert.equal(prevFy.to, "2026-03-31")
+  })
+})
+
+describe("P&L Cancellation Fee & Authoritative Accounting (Part 4c Task C Rules a-e)", () => {
+  it("verifies fixture cases (a)-(c): cancelled booking, multi-payment active booking, and departure profit", () => {
+    // (a) Total 10k, advance 4k, cancelled with fee 1k, refund 3k
+    const bookingA = {
+      _id: "bk-a",
+      tourName: "Kashi Yatra",
+      journeyDate: "2026-06-10",
+      busType: "2x1 Sleeper Luxury",
+      totalAmount: 10000,
+      advanceReceived: 4000,
+      cancellationCharge: 1000,
+      refundAmount: 3000,
+      status: "Cancelled",
+      passengers: [{ name: "Cancelled Pax" }],
+    }
+
+    // Verify booking A standalone
+    const reportA = calculateProfitLoss({ bookings: [bookingA], expenses: [] })
+    assert.equal(reportA.summary.bookedRevenue, 0, "(a) Booked revenue must be 0 for cancelled booking")
+    assert.equal(reportA.summary.collected, 1000, "(a) Cash collected net of refunds must equal retained fee 1,000")
+    assert.equal(reportA.summary.cancellationFeesRetained, 1000, "(a) Fee retained is 1,000")
+    assert.equal(reportA.summary.refundsPaid, 3000, "(a) Refunds paid is 3,000")
+    assert.equal(reportA.summary.outstanding, 0, "(a) Cancelled booking has 0 outstanding balance")
+    assert.equal(reportA.summary.passengers, 0, "(a) Cancelled passengers do not count")
+
+    // (b) Same tour active booking total 20k with payments array [5k, 3k]
+    const bookingB = {
+      _id: "bk-b",
+      tourName: "Kashi Yatra",
+      journeyDate: "2026-06-10",
+      busType: "2x1 Sleeper Luxury",
+      totalAmount: 20000,
+      advanceReceived: 0, // Should be overridden by payments ledger
+      payments: [
+        { amount: 5000, type: "advance", isVoid: false },
+        { amount: 3000, type: "installment", isVoid: false },
+        { amount: 9999, type: "advance", isVoid: true }, // Void payment must be ignored
+      ],
+      status: "Confirmed",
+      passengers: [{ name: "P1" }, { name: "P2" }],
+    }
+
+    // (c) Direct expenses 6k paid + 2k pending
+    const expensesC = [
+      {
+        _id: "exp-c1",
+        date: "2026-06-09",
+        amount: 6000,
+        category: "fuel",
+        departureKey: "Kashi Yatra___2026-06-10___2x1 Sleeper Luxury",
+        status: "paid",
+      },
+      {
+        _id: "exp-c2",
+        date: "2026-06-10",
+        amount: 2000,
+        category: "toll",
+        departureKey: "Kashi Yatra___2026-06-10___2x1 Sleeper Luxury",
+        status: "pending",
+      },
+    ]
+
+    const reportCombined = calculateProfitLoss({
+      bookings: [bookingA, bookingB],
+      expenses: expensesC,
+    })
+
+    const dep = reportCombined.departures[0]
+    assert.ok(dep, "Departure must exist")
+    assert.equal(dep.bookedRevenue, 20000, "Booked revenue is 20,000 (from booking B)")
+    assert.equal(dep.collected, 9000, "Collected cash is 8,000 (B) + 1,000 (A retained fee) = 9,000")
+    assert.equal(dep.outstanding, 12000, "Outstanding is 20,000 - 8,000 = 12,000 (B only)")
+    assert.equal(dep.cancellationFeesRetained, 1000, "Cancellation fee retained is 1,000")
+    assert.equal(dep.refundsPaid, 3000, "Refunds paid is 3,000")
+    assert.equal(dep.expensesPaid, 6000, "Expenses paid is 6,000")
+    assert.equal(dep.expensesPending, 2000, "Expenses pending is 2,000")
+    assert.equal(dep.expensesTotal, 8000, "Expenses total is 8,000")
+
+    // profitBooked = 20,000 + 1,000 - 8,000 = 13,000
+    assert.equal(dep.profitBooked, 13000, "profitBooked = 20k + 1k - 8k = 13,000")
+    // profitCash = (8,000 + 1,000) - 6,000 = 3,000
+    assert.equal(dep.profitCash, 3000, "profitCash = (8k + 1k) - 6k = 3,000")
+  })
+
+  it("verifies fixture case (d): attributes legacy tourRef rows to tour-level unallocated expenses", () => {
+    const booking = {
+      _id: "bk-d",
+      tourName: "Rameshwaram Yatra",
+      journeyDate: "2026-07-01",
+      busType: "2x1 Sleeper Luxury",
+      totalAmount: 30000,
+      advanceReceived: 30000,
+      status: "Confirmed",
+      passengers: [{ name: "P1" }, { name: "P2" }, { name: "P3" }],
+    }
+
+    const expenses = [
+      // Departure specific
+      {
+        _id: "exp-d1",
+        date: "2026-07-01",
+        amount: 10000,
+        category: "fuel",
+        departureKey: "Rameshwaram Yatra___2026-07-01___2x1 Sleeper Luxury",
+        status: "paid",
+      },
+      // Legacy tourRef unallocated expense
+      {
+        _id: "exp-d2",
+        date: "2026-06-25",
+        amount: 4000,
+        category: "advertising",
+        tourRef: "Rameshwaram Yatra",
+        status: "paid",
+      },
+    ]
+
+    const report = calculateProfitLoss({ bookings: [booking], expenses })
+    const tour = report.tours[0]
+    assert.equal(tour.tourName, "Rameshwaram Yatra")
+    assert.equal(tour.unallocatedExpenses.length, 1)
+    assert.equal(tour.unallocatedExpenses[0].category, "advertising")
+    assert.equal(tour.expensesTotal, 14000, "Total tour expenses include unallocated tourRef (10k + 4k = 14k)")
+    assert.equal(tour.profitBooked, 16000, "Tour profitBooked = 30k - 14k = 16k")
+    assert.equal(tour.profitCash, 16000, "Tour profitCash = 30k - 14k = 16k")
+  })
+
+  it("verifies fixture case (e): ensures zero double counting between tour view and overall business summary", () => {
+    const bookings = [
+      {
+        _id: "b-e1",
+        tourName: "Tour Alpha",
+        journeyDate: "2026-08-01",
+        totalAmount: 15000,
+        advanceReceived: 10000,
+        status: "Confirmed",
+        passengers: [{ name: "PA1" }],
+      },
+      {
+        _id: "b-e2",
+        tourName: "Tour Beta",
+        journeyDate: "2026-08-05",
+        totalAmount: 25000,
+        advanceReceived: 15000,
+        cancellationCharge: 3000,
+        refundAmount: 12000,
+        status: "Cancelled",
+        passengers: [{ name: "PB1" }],
+      },
+    ]
+
+    const expenses = [
+      {
+        _id: "exp-e1",
+        date: "2026-08-01",
+        amount: 5000,
+        category: "fuel",
+        departureKey: "Tour Alpha___2026-08-01___2x1 Sleeper Luxury",
+        status: "paid",
+      },
+      {
+        _id: "exp-e2",
+        date: "2026-08-05",
+        amount: 3000,
+        category: "bus_rent",
+        departureKey: "Tour Beta___2026-08-05___2x1 Sleeper Luxury",
+        status: "paid",
+      },
+      // General overhead (unlinked)
+      {
+        _id: "exp-e-gen",
+        date: "2026-08-10",
+        amount: 2500,
+        category: "office",
+        tourRef: null,
+        status: "paid",
+      },
+    ]
+
+    const report = calculateProfitLoss({ bookings, expenses })
+
+    // Verify sum of tour metrics matches totalTour metrics exactly
+    const sumTourBookedRevenue = report.tours.reduce((acc, t) => acc + t.bookedRevenue, 0)
+    const sumTourCollected = report.tours.reduce((acc, t) => acc + t.collected, 0)
+    const sumTourOutstanding = report.tours.reduce((acc, t) => acc + t.outstanding, 0)
+    const sumTourCancellationFees = report.tours.reduce((acc, t) => acc + t.cancellationFeesRetained, 0)
+    const sumTourExpensesTotal = report.tours.reduce((acc, t) => acc + t.expensesTotal, 0)
+
+    assert.equal(report.summary.bookedRevenue, sumTourBookedRevenue)
+    assert.equal(report.summary.collected, sumTourCollected)
+    assert.equal(report.summary.outstanding, sumTourOutstanding)
+    assert.equal(report.summary.cancellationFeesRetained, sumTourCancellationFees)
+    assert.equal(report.summary.tourExpensesTotal, sumTourExpensesTotal)
+
+    // General expenses must be strictly isolated from tour metrics
+    assert.equal(report.summary.generalExpensesTotal, 2500)
+    assert.equal(report.summary.allExpensesTotal, sumTourExpensesTotal + 2500)
+    assert.equal(
+      report.summary.overallBusinessProfitBooked,
+      round2(report.summary.tourProfitBooked - report.summary.generalExpensesTotal),
+    )
+    assert.equal(
+      report.summary.overallBusinessProfitCash,
+      round2(report.summary.tourProfitCash - report.summary.generalExpensesPaid),
+    )
   })
 })

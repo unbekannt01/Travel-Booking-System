@@ -12,11 +12,15 @@
  *    - Operating Margin %: (Booked Profit / Booked Revenue) * 100 (null if Booked Revenue == 0).
  *
  * 2. Cash Basis:
- *    - Collected: Actual cash/UPI/bank payments received minus refunds paid out.
+ *    - Collected: Actual cash/UPI/bank payments received net of refunds (active payments + retained cancellation fees).
  *    - Expenses Paid: Sum of active expenses with status === 'paid'.
  *    - Cash Profit: Collected - Expenses Paid.
  *
- * 3. Unit Economics:
+ * 3. Outstanding Balance:
+ *    - Outstanding: Uncollected balance due strictly across active (non-cancelled) bookings.
+ *    - Cancelled bookings have zero balance due.
+ *
+ * 4. Unit Economics:
  *    - Average Ticket Price: Booked Revenue / non-cancelled passengers (0 if 0 passengers).
  *    - Cost Per Passenger: Expenses Total / non-cancelled passengers (null if 0 passengers).
  *    - Break-Even Seats: Math.ceil(Expenses Total / Average Ticket Price) (null if Average Ticket Price == 0).
@@ -28,6 +32,7 @@
  */
 
 import { round2, sumAmounts } from "./expenses.js"
+import { calculateCancellationRefund, computeLedgerTotals } from "./businessLogic.js"
 
 /**
  * Checks if a booking is cancelled (case-insensitive for safety).
@@ -276,26 +281,73 @@ export function calculateProfitLoss({
 
     const isCancelled = isBookingCancelled(b)
     if (isCancelled) {
-      // Retained cancellation charge
-      const fee = round2(b.cancellationCharge || 0)
-      dep.cancellationFeesRetained = round2(dep.cancellationFeesRetained + fee)
-
-      // Cash retained is the fee
-      const advance = round2(b.advanceReceived || 0)
-      dep.collected = round2(dep.collected + (advance > 0 ? advance : fee))
-
-      if (b.refundAmount > 0) {
-        dep.refundsPaid = round2(dep.refundsPaid + Number(b.refundAmount))
+      // 1. Authoritative payment resolution: payments array vs advanceReceived
+      let totalPaid = 0
+      if (Array.isArray(b.payments) && b.payments.length > 0) {
+        const nonVoid = b.payments.filter((p) => !p.isVoid)
+        if (nonVoid.length > 0) {
+          const receipts = nonVoid.filter((p) => p.type !== "refund")
+          totalPaid = round2(receipts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0))
+        } else {
+          totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+        }
+      } else {
+        totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
       }
+
+      // 2. Cancellation fee and refund determination (source of truth: calculateCancellationRefund capped at totalPaid)
+      let fee = 0
+      let refundAmount = 0
+
+      if (b.cancellationCharge !== undefined && b.cancellationCharge !== null && b.cancellationCharge !== "") {
+        const charge = round2(b.cancellationCharge)
+        fee = Math.min(totalPaid, Math.max(0, charge))
+        refundAmount =
+          b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== ""
+            ? Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
+            : round2(totalPaid - fee)
+      } else if (b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== "") {
+        refundAmount = Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
+        fee = round2(totalPaid - refundAmount)
+      } else {
+        try {
+          const calc = calculateCancellationRefund({ totalPaid, cancellationCharge: 0 })
+          fee = calc.cancellationCharge
+          refundAmount = calc.refundAmount
+        } catch {
+          fee = 0
+          refundAmount = totalPaid
+        }
+      }
+
+      // 3. Attribution to departure
+      dep.cancellationFeesRetained = round2(dep.cancellationFeesRetained + fee)
+      // Cash collected net of refunds from this cancelled booking is the retained fee
+      dep.collected = round2(dep.collected + fee)
+      dep.refundsPaid = round2(dep.refundsPaid + refundAmount)
+      // Cancelled bookings do not add to passengers, bookedRevenue, or outstanding
     } else {
       // Active booking
       const total = round2(Number(b.totalAmount) || 0)
-      const paid = round2(Number(b.advanceReceived) || 0)
+      let paid = 0
+      if (Array.isArray(b.payments) && b.payments.length > 0) {
+        const nonVoid = b.payments.filter((p) => !p.isVoid)
+        if (nonVoid.length > 0) {
+          paid = computeLedgerTotals(b.payments, total).advanceReceived
+        } else {
+          paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+        }
+      } else {
+        paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+      }
+
       const paxCount = Array.isArray(b.passengers) ? b.passengers.length : 0
+      const balance = Math.max(0, round2(total - paid))
 
       dep.passengers += paxCount
       dep.bookedRevenue = round2(dep.bookedRevenue + total)
       dep.collected = round2(dep.collected + paid)
+      dep.outstanding = round2(dep.outstanding + balance)
     }
   }
 
@@ -320,8 +372,6 @@ export function calculateProfitLoss({
 
   // Calculate departure economics
   for (const dep of departureMap.values()) {
-    dep.outstanding = Math.max(0, round2(dep.bookedRevenue - dep.collected))
-
     dep.expensesPaid = sumAmounts(dep.expenses.filter((e) => e.status === "paid"))
     dep.expensesPending = sumAmounts(dep.expenses.filter((e) => e.status === "pending"))
     dep.expensesTotal = sumAmounts(dep.expenses)
@@ -364,6 +414,7 @@ export function calculateProfitLoss({
     let passengers = 0
     let bookedRevenue = 0
     let collected = 0
+    let outstanding = 0
     let cancellationFeesRetained = 0
     let refundsPaid = 0
     let departureExpensesPaid = 0
@@ -375,6 +426,7 @@ export function calculateProfitLoss({
       passengers += d.passengers
       bookedRevenue = round2(bookedRevenue + d.bookedRevenue)
       collected = round2(collected + d.collected)
+      outstanding = round2(outstanding + d.outstanding)
       cancellationFeesRetained = round2(cancellationFeesRetained + d.cancellationFeesRetained)
       refundsPaid = round2(refundsPaid + d.refundsPaid)
       departureExpensesPaid = round2(departureExpensesPaid + d.expensesPaid)
@@ -391,7 +443,6 @@ export function calculateProfitLoss({
     const expensesPending = round2(departureExpensesPending + unallocPending)
     const expensesTotal = round2(departureExpensesTotal + unallocTotal)
 
-    const outstanding = Math.max(0, round2(bookedRevenue - collected))
     const profitBooked = round2(bookedRevenue + cancellationFeesRetained - expensesTotal)
     const profitCash = round2(collected - expensesPaid)
     const marginPercent = bookedRevenue > 0 ? round2((profitBooked / bookedRevenue) * 100) : null
@@ -438,6 +489,7 @@ export function calculateProfitLoss({
   let totalCapacity = 0
   let totalBookedRevenue = 0
   let totalCollected = 0
+  let totalOutstanding = 0
   let totalCancellationFees = 0
   let totalRefundsPaid = 0
   let totalTourExpensesPaid = 0
@@ -449,6 +501,7 @@ export function calculateProfitLoss({
     totalCapacity += t.capacity || 0
     totalBookedRevenue = round2(totalBookedRevenue + t.bookedRevenue)
     totalCollected = round2(totalCollected + t.collected)
+    totalOutstanding = round2(totalOutstanding + t.outstanding)
     totalCancellationFees = round2(totalCancellationFees + t.cancellationFeesRetained)
     totalRefundsPaid = round2(totalRefundsPaid + t.refundsPaid)
     totalTourExpensesPaid = round2(totalTourExpensesPaid + t.expensesPaid)
@@ -456,7 +509,6 @@ export function calculateProfitLoss({
     totalTourExpenses = round2(totalTourExpenses + t.expensesTotal)
   }
 
-  const totalOutstanding = Math.max(0, round2(totalBookedRevenue - totalCollected))
   const tourProfitBooked = round2(totalBookedRevenue + totalCancellationFees - totalTourExpenses)
   const tourProfitCash = round2(totalCollected - totalTourExpensesPaid)
   const tourMarginPercent =

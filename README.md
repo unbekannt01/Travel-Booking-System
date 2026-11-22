@@ -69,10 +69,10 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (272 tests across 68 suites)
+# Run all unit, security, crypto, and business logic tests (293 tests across 68 suites)
 npm test
 
-# Run component test safety net (27 tests across 10 Vitest suites)
+# Run component test safety net (34 tests across 11 Vitest suites)
 npm run test:ui
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -85,7 +85,7 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**272 unit tests + 27 component tests across 78 total suites**):
+### Test Coverage Summary (**293 unit tests + 34 component tests across 79 total suites**):
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
    - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
 1. **Expense Management & Backend Validation** (`tests/expenses-backend.test.js`):

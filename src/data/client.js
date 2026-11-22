@@ -96,6 +96,13 @@ export async function request(endpoint, options = {}) {
       const error = new Error((data && data.message) || `Request failed with status ${response.status}`)
       error.status = response.status
       error.data = data
+      const retryAfterHeader = response.headers?.get?.("retry-after")
+      if (retryAfterHeader) {
+        const parsed = parseInt(retryAfterHeader, 10)
+        if (!isNaN(parsed) && parsed > 0) {
+          error.retryAfter = parsed
+        }
+      }
       throw error
     }
 

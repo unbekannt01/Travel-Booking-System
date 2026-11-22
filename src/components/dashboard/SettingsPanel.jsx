@@ -758,7 +758,7 @@ export default function SettingsPanel({
       id: "studio",
       label: "Invoice Studio",
       icon: <Sparkles size={16} />,
-      content: (
+      content: activeTab === "studio" ? (
         <Suspense
           fallback={
             <div className="flex h-96 items-center justify-center">
@@ -768,7 +768,7 @@ export default function SettingsPanel({
         >
           <InvoiceStudio user={user} />
         </Suspense>
-      ),
+      ) : null,
     },
     {
       id: "tickets",

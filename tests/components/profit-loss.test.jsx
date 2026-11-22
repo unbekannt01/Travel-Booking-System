@@ -176,6 +176,23 @@ describe("Tour Analytics & Profit & Loss Screen", () => {
     expect(screen.queryByText("9876543210")).toBeNull()
     expect(consoleErrorSpy).not.toHaveBeenCalled()
   })
+
+  it("renders calm inline RateLimitNotice when getTourPnl encounters HTTP 429", async () => {
+    const error429 = new Error("Too many requests from this IP, please try again after 15 minutes")
+    error429.status = 429
+    error429.retryAfter = 45
+    vi.spyOn(reportData, "getTourPnl").mockRejectedValue(error429)
+
+    renderWithProviders(<TourAnalytics bookings={mockBookings} tours={mockTours} />)
+
+    const pnlTab = screen.getByRole("tab", { name: /profit & loss/i })
+    fireEvent.click(pnlTab)
+
+    await waitFor(() => {
+      expect(screen.getByText("Reports Rate Limit Active")).toBeDefined()
+      expect(screen.getByRole("button", { name: /retry in/i })).toBeDefined()
+    })
+  })
 })
 
 describe("JourneyManager Trip Financials & Add Expense", () => {
