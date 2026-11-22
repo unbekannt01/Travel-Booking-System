@@ -65,15 +65,17 @@ export function Avatar({
       role={ariaHidden ? undefined : "img"}
       aria-label={ariaHidden ? undefined : accessibleLabel}
       aria-hidden={ariaHidden}
+      data-initials={initials}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full border font-bold select-none",
         SIZE_CLASSES[size] || SIZE_CLASSES.md,
         TONE_CLASSES[resolvedTone] || TONE_CLASSES.neutral,
+        ariaHidden && "before:content-[attr(data-initials)]",
         className,
       )}
       {...rest}
     >
-      {initials}
+      {ariaHidden ? null : initials}
     </span>
   )
 }
