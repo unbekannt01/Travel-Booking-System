@@ -111,8 +111,8 @@ describe("Part 3.5: Remaining Screens, Auth & Theme System", () => {
       }
     })
 
-    it("resolves route metadata for all 6 primary navigation tabs", () => {
-      const tabs = ["dashboard", "passengers", "journey", "tours", "analytics", "settings"]
+    it("resolves route metadata for all 7 primary navigation tabs", () => {
+      const tabs = ["dashboard", "passengers", "journey", "tours", "expenses", "analytics", "settings"]
       for (const tab of tabs) {
         const meta = resolvePageMeta(tab)
         assert.equal(meta.id, tab)

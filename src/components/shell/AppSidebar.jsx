@@ -4,6 +4,7 @@ import {
   MapPin,
   Bus,
   TrendingUp,
+  ReceiptText,
   Settings,
   LogOut,
   PanelLeftClose,
@@ -20,6 +21,7 @@ const ICON_MAP = {
   MapPin,
   Bus,
   TrendingUp,
+  ReceiptText,
   Settings,
 }
 

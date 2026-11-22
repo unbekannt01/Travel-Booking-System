@@ -69,10 +69,10 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (255 tests across 65 suites)
+# Run all unit, security, crypto, and business logic tests (272 tests across 68 suites)
 npm test
 
-# Run component test safety net (22 tests across 9 Vitest suites)
+# Run component test safety net (27 tests across 10 Vitest suites)
 npm run test:ui
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -85,9 +85,11 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**255 unit tests + 22 component tests across 74 total suites**):
+### Test Coverage Summary (**272 unit tests + 27 component tests across 78 total suites**):
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
-   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Analytics, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
+   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
+1. **Expense Management & Backend Validation** (`tests/expenses-backend.test.js`):
+   - Pure helpers (13 categories trilingual registry, integer paise sum without drift, category & monthly FY aggregation, in-memory filters), strict Zod schemas (`createExpenseSchema`, `updateExpenseSchema`, `listExpenseQuerySchema`), CSV formula injection protection, tenant isolation, soft delete, and audit logging.
 1. **Invoice Studio, Presets & Document Renderer** (`tests/invoice-studio.test.js`):
    - Layout architecture validation, 6 built-in presets (`classic-bus`, `modern-minimal`, `gujarat-heritage`, `pilgrim-simple`, `thermal-compact`, `corporate-blue`), relative luminance and WCAG 2.1 AA contrast ratio calculator (4.5:1 threshold), NPCI UPI URI generator, pure zero-Aadhaar document HTML renderer, CSP meta tag enforcement, multi-copy sheets with page breaks, thermal receipt styling, automatic VOID watermark, and binary magic-byte validation (PNG, JPEG, WebP allowed, SVG rejected).
 2. **Multiple Document Types, Snapshots & Credit Notes** (`tests/document-management.test.js`):
@@ -179,6 +181,14 @@ npm run ui:smoke
 - Cancellation management with retention fees and customer refund calculations.
 - Coach departure grouped cards showing capacity, occupancy percentage, boarded passengers, and pending dues.
 - 1-click batch boarding ("Board All" / "Unboard All"), seat swap modal, and quick balance collection at coach steps.
+
+### 5. Expense Management & Coach Operations Cost Tracking
+- **13 Specialized Categories**: Fuel & Diesel, Toll & Fastag, Driver/Conductor Allowance (Bhatta), Coach Hire, Food & Pilgrim Meals, Accommodation & Dharamshala, Permits & Road Taxes, Vehicle Maintenance & Repairs, Booking Commissions, Marketing & Outreach, Office Expenses, Staff Salaries, and Miscellaneous.
+- **KPI Metrics & Analytics**: Total Expenses, Paid Bills, Pending Dues, Top Category, and live Tour Operating Margin (Net Profit, Margin %, Expense Ratio) calculated against booking collections.
+- **Category Distribution (Recharts)**: Visual pie chart breakdown and ranked list by expense volume with percentages.
+- **Collapsible Filter Bar**: Quick date presets (This Month, Last Month, This FY, All Time, Custom Range), Category, Tour association, Payment Mode, Status, and real-time Search.
+- **Rapid Operations Workflows**: "Add Similar" (1-click duplicate for recurring fuel or toll slips), Edit, and soft delete with `ConfirmDialog` and recovery support.
+- **Secure CSV Export**: Formula injection sanitized (prefixing dangerous trigger characters with `'`) and UTF-8 BOM encoded for Excel compatibility.
 
 ---
 

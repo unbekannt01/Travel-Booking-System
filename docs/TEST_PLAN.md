@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 65 test suites (255 tests), the Vitest component test safety net (`npm run test:ui`, 22 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 68 test suites (272 tests), the Vitest component test safety net (`npm run test:ui`, 27 tests), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -31,10 +31,11 @@ npm run test:ui
 
 ## 2. Test Suites & Coverage Map
 
-### 2.1 Component Test Layer (22 Tests / 9 Suites)
+### 2.1 Component Test Layer (27 Tests / 10 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/components/expenses.test.jsx`** | 5 | Renders ExpenseTracker with data, StatCards, and table rows; renders EmptyState cleanly when no expenses exist; renders calm inline error card with Retry button when loading fails; opens Add Expense modal and validates required fields; allows interacting with filter chips and search input. |
 | **`tests/components/overview.test.jsx`** | 2 | Renders KPI metrics and recent bookings with full mock data; renders cleanly with empty state when bookings/tours array is empty. |
 | **`tests/components/travelers.test.jsx`** | 2 | Renders passenger manifest, search input, filter chips, and masked Aadhaar numbers; renders empty state cleanly. |
 | **`tests/components/journeys.test.jsx`** | 5 | Renders Coaches & Departures tab; switches to Boarding Manifest tab; displays manifest statistics; regression test for legacy bookings lacking `passengers` array without throwing. |
@@ -49,6 +50,7 @@ npm run test:ui
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/expenses-backend.test.js`** | 17 | **Expense Management & Backend Validation (Part 4a)**: 13 built-in categories frozen array and lookup map; payment modes and statuses frozen arrays; `round2` 2-decimal rupee rounding; `sumAmounts` integer paise accumulation without float drift; `groupByCategory` ranking and percentages; `groupByMonth` Indian FY calendar grouping; `filterExpenses` multi-criteria in-memory filtering; Zod schema validation (`createExpenseSchema`, `updateExpenseSchema`, `listExpenseQuerySchema`) rejecting unknown keys, non-positive amounts, invalid categories, out-of-range dates, and oversize text; CSV formula injection protection (`escapeCsvValue` prefixing with single quote) and UTF-8 BOM encoding; tenant isolation by `userId`; soft delete hiding rows while preserving DB records; summary fixture exact calculation; audit logging contract for expense create/update/delete. |
 | **`tests/document-management.test.js`** | 32 | **Multiple Document Types, Snapshots & Credit Notes (Part 3.7a)**: 6 document types registry validation; `financialYearOf` Indian fiscal year boundary calculation (31 Mar vs 1 Apr); `formatNumber` pattern formatting; default settings map; Zod validation (`singleDocumentSettingSchema`, `documentSettingsUpdateSchema`, `issueDocumentInputSchema`, `voidDocumentInputSchema`); document numbering continuity from legacy invoice counters without gaps/duplicates; atomic parallel generation simulation; zero-Aadhaar PII snapshot verification; Credit Note rules (reject non-cancelled, match cancellation refund, idempotency); void flow recording reason and audit details; snapshot immutability against live user profile changes. |
 | **`tests/remaining-screens-and-auth.test.js`** | 19 | **Remaining Screens, Auth & Theme Toggle (Part 3.5)**: Password complexity policy (`checkPasswordCriteria` test matrix for length, case, number, symbol); user-friendly auth error mapping (`formatAuthError` for 401, 403, 429, network, and fallback); API status event subscription and emission (`API_STATUS_EVENT`, `subscribeApiStatus`, `emitApiStatus`); `SHOW_THEME_TOGGLE` is explicitly true; all 6 navigation items (`dashboard`, `passengers`, `journey`, `tours`, `analytics`, `settings`) have `hasOwnHeading: false`; `resolvePageMeta` returns non-empty title and description for all tabs; print styles isolate dark mode. |
 | **`tests/operational-modals-journey.test.js`** | 18 | **Operational Modals & Journeys Screen (Part 3.4)**: `formatSeatLabel` human parsing (lower/upper sleeper berths, case normalization, fallback handling, custom identifiers); `formatSeatList` with comma separation, overflow truncation (`+N`), and fallback safety; `shellConfig` metadata verification (`journey.hasOwnHeading === false`, `dashboard.hasOwnHeading === false`, `passengers.hasOwnHeading === false`, `tours.hasOwnHeading === false`); boarding math and progress bar values (occupancy %, boarded passenger count); `CancelBookingModal` refund calculation (`totalPaid - fee`), zero-floor bounds checking, fee presets (₹0 fee for full refund, Retain All for 0 refund); `InvoicesModal` multi-field search and payment/cancellation status chip filtering. |
@@ -290,14 +292,47 @@ npm run ui:smoke
   - In `scripts/ui-smoke.mjs`, every tab element (`[role="tab"]`) is clicked sequentially across viewports (1280px desktop, 768px tablet, 360px mobile) and themes (light, dark).
   - The smoke crawler inspects the DOM for crash boundary text (`Could not load this page`, `Something went wrong in this panel`, `Section Unavailable`) and reports them as fatal section failures in Section 4 of `report.md`.
 - [ ] **Component Safety Net (`npm run test:ui`)**:
-  - Execute `npm run test:ui`. Verify all 22 component tests across 9 suites pass cleanly.
+  - Execute `npm run test:ui`. Verify all 27 component tests across 10 suites pass cleanly.
   - Verify zero audit vulnerabilities exist for production dependencies (`npm audit --omit=dev`).
+
+---
+
+## 3.10 Manual Verification Checklist — Part 4a Expense Management
+
+- [ ] **Navigation & Shell Routing**:
+  - In desktop sidebar, verify "Expenses" appears with the `ReceiptText` icon; click it and verify URL updates and title displays "Expense Management".
+  - In mobile viewport (<1024px), open "More" drawer; verify "Expenses" is listed and navigates smoothly.
+- [ ] **StatCards & Overview Metrics**:
+  - Verify 4 primary StatCards: Total Expenses, Paid Expenses, Pending Payments (with warning tone and count if pending > 0), and Top Category.
+  - When bookings exist, verify Tour Operating Margin card displays Total Revenue, Net Operating Profit, Margin %, and Expense Ratio.
+- [ ] **Add Expense Modal**:
+  - Click "Add Expense"; verify modal opens with default today's date and cash payment mode.
+  - Test validation: leave amount empty or enter 0; verify error "Enter a valid amount greater than ₹0".
+  - Fill valid amount (e.g. ₹5,500), category "Fuel & Diesel", related tour "Chardham Special Yatra 2026", vendor "HPCL", and save.
+  - Verify toast notification confirms "Expense added successfully", modal closes, and expense appears in the table.
+- [ ] **Edit & Duplicate ("Add Similar")**:
+  - Click "Edit" icon on an existing expense; change amount or note; click "Update Expense"; verify updated values appear in the list and summary updates.
+  - Click "Add Similar" (copy icon) on a fuel expense; verify modal opens pre-filled with the same category, tour, vendor, and amount, with today's date; click save; verify new duplicated transaction is created.
+- [ ] **Delete & Soft Delete**:
+  - Click "Delete" (trash icon) on an expense; verify destructive `ConfirmDialog` asks for confirmation.
+  - Click "Delete Expense"; verify toast "Expense removed", row disappears from active list, and DB record retains `deletedAt` without being permanently purged.
+- [ ] **Filters & Search**:
+  - Toggle date range chips: "This Month", "Last Month", "This FY", "All Time", "Custom".
+  - Toggle Category dropdown (filter by "Fuel & Diesel"); verify only fuel expenses show and count/total recalculates.
+  - Type in search input (e.g. vendor name "HPCL"); verify real-time search filtering.
+  - Click "Reset Filters" / "Clear Filters"; verify filters reset to defaults.
+- [ ] **CSV Export & Formula Protection**:
+  - Click "Export CSV"; verify file `yatrahub-expenses-YYYY-MM-DD.csv` downloads.
+  - Open in Excel / text editor; verify cells with special characters (=, +, -, @) are safely prefixed with `'` and Unicode text (Hindi/Gujarati) renders without corruption.
+- [ ] **Responsive & Dark Mode**:
+  - Resize browser to 360px width; verify zero horizontal scrollbar, table shifts to stacked cards, and touch targets are >= 44px.
+  - Switch theme to Dark Mode; verify high-contrast text, card backgrounds, and category pills render with appropriate dark tokens.
 
 ---
 
 ## 4. Current Testing Gaps & Roadmap
 
-With 255 unit & regression tests passing across 65 TAP test suites, 22 component tests passing across 9 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 272 unit & regression tests passing across 68 TAP test suites, 27 component tests passing across 10 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.

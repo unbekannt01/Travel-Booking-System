@@ -57,6 +57,7 @@ graph TD
             TourModel["Tour (Packages, Pricing, Berths)"]
             PaymentModel["Payment (Receipts, Ledger, Voids)"]
             EmailTokenModel["EmailToken (Reset, 2FA Recovery)"]
+            ExpenseModel["Expense (Operations, Fuel, Toll, Bhatta)"]
         end
     end
 
@@ -81,11 +82,12 @@ graph TD
   - `src/components/JourneyManager.jsx`: Bus departure coordination, manifest status, batch boarding, seat swap, and quick balance collection.
   - `src/components/PaymentTracker.jsx`: Multi-installment payment ledger, payment recording, and receipt voucher generation.
   - `src/components/TourInventory.jsx`: Tour package management, coach type configuration, and berth pricing.
+  - `src/components/ExpenseTracker.jsx`: Expense management, coach operations costs (fuel, toll, bhatta, maintenance), category breakdown (Recharts), responsive desktop table / mobile cards, collapsible filter bar, CSV export, duplicate, and soft delete.
   - `src/components/TourAnalytics.jsx`: Revenue metrics, booking statistics, and occupancy analytics.
 - `src/data/`: Centralized Data Access Layer (DAL). Components never execute raw `fetch()` calls; all requests route through:
   - `src/data/client.js`: HTTP request wrapper with bearer token injection and error handling.
   - `src/data/adapters/index.js` & `src/data/adapters/rest.js`: REST adapter converting backend JSON into normalized application entities.
-  - Domain modules: `src/data/auth.js`, `src/data/bookings.js`, `src/data/tours.js`, `src/data/payments.js`, `src/data/settings.js`.
+  - Domain modules: `src/data/auth.js`, `src/data/bookings.js`, `src/data/tours.js`, `src/data/payments.js`, `src/data/expenses.js`, `src/data/settings.js`.
 - `src/i18n/`: Internationalization dictionaries (`documents.js`) offering complete translation parity across English (`en`), Hindi (`hi`), and Gujarati (`gu`).
 - `src/utils/`: Pure helpers for dates, currency formatting, CSV generation (`csv.js`), seat auto-allocation (`seatAssignment.js`), and validators (`validators.js`).
 
@@ -449,3 +451,41 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
 - **Component Test Safety Net (`npm run test:ui`)**:
   - Powered by Vitest v5, `@testing-library/react` v16, and `jsdom` v25 (Node 22 LTS compatible).
   - 9 test files covering 22 test scenarios across all main views with mock data fixtures and strict `console.error` failure traps. Runs in ~9 seconds with 0 production vulnerabilities.
+
+---
+
+## 17. Expense Management & Cost Architecture (Part 4a)
+
+- **Expense Data Model (`backend/models/Expense.js`)**:
+  - Strict tenant isolation by `userId` with high-performance compound indexes:
+    - `{ userId: 1, date: -1 }` (date-range timelines)
+    - `{ userId: 1, category: 1, date: -1 }` (category audits)
+    - `{ userId: 1, tourRef: 1, date: -1 }` (tour profitability queries for Part 4b)
+    - `{ userId: 1, deletedAt: 1, date: -1 }` (soft delete index)
+  - Core fields: `date`, `amount` (Number, 2 decimals), `category` (enum of 13 built-in categories), `tourRef` (nullable string: tour name or departure compound key), `tourLabel` (display string snapshot), `vendor` (max 80 chars), `paymentMode` (`cash`, `upi`, `bank`, `card`, `cheque`), `status` (`paid`, `pending`), `paidOn`, `note` (max 300 chars), `createdBy`, `updatedBy`.
+  - **Soft Delete Architecture**: `deletedAt` (Date) and `deletedBy` (ObjectId). Documents are never hard-deleted; queries filter out soft-deleted items via `deletedAt: null`. This preserves an immutable audit trail and prepares for trash/restore in Part 6.
+
+- **REST API Endpoints (`backend/routes/expenses.js`)**:
+  - `GET /api/expenses`: Paginated listing with multi-criteria filtering (`from`, `to`, `category`, `tourRef`, `paymentMode`, `status`, `q` text search). Max page limit clamped to 100.
+  - `GET /api/expenses/summary`: Aggregates real-time financial metrics (`totalExpenses`, `totalPaid`, `totalPending`, `count`, `pendingCount`, `byCategory`, `monthly` with Indian FY tracking).
+  - `POST /api/expenses`: Creates expense with strict Zod validation (`createExpenseSchema`), write rate limiting (100 req/15min via `expenseWriteLimiter`), and audit log record (`CREATE_EXPENSE`).
+  - `PUT /api/expenses/:id`: Updates an existing expense (`updateExpenseSchema`), ensuring tenant isolation and audit logging (`UPDATE_EXPENSE`).
+  - `DELETE /api/expenses/:id`: Soft-deletes the expense by setting `deletedAt` and audit logging (`DELETE_EXPENSE`).
+
+- **Shared Pure Helpers (`shared/expenses.js`)**:
+  - Zero-dependency ESM pure module shared by frontend and backend.
+  - Frozen list of 13 operational categories (`EXPENSE_CATEGORIES`): Fuel & Diesel, Toll & Fastag, Driver Allowance, Bus Hire, Food & Meals, Accommodation, Permit & Taxes, Maintenance, Commission, Advertising, Office, Salary, and Other. Includes full trilingual labels (English, Hindi `labelHi`, Gujarati `labelGu`) and Lucide icon mappings.
+  - `sumAmounts(expenses)`: Uses integer paise internally to guarantee zero floating point drift.
+  - `groupByCategory(expenses)`: Category aggregation with counts and percentages.
+  - `groupByMonth(expenses)`: Month grouping aligned with Indian Financial Year boundaries (April 1 to March 31) via `financialYearOf`.
+  - `filterExpenses(expenses, filters)`: Multi-criteria client-side filter engine.
+  - `round2(num)`: Rupee decimal rounding.
+
+- **TourRef Contract for Part 4b (Tour-wise Profit/Loss)**:
+  - `tourRef` stores the exact identifier used by Bookings and Journeys (`booking.tourName` or departure compound key `${tourName}___${date}___${bus}`).
+  - In Part 4b, Tour Profit/Loss will aggregate revenue from Bookings matching `tourName` and join against Expenses matching `tourRef === tourName` to compute gross revenue, total tour expenses, net operating profit, margin %, per-seat cost (`totalExpenses / bookedSeats`), and break-even ticket threshold.
+
+- **CSV Export Sanitization (`src/utils/csv.js`)**:
+  - Formula injection protection: all fields starting with `=`, `+`, `-`, `@`, `\t`, `\r` are prefixed with a single quote (`'`).
+  - UTF-8 Byte Order Mark (`\uFEFF`) included to preserve Devanagari and Gujarati Unicode scripts in Microsoft Excel.
+

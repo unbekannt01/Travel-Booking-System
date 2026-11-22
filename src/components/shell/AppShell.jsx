@@ -5,6 +5,7 @@ import {
   MapPin,
   Bus,
   TrendingUp,
+  ReceiptText,
   Settings,
   LogOut,
   Plus,
@@ -33,6 +34,7 @@ const DRAWER_ICONS = {
   MapPin,
   Bus,
   TrendingUp,
+  ReceiptText,
   Settings,
 }
 

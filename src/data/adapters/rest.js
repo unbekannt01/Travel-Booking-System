@@ -452,3 +452,84 @@ export async function setDefaultTemplateForType(type, templateId) {
   })
   return res
 }
+
+function normalizeExpense(e) {
+  if (!e) return e
+  return {
+    ...e,
+    id: e._id || e.id,
+  }
+}
+
+// --- EXPENSES ---
+export async function listExpenses(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/expenses${qs}`)
+  return {
+    expenses: (res?.expenses || []).map(normalizeExpense),
+    total: res?.total || 0,
+    page: res?.page || 1,
+    limit: res?.limit || 50,
+    totalPages: res?.totalPages || 1,
+  }
+}
+
+export async function getExpenseSummary(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/expenses/summary${qs}`)
+  return res || {
+    count: 0,
+    totalExpenses: 0,
+    paidTotal: 0,
+    pendingTotal: 0,
+    byCategory: [],
+    byMonth: [],
+    topCategory: null,
+  }
+}
+
+export async function getExpense(id) {
+  const res = await request(`/api/expenses/${id}`)
+  return normalizeExpense(res)
+}
+
+export async function createExpense(data) {
+  const res = await request("/api/expenses", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+  return {
+    ...res,
+    expense: normalizeExpense(res?.expense),
+  }
+}
+
+export async function updateExpense(id, data) {
+  const res = await request(`/api/expenses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+  return {
+    ...res,
+    expense: normalizeExpense(res?.expense),
+  }
+}
+
+export async function deleteExpense(id) {
+  return request(`/api/expenses/${id}`, {
+    method: "DELETE",
+  })
+}
+

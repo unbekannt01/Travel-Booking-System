@@ -11,6 +11,7 @@ import tourRoutes from "./routes/tours.js"
 import paymentRoutes from "./routes/payments.js"
 import documentRoutes from "./routes/documents.js"
 import documentTemplateRoutes from "./routes/documentTemplates.js"
+import expenseRoutes from "./routes/expenses.js"
 
 const app = express()
 
@@ -59,6 +60,7 @@ app.use("/api/tours", tourRoutes)
 app.use("/api/payments", paymentRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
+app.use("/api/expenses", expenseRoutes)
 
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {

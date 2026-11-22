@@ -47,6 +47,7 @@ const SCREENS = [
   { id: "passengers", label: "Travelers", tabId: "passengers" },
   { id: "journey", label: "Journeys", tabId: "journey" },
   { id: "tours", label: "Destinations", tabId: "tours" },
+  { id: "expenses", label: "Expenses", tabId: "expenses" },
   { id: "analytics", label: "Analytics", tabId: "analytics" },
   { id: "settings", label: "Settings", tabId: "settings" },
   { id: "invoice-studio", label: "Invoice Studio", isSettingsTab: "studio" },

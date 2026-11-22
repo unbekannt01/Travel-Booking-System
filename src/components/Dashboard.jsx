@@ -27,6 +27,7 @@ const SCREEN_LOADERS = {
   form: () => import("./BookingForm"),
   passengers: () => import("./PassengerManagement"),
   tours: () => import("./TourInventory"),
+  expenses: () => import("./ExpenseTracker"),
   journey: () => import("./JourneyManager"),
   analytics: () => import("./TourAnalytics"),
   settings: () => import("./dashboard/SettingsPanel"),
@@ -36,6 +37,7 @@ const DashboardHome = lazy(SCREEN_LOADERS.dashboard)
 const BookingForm = lazy(SCREEN_LOADERS.form)
 const PassengerManagement = lazy(SCREEN_LOADERS.passengers)
 const TourInventory = lazy(SCREEN_LOADERS.tours)
+const ExpenseTracker = lazy(SCREEN_LOADERS.expenses)
 const JourneyManager = lazy(SCREEN_LOADERS.journey)
 const TourAnalytics = lazy(SCREEN_LOADERS.analytics)
 const SettingsPanel = lazy(SCREEN_LOADERS.settings)
@@ -65,7 +67,28 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const confirm = useConfirm()
 
   const [bookings, setBookings] = useState([])
-  const [activeTab, setActiveTab] = useState("dashboard")
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const h = window.location.hash.replace(/^#\/?/, "")
+      if (["expenses", "dashboard", "passengers", "journey", "tours", "analytics", "settings"].includes(h)) {
+        return h
+      }
+    }
+    return "dashboard"
+  })
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const h = window.location.hash.replace(/^#\/?/, "")
+        if (["expenses", "dashboard", "passengers", "journey", "tours", "analytics", "settings"].includes(h)) {
+          setActiveTab(h)
+        }
+      }
+    }
+    window.addEventListener("hashchange", handleHashChange)
+    return () => window.removeEventListener("hashchange", handleHashChange)
+  }, [])
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [editingBooking, setEditingBooking] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
@@ -544,6 +567,14 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 tours={tours}
                 onAdd={handleSaveTour}
                 onDelete={handleDeleteTour}
+              />
+            )}
+
+            {activeTab === "expenses" && (
+              <ExpenseTracker
+                tours={tours}
+                bookings={bookings}
+                user={user}
               />
             )}
 

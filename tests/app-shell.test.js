@@ -14,7 +14,7 @@ import {
 
 describe("App Shell & Navigation Configuration (Part 3.2)", () => {
   describe("Navigation destinations & theme toggle flag", () => {
-    it("preserves all 6 exact Dashboard tab IDs and labels", () => {
+    it("preserves all 7 exact Dashboard tab IDs and labels", () => {
       assert.deepEqual(
         NAV_ITEMS.map((item) => ({ id: item.id, label: item.label })),
         [
@@ -22,6 +22,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
           { id: "passengers", label: "Travelers" },
           { id: "journey", label: "Journeys" },
           { id: "tours", label: "Destinations" },
+          { id: "expenses", label: "Expenses" },
           { id: "analytics", label: "Analytics" },
           { id: "settings", label: "Settings" },
         ],
@@ -39,6 +40,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
       assert.equal(resolvePageMeta("passengers").title, "Travelers")
       assert.equal(resolvePageMeta("journey").title, "Journeys")
       assert.equal(resolvePageMeta("tours").title, "Destinations")
+      assert.equal(resolvePageMeta("expenses").title, "Expense Management")
       assert.equal(resolvePageMeta("analytics").title, "Analytics")
       assert.equal(resolvePageMeta("settings").title, "Settings")
       assert.equal(resolvePageMeta("nonexistent").title, "Overview")
@@ -61,6 +63,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
 
       // Secondary destinations DO highlight "More"
       assert.equal(isMoreDestinationActive("tours"), true)
+      assert.equal(isMoreDestinationActive("expenses"), true)
       assert.equal(isMoreDestinationActive("analytics"), true)
       assert.equal(isMoreDestinationActive("settings"), true)
     })
@@ -73,6 +76,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
       assert.equal(getSkeletonVariant("passengers"), "table")
       assert.equal(getSkeletonVariant("tours"), "table")
       assert.equal(getSkeletonVariant("journey"), "table")
+      assert.equal(getSkeletonVariant("expenses"), "table")
       assert.equal(getSkeletonVariant("unknown"), "dashboard")
     })
   })

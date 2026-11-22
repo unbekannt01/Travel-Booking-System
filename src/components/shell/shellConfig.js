@@ -52,6 +52,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: false,
   },
   {
+    id: "expenses",
+    label: "Expenses",
+    title: "Expense Management",
+    description: "Track coach operations, fuel, toll, driver bhatta, and vendor costs.",
+    iconName: "ReceiptText",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "analytics",
     label: "Analytics",
     title: "Analytics",
@@ -180,6 +189,7 @@ export function getSkeletonVariant(activeTab) {
     case "passengers":
     case "tours":
     case "journey":
+    case "expenses":
       return "table"
     case "dashboard":
     default:
