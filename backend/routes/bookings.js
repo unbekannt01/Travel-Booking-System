@@ -306,7 +306,7 @@ export async function upsertCustomerForBooking(userId, { contactName, contactPho
 
     return customer
   } catch (err) {
-    console.warn("[CustomerUpsert] Non-blocking customer link failed:", err.message)
+    console.warn("[CustomerUpsert] Non-blocking customer link failed:", err.name, err.code || "")
     return null
   }
 }
@@ -448,7 +448,7 @@ router.post("/", verifyToken, async (req, res) => {
         contactEmail,
       })
     } catch (custErr) {
-      console.warn("[CustomerUpsert] Non-blocking customer link failed:", custErr.message)
+      console.warn("[CustomerUpsert] Non-blocking customer link failed:", custErr.name, custErr.code || "")
     }
 
     const newBooking = new Booking({
@@ -514,7 +514,7 @@ router.post("/", verifyToken, async (req, res) => {
         await ensureLegacyInvoiceDocument(savedBooking, user)
       }
     } catch (docErr) {
-      console.error("Warning: Could not create initial IssuedDocument for booking:", docErr.message)
+      console.error("Warning: Could not create initial IssuedDocument for booking:", docErr.name, docErr.code || "")
     }
 
     // If advance is received, record in separate Payment ledger collection
@@ -535,7 +535,7 @@ router.post("/", verifyToken, async (req, res) => {
         await paymentDoc.save()
         await syncBookingPayments(savedBooking._id, req.user.id)
       } catch (payErr) {
-        console.error("Warning: Could not create initial Payment ledger record:", payErr.message)
+        console.error("Warning: Could not create initial Payment ledger record:", payErr.name, payErr.code || "")
       }
     }
 
@@ -681,7 +681,7 @@ router.put("/:id", verifyToken, async (req, res) => {
           booking.customerId = linkedCustomer._id
         }
       } catch (custErr) {
-        console.warn("[CustomerUpsert] Non-blocking customer update failed:", custErr.message)
+        console.warn("[CustomerUpsert] Non-blocking customer update failed:", custErr.name, custErr.code || "")
       }
     }
 
@@ -951,7 +951,7 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
           recordedBy: req.user.userName || req.user.email || "Operator",
         })
       } catch (err) {
-        console.error("Error creating refund payment record:", err)
+        console.error("Error creating refund payment record:", err.name, err.code || "")
       }
     }
 

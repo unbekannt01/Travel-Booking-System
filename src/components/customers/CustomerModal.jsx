@@ -28,8 +28,10 @@ const TAG_LABELS = {
   vip: "VIP",
   "group-leader": "Group Leader",
   agent: "Agent",
+  frequent: "Frequent",
   corporate: "Corporate",
   "pilgrim-group": "Pilgrim Group",
+  regular: "Regular",
 }
 
 export default function CustomerModal({

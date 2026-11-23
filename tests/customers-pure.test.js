@@ -8,6 +8,10 @@ import {
   CUSTOMER_LANGUAGES,
   summarizeCustomer,
 } from "../shared/customers.js"
+import {
+  calculateBookingFinancials,
+  calculateProfitLoss,
+} from "../shared/profitLoss.js"
 
 test("normalizeIndianMobile: normalizes valid formats correctly", () => {
   const cases = [
@@ -75,8 +79,72 @@ test("pickDisplayName: selects the longest clean candidate", () => {
 test("CUSTOMER_TAGS and CUSTOMER_LANGUAGES are frozen arrays", () => {
   assert.ok(Object.isFrozen(CUSTOMER_TAGS))
   assert.ok(Object.isFrozen(CUSTOMER_LANGUAGES))
-  assert.deepEqual(CUSTOMER_TAGS, ["vip", "group-leader", "agent", "corporate", "pilgrim-group"])
+  assert.deepEqual(CUSTOMER_TAGS, [
+    "vip",
+    "group-leader",
+    "agent",
+    "frequent",
+    "corporate",
+    "pilgrim-group",
+    "regular",
+  ])
   assert.deepEqual(CUSTOMER_LANGUAGES, ["en", "hi", "gu"])
+})
+
+test("calculateBookingFinancials & summarizeCustomer parity (Step 0.a)", () => {
+  // (a) total 10,000, paid 4,000, cancelled with fee 1,000 and refund 3,000 -> collected 1,000, fees 1,000, booked 0, outstanding 0
+  const bookingA = {
+    _id: "b_cancel",
+    tourName: "Chardham",
+    status: "Cancelled",
+    totalAmount: 10000,
+    advanceReceived: 4000,
+    cancellationCharge: 1000,
+    refundAmount: 3000,
+    payments: [{ amount: 4000, isVoid: false }],
+  }
+  const finA = calculateBookingFinancials(bookingA)
+  assert.equal(finA.bookedRevenue, 0)
+  assert.equal(finA.collected, 1000)
+  assert.equal(finA.retainedFees, 1000)
+  assert.equal(finA.balanceDue, 0)
+
+  // (b) active booking total 20,000 with payments 5,000 + 3,000 -> collected 8,000, outstanding 12,000
+  const bookingB = {
+    _id: "b_active",
+    tourName: "Chardham",
+    status: "Confirmed",
+    totalAmount: 20000,
+    advanceReceived: 8000,
+    payments: [
+      { amount: 5000, isVoid: false },
+      { amount: 3000, isVoid: false },
+    ],
+  }
+  const finB = calculateBookingFinancials(bookingB)
+  assert.equal(finB.bookedRevenue, 20000)
+  assert.equal(finB.collected, 8000)
+  assert.equal(finB.retainedFees, 0)
+  assert.equal(finB.balanceDue, 12000)
+
+  // (c) both bookings for same customer combine without double counting
+  const summary = summarizeCustomer([bookingA, bookingB])
+  assert.equal(summary.totalBookings, 1)
+  assert.equal(summary.totalCancelledBookings, 1)
+  assert.equal(summary.totalBookedRevenue, 20000)
+  assert.equal(summary.totalCollected, 9000) // 1000 + 8000
+  assert.equal(summary.totalOutstanding, 12000)
+  assert.equal(summary.totalCancellationFees, 1000)
+
+  // (d) customer summary equals P&L engine over same bookings
+  const pnl = calculateProfitLoss({
+    bookings: [bookingA, bookingB],
+    expenses: [],
+  })
+  assert.equal(summary.totalBookedRevenue, pnl.summary.bookedRevenue)
+  assert.equal(summary.totalCollected, pnl.summary.collected)
+  assert.equal(summary.totalCancellationFees, pnl.summary.cancellationFeesRetained)
+  assert.equal(summary.totalOutstanding, pnl.summary.outstanding)
 })
 
 test("summarizeCustomer: computes correct metrics with zero P&L divergence", () => {

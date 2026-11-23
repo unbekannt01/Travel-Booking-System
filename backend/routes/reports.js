@@ -13,7 +13,7 @@ const router = express.Router()
  */
 const reportLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 120, // 120 requests per window
+  max: 60, // 60 requests per window (strict security limit; debounced/cached client-side)
   message: { message: "Too many report requests from this IP. Please try again after 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -227,7 +227,7 @@ router.get("/tour-pnl", verifyToken, reportLimiter, async (req, res) => {
       generalExpenses: sanitizedGeneralExpenses,
     })
   } catch (error) {
-    console.error("Tour P&L report generation error:", error.message)
+    console.error("Tour P&L report generation error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to generate Profit & Loss report" })
   }
 })

@@ -9,7 +9,7 @@ import {
   updateCustomerSchema,
   customerQuerySchema,
 } from "../utils/customerValidation.js"
-import { normalizeIndianMobile, summarizeCustomer } from "../../shared/customers.js"
+import { normalizeIndianMobile, summarizeCustomer, CUSTOMER_TAGS } from "../../shared/customers.js"
 
 const router = express.Router()
 
@@ -69,12 +69,12 @@ router.get("/lookup", verifyToken, customerLookupLimiter, async (req, res) => {
         address: customer.address || "",
         gstin: customer.gstin || "",
         language: customer.language || "en",
-        tags: customer.tags || [],
+        tags: (customer.tags || []).filter((t) => CUSTOMER_TAGS.includes(t)),
         whatsappOptOut: customer.whatsappOptOut || false,
       },
     })
   } catch (error) {
-    console.error("Customer lookup error:", error.message)
+    console.error("Customer lookup error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to perform customer lookup" })
   }
 })
@@ -133,6 +133,7 @@ router.get("/", verifyToken, async (req, res) => {
       return {
         ...c,
         id: c._id.toString(),
+        tags: (c.tags || []).filter((t) => CUSTOMER_TAGS.includes(t)),
         summary,
       }
     })
@@ -219,7 +220,7 @@ router.get("/", verifyToken, async (req, res) => {
       },
     })
   } catch (error) {
-    console.error("Customer list fetch error:", error.message)
+    console.error("Customer list fetch error:", error.name, error.code || "")
     if (error.name === "ZodError") {
       return res.status(400).json({ message: "Invalid query parameters", errors: error.errors })
     }
@@ -277,12 +278,13 @@ router.get("/:id", verifyToken, async (req, res) => {
       customer: {
         ...customer,
         id: customer._id.toString(),
+        tags: (customer.tags || []).filter((t) => CUSTOMER_TAGS.includes(t)),
       },
       summary,
       bookings: sanitizedBookings,
     })
   } catch (error) {
-    console.error("Customer detail fetch error:", error.message)
+    console.error("Customer detail fetch error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to retrieve customer details" })
   }
 })
@@ -315,19 +317,31 @@ router.post("/", verifyToken, customerWriteLimiter, async (req, res) => {
 
     const saved = await newCustomer.save()
 
-    // Check if any existing active bookings match this phone and link them
+    // Relink any bookings pointing to soft-deleted versions of this customer, or unlinked with this phone
     try {
+      const oldSoftDeleted = await Customer.find({
+        userId: req.user.id,
+        phone: input.phone,
+        deletedAt: { $ne: null },
+      }).select("_id").lean()
+      const oldCustomerIds = oldSoftDeleted.map((c) => c._id)
+
+      const filterConditions = [
+        { customerId: null, contactPhone: { $regex: new RegExp(input.phone + "$") } },
+      ]
+      if (oldCustomerIds.length > 0) {
+        filterConditions.push({ customerId: { $in: oldCustomerIds } })
+      }
+
       await Booking.updateMany(
         {
           userId: req.user.id,
-          contactPhone: { $regex: new RegExp(input.phone + "$") },
-          customerId: null,
-          deletedAt: null,
+          $or: filterConditions,
         },
         { $set: { customerId: saved._id } }
       )
     } catch {
-      // Non-blocking link
+      // Non-blocking relinking: never fail customer creation if relinking encounters an error
     }
 
     await logAudit({
@@ -336,7 +350,6 @@ router.post("/", verifyToken, customerWriteLimiter, async (req, res) => {
       req,
       meta: {
         customerId: saved._id.toString(),
-        phone: saved.phone,
       },
     })
 
@@ -345,7 +358,7 @@ router.post("/", verifyToken, customerWriteLimiter, async (req, res) => {
       id: saved._id.toString(),
     })
   } catch (error) {
-    console.error("Customer create error:", error.message)
+    console.error("Customer create error:", error.name, error.code || "")
     if (error.name === "ZodError") {
       return res.status(400).json({
         message: error.errors[0]?.message || "Invalid customer data",
@@ -400,6 +413,7 @@ router.put("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
       req,
       meta: {
         customerId: updated._id.toString(),
+        changedFields: Object.keys(input),
       },
     })
 
@@ -408,7 +422,7 @@ router.put("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
       id: updated._id.toString(),
     })
   } catch (error) {
-    console.error("Customer update error:", error.message)
+    console.error("Customer update error:", error.name, error.code || "")
     if (error.name === "ZodError") {
       return res.status(400).json({
         message: error.errors[0]?.message || "Invalid customer update data",
@@ -453,7 +467,7 @@ router.delete("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
 
     res.json({ message: "Customer deleted successfully" })
   } catch (error) {
-    console.error("Customer deletion error:", error.message)
+    console.error("Customer deletion error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to delete customer" })
   }
 })

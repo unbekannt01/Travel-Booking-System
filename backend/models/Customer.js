@@ -52,12 +52,7 @@ const customerSchema = new mongoose.Schema(
       default: "en",
     },
     tags: {
-      type: [
-        {
-          type: String,
-          enum: CUSTOMER_TAGS,
-        },
-      ],
+      type: [{ type: String }],
       default: [],
       validate: [
         (val) => Array.isArray(val) && val.length <= 5,
@@ -110,5 +105,13 @@ customerSchema.index(
 customerSchema.index({ userId: 1, name: 1 })
 customerSchema.index({ userId: 1, deletedAt: 1 })
 customerSchema.index({ userId: 1, tags: 1 })
+
+// Clean tags before save: filter unknown tags and cap to 5
+customerSchema.pre("save", function (next) {
+  if (Array.isArray(this.tags)) {
+    this.tags = this.tags.filter((t) => CUSTOMER_TAGS.includes(t)).slice(0, 5)
+  }
+  if (typeof next === "function") next()
+})
 
 export default mongoose.model("Customer", customerSchema)

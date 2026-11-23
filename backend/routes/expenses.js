@@ -147,7 +147,7 @@ router.get("/summary", verifyToken, async (req, res) => {
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Invalid summary parameters" })
     }
-    console.error("Expense summary error:", error.message)
+    console.error("Expense summary error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to generate expense summary" })
   }
 })
@@ -187,7 +187,7 @@ router.get("/", verifyToken, async (req, res) => {
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Invalid filter parameters" })
     }
-    console.error("Expense listing error:", error.message)
+    console.error("Expense listing error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to retrieve expenses" })
   }
 })
@@ -213,7 +213,7 @@ router.get("/:id", verifyToken, async (req, res) => {
       id: expense._id.toString(),
     })
   } catch (error) {
-    console.error("Expense fetch error:", error.message)
+    console.error("Expense fetch error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to retrieve expense" })
   }
 })
@@ -264,7 +264,7 @@ router.post("/", verifyToken, expenseWriteLimiter, async (req, res) => {
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Validation failed" })
     }
-    console.error("Expense creation error:", error.message)
+    console.error("Expense creation error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to record expense" })
   }
 })
@@ -326,7 +326,7 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Validation failed" })
     }
-    console.error("Expense update error:", error.message)
+    console.error("Expense update error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to update expense" })
   }
 })
@@ -367,7 +367,7 @@ router.delete("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       id: expense._id.toString(),
     })
   } catch (error) {
-    console.error("Expense deletion error:", error.message)
+    console.error("Expense deletion error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to delete expense" })
   }
 })

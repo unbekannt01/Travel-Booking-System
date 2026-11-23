@@ -44,8 +44,10 @@ const TAG_VARIANTS = {
   vip: "primary",
   "group-leader": "success",
   agent: "info",
+  frequent: "primary",
   corporate: "accent",
   "pilgrim-group": "neutral",
+  regular: "neutral",
 }
 
 export default function CustomerDrawer({

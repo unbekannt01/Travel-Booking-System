@@ -101,6 +101,7 @@ const ALL_SCREENS = [
   { id: "dashboard", label: "Overview", tabId: "dashboard" },
   { id: "passengers", label: "Travelers", tabId: "passengers" },
   { id: "customers", label: "Customers", tabId: "customers" },
+  { id: "outstanding", label: "Outstanding", tabId: "outstanding" },
   { id: "journey", label: "Journeys", tabId: "journey" },
   { id: "tours", label: "Destinations", tabId: "tours" },
   { id: "expenses", label: "Expenses", tabId: "expenses" },
@@ -154,6 +155,7 @@ async function run() {
   const httpFailures = [] // 429 and 5xx responses
   const overflowFindings = []
   const fallbackFindings = []
+  const tabCoverageWarnings = []
   const budgetBreaches = []
   const groupedAxeViolations = new Map()
   const completedScreens = []
@@ -316,9 +318,22 @@ async function run() {
       }
     }
 
+    reportLines.push("")
+    reportLines.push("## 6. Tab Coverage")
+    if (tabCoverageWarnings.length === 0) {
+      reportLines.push("✅ **All non-disabled tabs were successfully clicked across evaluated screens.**")
+    } else {
+      reportLines.push(`⚠️ **${tabCoverageWarnings.length} tab click warnings detected:**`)
+      reportLines.push("| Screen | Tab | Reason |")
+      reportLines.push("| :--- | :--- | :--- |")
+      for (const w of tabCoverageWarnings) {
+        reportLines.push(`| ${w.screen} | ${w.tab} | ${w.reason} |`)
+      }
+    }
+
     if (budgetBreaches.length > 0) {
       reportLines.push("")
-      reportLines.push("## 6. Budget Breaches (> 90s per screen)")
+      reportLines.push("## 7. Budget Breaches (> 90s per screen)")
       for (const b of budgetBreaches) {
         reportLines.push(`- ⚠️ **${b.screen}**: took ${Math.round(b.durationMs / 1000)}s (budget 90s)`)
       }
@@ -471,27 +486,34 @@ async function run() {
         await page.waitForTimeout(200)
 
         // Query tabs present on the active screen
+        await page.waitForTimeout(300)
         const tabLocators = page.locator('[role="tab"]')
-        const tabCount = await tabLocators.count().catch(() => 0)
+        const totalTabs = await tabLocators.count().catch(() => 0)
         const tabsToCrawl = []
+        let tabsFound = 0
+        let tabsClicked = 0
+        let tabsSkipped = 0
 
-        if (tabCount === 0) {
+        for (let i = 0; i < totalTabs; i++) {
+          const tabLoc = tabLocators.nth(i)
+          const isVisible = await tabLoc.isVisible().catch(() => false)
+          if (!isVisible) continue
+          tabsFound++
+          const raw = (await tabLoc.innerText().catch(() => "")) || ""
+          const clean =
+            raw
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, "") || `tab-${i + 1}`
+          const isDisabled = await tabLoc.evaluate((el) => {
+            return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true"
+          }).catch(() => false)
+          tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc, disabled: isDisabled })
+        }
+
+        if (tabsToCrawl.length === 0) {
           tabsToCrawl.push({ id: "main", label: "Main", locator: null, disabled: false })
-        } else {
-          for (let i = 0; i < tabCount; i++) {
-            const tabLoc = tabLocators.nth(i)
-            const raw = (await tabLoc.innerText().catch(() => "")) || ""
-            const clean =
-              raw
-                .trim()
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, "-")
-                .replace(/^-|-$/g, "") || `tab-${i + 1}`
-            const isDisabled = await tabLoc.evaluate((el) => {
-              return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true"
-            }).catch(() => false)
-            tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc, disabled: isDisabled })
-          }
         }
 
         for (const t of tabsToCrawl) {
@@ -503,14 +525,22 @@ async function run() {
 
           if (t.locator) {
             if (t.disabled) {
-              console.log(`[ui:smoke] Skipped disabled tab "${t.label}"`)
+              tabsSkipped++
+              console.log(`[ui:smoke] Skipped disabled tab "${t.label}" on screen "${screen.label}"`)
               continue
             }
             try {
               await t.locator.click({ timeout: 5000 })
               await page.waitForTimeout(250)
+              tabsClicked++
             } catch (clickErr) {
-              console.warn(`[ui:smoke] Could not click tab "${t.label}": ${clickErr.message.split("\n")[0]}`)
+              const errMsg = clickErr.message.split("\n")[0]
+              console.warn(`[ui:smoke] Could not click tab "${t.label}" on screen "${screen.label}": ${errMsg}`)
+              tabCoverageWarnings.push({
+                screen: screen.label,
+                tab: t.label,
+                reason: `Click failed: ${errMsg}`,
+              })
             }
           }
 
@@ -625,6 +655,10 @@ async function run() {
           await page.screenshot({ path: screenshotPath, fullPage: false })
           totalScreenshots++
         }
+
+        console.log(
+          `[ui:smoke] ${screen.label}: ${tabsFound} tabs found / ${tabsClicked} tabs clicked / ${tabsSkipped} tabs skipped (disabled)`,
+        )
       }
     }
 
@@ -641,10 +675,11 @@ async function run() {
   const hasFailures =
     overflowFindings.length > 0 ||
     groupedAxeViolations.size > 0 ||
-    fallbackFindings.length > 0
+    fallbackFindings.length > 0 ||
+    tabCoverageWarnings.length > 0
   if (hasFailures) {
     console.error(
-      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, or UI error fallbacks.",
+      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, UI error fallbacks, or tab coverage.",
     )
     process.exit(1)
   } else {

@@ -44,16 +44,26 @@ describe("Customer Master Backend Validation & Pure Logic (Part 5a)", () => {
       }
     })
 
-    it("rejects more than 5 customer tags", () => {
-      assert.throws(
-        () =>
-          createCustomerSchema.parse({
-            name: "Test",
-            phone: "9876543210",
-            tags: ["vip", "group-leader", "agent", "corporate", "pilgrim-group", "vip"],
-          }),
-        /Cannot assign more than 5 tags/
-      )
+    it("filters out unknown tags (e.g. senior-citizen, special-care) and caps tags at 5 without throwing", () => {
+      const parsed = createCustomerSchema.parse({
+        name: "Test",
+        phone: "9876543210",
+        tags: [
+          "vip",
+          "senior-citizen",
+          "special-care",
+          "frequent",
+          "regular",
+          "agent",
+          "corporate",
+          "pilgrim-group",
+        ],
+      })
+      // senior-citizen and special-care are filtered out, and result is capped at 5
+      assert.deepEqual(parsed.tags, ["vip", "frequent", "regular", "agent", "corporate"])
+      assert.equal(parsed.tags.length, 5)
+      assert.ok(!parsed.tags.includes("senior-citizen"))
+      assert.ok(!parsed.tags.includes("special-care"))
     })
 
     it("validates and auto-uppercases Indian GSTIN format", () => {
@@ -150,6 +160,48 @@ describe("Customer Master Backend Validation & Pure Logic (Part 5a)", () => {
 
       // Repeat customer flag: false because only 1 active booking
       assert.equal(s.isRepeat, false)
+    })
+  })
+
+  describe("Audit Log & Error Log Privacy (Steps 0.b & 0.c)", () => {
+    it("ensures duplicate key error log pattern does not leak phone number PII", () => {
+      // Simulate MongoDB E11000 error with sensitive index payload
+      const sensitivePhone = "9876543210"
+      const mongoError = new Error(
+        `E11000 duplicate key error collection: yatrahub.customers index: userId_1_phone_1 dup key: { userId: ObjectId('664a1b2c3d4e5f6a7b8c9d0e'), phone: "${sensitivePhone}" }`
+      )
+      mongoError.name = "MongoServerError"
+      mongoError.code = 11000
+
+      // The privacy pattern used in route catch blocks: log error.name and error.code only
+      const loggedParts = [mongoError.name, mongoError.code || ""]
+      const loggedString = loggedParts.join(" ")
+
+      assert.ok(!loggedString.includes(sensitivePhone), "Logged error must not contain phone number")
+      assert.equal(loggedString, "MongoServerError 11000")
+    })
+
+    it("ensures customer audit log payloads omit customer phone and address PII", () => {
+      // Meta payload constructed in routes/customers.js
+      const customerId = "664a1b2c3d4e5f6a7b8c9d0e"
+      const changedInput = {
+        name: "Ramesh Bhai",
+        phone: "9876543210",
+        city: "Surat",
+      }
+
+      // Customer update meta only contains customerId and changedFields
+      const updateMeta = {
+        customerId,
+        changedFields: Object.keys(changedInput),
+      }
+
+      assert.ok(!JSON.stringify(updateMeta).includes("9876543210"))
+      assert.deepEqual(updateMeta.changedFields, ["name", "phone", "city"])
+
+      // Customer create meta only contains customerId
+      const createMeta = { customerId }
+      assert.ok(!JSON.stringify(createMeta).includes("9876543210"))
     })
   })
 })

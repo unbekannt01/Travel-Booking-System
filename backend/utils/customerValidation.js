@@ -62,13 +62,9 @@ export const createCustomerSchema = z.object({
     })
     .default("en"),
   tags: z
-    .array(
-      z.enum(CUSTOMER_TAGS, {
-        errorMap: () => ({ message: "Invalid customer tag" }),
-      })
-    )
-    .max(5, "Cannot assign more than 5 tags")
-    .default([]),
+    .array(z.string())
+    .default([])
+    .transform((list) => (list || []).filter((t) => CUSTOMER_TAGS.includes(t)).slice(0, 5)),
   notes: z
     .string()
     .trim()
@@ -136,9 +132,9 @@ export const updateCustomerSchema = z.object({
     .enum(CUSTOMER_LANGUAGES)
     .optional(),
   tags: z
-    .array(z.enum(CUSTOMER_TAGS))
-    .max(5, "Cannot assign more than 5 tags")
-    .optional(),
+    .array(z.string())
+    .optional()
+    .transform((list) => (list ? list.filter((t) => CUSTOMER_TAGS.includes(t)).slice(0, 5) : undefined)),
   notes: z
     .string()
     .trim()

@@ -139,6 +139,137 @@ export function toDateKey(d) {
 }
 
 /**
+ * Calculates authoritative financial figures for a single booking.
+ * Shared between the P&L engine, Customer summary, Receivables, and Statements.
+ *
+ * RULES:
+ * 1. Cancelled bookings contribute:
+ *    - 0 passengers
+ *    - 0 booked revenue
+ *    - 0 outstanding
+ *    - Collected revenue = cancellation charge from calculateCancellationRefund capped at total paid
+ *    - Cancellation fees retained = cancellation charge capped at total paid
+ *    - Refunds paid = total paid - cancellation fee
+ * 2. Active bookings contribute:
+ *    - passengers: number of passengers
+ *    - bookedRevenue: totalAmount
+ *    - collected: payments ledger authoritative (or advanceReceived fallback)
+ *    - outstanding: Math.max(0, totalAmount - paid)
+ *    - cancellationFee: 0
+ *
+ * @param {Object} b - Booking record
+ * @returns {{
+ *   isCancelled: boolean,
+ *   passengers: number,
+ *   bookedRevenue: number,
+ *   collected: number,
+ *   outstanding: number,
+ *   cancellationFeesRetained: number,
+ *   refundsPaid: number,
+ *   totalPaid: number,
+ * }}
+ */
+export function calculateBookingFinancials(b) {
+  if (!b) {
+    return {
+      isCancelled: false,
+      passengers: 0,
+      bookedRevenue: 0,
+      collected: 0,
+      outstanding: 0,
+      cancellationFeesRetained: 0,
+      refundsPaid: 0,
+      totalPaid: 0,
+    }
+  }
+
+  const isCancelled = isBookingCancelled(b)
+  if (isCancelled) {
+    // 1. Authoritative payment resolution: payments array vs advanceReceived
+    let totalPaid = 0
+    if (Array.isArray(b.payments) && b.payments.length > 0) {
+      const nonVoid = b.payments.filter((p) => !p.isVoid)
+      if (nonVoid.length > 0) {
+        const receipts = nonVoid.filter((p) => p.type !== "refund")
+        totalPaid = round2(receipts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0))
+      } else {
+        totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+      }
+    } else {
+      totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+    }
+
+    // 2. Cancellation fee and refund determination (source of truth: calculateCancellationRefund capped at totalPaid)
+    let fee = 0
+    let refundAmount = 0
+
+    if (b.cancellationCharge !== undefined && b.cancellationCharge !== null && b.cancellationCharge !== "") {
+      const charge = round2(b.cancellationCharge)
+      fee = Math.min(totalPaid, Math.max(0, charge))
+      refundAmount =
+        b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== ""
+          ? Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
+          : round2(totalPaid - fee)
+    } else if (b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== "") {
+      refundAmount = Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
+      fee = round2(totalPaid - refundAmount)
+    } else {
+      try {
+        const calc = calculateCancellationRefund({ totalPaid, cancellationCharge: 0 })
+        fee = calc.cancellationCharge
+        refundAmount = calc.refundAmount
+      } catch {
+        fee = 0
+        refundAmount = totalPaid
+      }
+    }
+
+    return {
+      isCancelled: true,
+      passengers: 0,
+      bookedRevenue: 0,
+      collected: fee,
+      outstanding: 0,
+      balanceDue: 0,
+      cancellationFeesRetained: fee,
+      retainedFees: fee,
+      refundsPaid: refundAmount,
+      totalPaid,
+    }
+  }
+
+  // Active booking
+  const total = round2(Number(b.totalAmount) || 0)
+  let paid = 0
+  if (Array.isArray(b.payments) && b.payments.length > 0) {
+    const nonVoid = b.payments.filter((p) => !p.isVoid)
+    if (nonVoid.length > 0) {
+      paid = computeLedgerTotals(b.payments, total).advanceReceived
+    } else {
+      paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+    }
+  } else {
+    paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
+  }
+
+  const paxCount = Array.isArray(b.passengers) ? b.passengers.length : 0
+  const balance = Math.max(0, round2(total - paid))
+
+  return {
+    isCancelled: false,
+    passengers: paxCount,
+    bookedRevenue: total,
+    collected: paid,
+    outstanding: balance,
+    balanceDue: balance,
+    cancellationFeesRetained: 0,
+    retainedFees: 0,
+    refundsPaid: 0,
+    totalPaid: paid,
+  }
+}
+
+/**
  * Computes comprehensive Tour-wise and Departure-wise Profit/Loss metrics.
  *
  * @param {Object} params
@@ -279,75 +410,16 @@ export function calculateProfitLoss({
     const dep = getOrCreateDeparture(depKey, b.tourName, b.journeyDate || b.date, bus)
     dep.bookings.push(b)
 
-    const isCancelled = isBookingCancelled(b)
-    if (isCancelled) {
-      // 1. Authoritative payment resolution: payments array vs advanceReceived
-      let totalPaid = 0
-      if (Array.isArray(b.payments) && b.payments.length > 0) {
-        const nonVoid = b.payments.filter((p) => !p.isVoid)
-        if (nonVoid.length > 0) {
-          const receipts = nonVoid.filter((p) => p.type !== "refund")
-          totalPaid = round2(receipts.reduce((sum, p) => sum + (Number(p.amount) || 0), 0))
-        } else {
-          totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
-        }
-      } else {
-        totalPaid = Math.max(0, round2(Number(b.advanceReceived) || 0))
-      }
-
-      // 2. Cancellation fee and refund determination (source of truth: calculateCancellationRefund capped at totalPaid)
-      let fee = 0
-      let refundAmount = 0
-
-      if (b.cancellationCharge !== undefined && b.cancellationCharge !== null && b.cancellationCharge !== "") {
-        const charge = round2(b.cancellationCharge)
-        fee = Math.min(totalPaid, Math.max(0, charge))
-        refundAmount =
-          b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== ""
-            ? Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
-            : round2(totalPaid - fee)
-      } else if (b.refundAmount !== undefined && b.refundAmount !== null && b.refundAmount !== "") {
-        refundAmount = Math.min(totalPaid, Math.max(0, round2(b.refundAmount)))
-        fee = round2(totalPaid - refundAmount)
-      } else {
-        try {
-          const calc = calculateCancellationRefund({ totalPaid, cancellationCharge: 0 })
-          fee = calc.cancellationCharge
-          refundAmount = calc.refundAmount
-        } catch {
-          fee = 0
-          refundAmount = totalPaid
-        }
-      }
-
-      // 3. Attribution to departure
-      dep.cancellationFeesRetained = round2(dep.cancellationFeesRetained + fee)
-      // Cash collected net of refunds from this cancelled booking is the retained fee
-      dep.collected = round2(dep.collected + fee)
-      dep.refundsPaid = round2(dep.refundsPaid + refundAmount)
-      // Cancelled bookings do not add to passengers, bookedRevenue, or outstanding
+    const fin = calculateBookingFinancials(b)
+    if (fin.isCancelled) {
+      dep.cancellationFeesRetained = round2(dep.cancellationFeesRetained + fin.cancellationFeesRetained)
+      dep.collected = round2(dep.collected + fin.collected)
+      dep.refundsPaid = round2(dep.refundsPaid + fin.refundsPaid)
     } else {
-      // Active booking
-      const total = round2(Number(b.totalAmount) || 0)
-      let paid = 0
-      if (Array.isArray(b.payments) && b.payments.length > 0) {
-        const nonVoid = b.payments.filter((p) => !p.isVoid)
-        if (nonVoid.length > 0) {
-          paid = computeLedgerTotals(b.payments, total).advanceReceived
-        } else {
-          paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
-        }
-      } else {
-        paid = Math.max(0, round2(Number(b.advanceReceived) || 0))
-      }
-
-      const paxCount = Array.isArray(b.passengers) ? b.passengers.length : 0
-      const balance = Math.max(0, round2(total - paid))
-
-      dep.passengers += paxCount
-      dep.bookedRevenue = round2(dep.bookedRevenue + total)
-      dep.collected = round2(dep.collected + paid)
-      dep.outstanding = round2(dep.outstanding + balance)
+      dep.passengers += fin.passengers
+      dep.bookedRevenue = round2(dep.bookedRevenue + fin.bookedRevenue)
+      dep.collected = round2(dep.collected + fin.collected)
+      dep.outstanding = round2(dep.outstanding + fin.outstanding)
     }
   }
 
