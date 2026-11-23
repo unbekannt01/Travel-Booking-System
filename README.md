@@ -209,6 +209,17 @@ npm run ui:smoke
 - **Safe Backfill CLI Utility**: `node scripts/backfill-customers.mjs` safely scans historical bookings lacking customer linkage, defaulting to `--dry-run` and requiring `--apply` to persist changes, with strictly zero raw PII logged to the terminal.
 - **Security & Privacy Enforcement**: Compound partial unique index `{ userId: 1, phone: 1 }` allows re-registering soft-deleted numbers; Aadhaar numbers are never stored in the customer master and never exposed in customer API responses.
 
+### 8. Outstanding Receivables & Customer Account Statements (Part 5b)
+- **Receivables Aging Analysis**: Days-past-due aging buckets (`not-due`, `0-30`, `31-60`, `61-90`, `90-plus`) calculated on Journey Date or Booking Date basis.
+- **Accessible Grouping**: Roll up by customer with expandable nested booking ledgers, or view as a flat booking list.
+- **Customer Account Statements**: Comprehensive ledger accounting with opening balance, chronological debits/credits, same-day sort stability, and sandboxed browser print/PDF preview.
+
+### 9. WhatsApp Payment Reminders (Part 5c)
+- **Semi-Automated Dispatch**: Official `https://wa.me/91<10 digits>?text=<encoded message>` link generation. Operators send messages manually in WhatsApp.
+- **Strict Data Privacy**: Zero message bodies and zero phone numbers stored in MongoDB or audit logs. 400-day TTL index on reminder logs.
+- **Multilingual Templates**: 9 built-in polite templates (English, Hindi, Gujarati across Friendly, Due Soon, and Overdue tones) with custom template overrides in Settings.
+- **Smart Safety Nets**: 24-hour reminder warning, opt-out enforcement, 10-digit mobile validation, and batch reminder queue mode.
+
 
 ---
 

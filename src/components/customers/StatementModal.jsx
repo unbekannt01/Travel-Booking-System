@@ -4,7 +4,8 @@ import { RateLimitNotice } from "../common/RateLimitNotice"
 import { getCustomerStatement } from "../../data/customers"
 import { renderCustomerStatementHtml } from "../../../shared/statementRenderer"
 import { downloadCsv } from "../../utils/csv"
-import { Printer, Download, RefreshCw, Calendar, Globe } from "lucide-react"
+import ReminderModal from "../reminders/ReminderModal"
+import { Printer, Download, RefreshCw, Calendar, Globe, MessageSquare } from "lucide-react"
 
 /**
  * Calculates date range presets for financial periods.
@@ -61,6 +62,7 @@ export default function StatementModal({
   const [error, setError] = useState(null)
   const [statementData, setStatementData] = useState(null)
   const [operatorSettings, setOperatorSettings] = useState(null)
+  const [showReminderModal, setShowReminderModal] = useState(false)
 
   const iframeRef = useRef(null)
 
@@ -307,6 +309,19 @@ export default function StatementModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {statementData?.summary?.closingBalance > 0 && !customer?.whatsappOptOut && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowReminderModal(true)}
+                className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+              >
+                <MessageSquare className="w-4 h-4" />
+                Send Reminder
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="outline"
@@ -337,6 +352,15 @@ export default function StatementModal({
           </div>
         </div>
       </div>
+
+      {showReminderModal && customer && (
+        <ReminderModal
+          isOpen={showReminderModal}
+          onClose={() => setShowReminderModal(false)}
+          customer={customer}
+          company={operatorSettings}
+        />
+      )}
     </Modal>
   )
 }

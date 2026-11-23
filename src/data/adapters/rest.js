@@ -645,3 +645,47 @@ export async function deleteCustomer(id) {
   })
 }
 
+// --- REMINDERS & TEMPLATES ---
+export async function listReminderTemplates() {
+  const res = await request("/api/reminder-templates")
+  return res?.templates || {}
+}
+
+export async function saveReminderTemplate(language, tone, body) {
+  const res = await request(`/api/reminder-templates/${language}/${tone}`, {
+    method: "PUT",
+    body: JSON.stringify({ body }),
+  })
+  return res?.template
+}
+
+export async function resetReminderTemplate(language, tone) {
+  const res = await request(`/api/reminder-templates/${language}/${tone}`, {
+    method: "DELETE",
+  })
+  return res?.template
+}
+
+export async function listReminders(params = {}) {
+  const query = new URLSearchParams()
+  if (params.customerId) query.set("customerId", params.customerId)
+  if (params.limit) query.set("limit", String(params.limit))
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/reminders${qs}`)
+  return res?.reminders || []
+}
+
+export async function createReminderLog(data) {
+  return request("/api/reminders", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function markReminderSent(id) {
+  return request(`/api/reminders/${id}/sent`, {
+    method: "POST",
+  })
+}
+
+

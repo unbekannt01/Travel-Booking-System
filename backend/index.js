@@ -14,6 +14,8 @@ import documentTemplateRoutes from "./routes/documentTemplates.js"
 import expenseRoutes from "./routes/expenses.js"
 import reportRoutes from "./routes/reports.js"
 import customerRoutes from "./routes/customers.js"
+import reminderTemplateRoutes from "./routes/reminderTemplates.js"
+import reminderRoutes from "./routes/reminders.js"
 
 const app = express()
 
@@ -65,6 +67,8 @@ app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/expenses", expenseRoutes)
 app.use("/api/reports", reportRoutes)
 app.use("/api/customers", customerRoutes)
+app.use("/api/reminder-templates", reminderTemplateRoutes)
+app.use("/api/reminders", reminderRoutes)
 
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {

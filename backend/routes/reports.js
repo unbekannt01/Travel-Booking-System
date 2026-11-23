@@ -1,10 +1,12 @@
 import express from "express"
+import mongoose from "mongoose"
 import rateLimit from "express-rate-limit"
 import { z } from "zod"
 import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
 import Expense from "../models/Expense.js"
 import Customer from "../models/Customer.js"
+import ReminderLog from "../models/ReminderLog.js"
 import { calculateProfitLoss } from "../../shared/profitLoss.js"
 import { calculateReceivables } from "../../shared/receivables.js"
 
@@ -289,7 +291,7 @@ router.get("/outstanding", verifyToken, reportLimiter, async (req, res) => {
       userId: req.user.id,
       deletedAt: null,
     })
-      .select("_id name phone email city")
+      .select("_id name phone email city language whatsappOptOut")
       .lean()
 
     // 3. Run pure receivables aging calculation
@@ -317,6 +319,69 @@ router.get("/outstanding", verifyToken, reportLimiter, async (req, res) => {
     const pagedCustomers = filteredCustomers.slice(startIndex, startIndex + limit)
     const pagedRows = filteredRows.slice(startIndex, startIndex + limit)
 
+    // 6. Enrich with reminder statistics (lastReminderAt, reminderCount30d)
+    const customerIdsToLookup = Array.from(
+      new Set(
+        [
+          ...pagedCustomers.map((c) => c.customerId),
+          ...pagedRows.map((r) => r.customerId),
+        ].filter((id) => id && id !== "unlinked" && !id.startsWith("phone_") && mongoose.isValidObjectId(id))
+      )
+    )
+
+    const reminderMap = new Map()
+    if (customerIdsToLookup.length > 0) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const reminderStats = await ReminderLog.aggregate([
+        {
+          $match: {
+            userId: new mongoose.Types.ObjectId(req.user.id),
+            customerId: { $in: customerIdsToLookup.map((id) => new mongoose.Types.ObjectId(id)) },
+          },
+        },
+        {
+          $group: {
+            _id: "$customerId",
+            lastReminderAt: { $max: "$openedAt" },
+            reminderCount30d: {
+              $sum: {
+                $cond: [{ $gte: ["$openedAt", thirtyDaysAgo] }, 1, 0],
+              },
+            },
+          },
+        },
+      ])
+
+      for (const stat of reminderStats) {
+        reminderMap.set(stat._id.toString(), {
+          lastReminderAt: stat.lastReminderAt,
+          reminderCount30d: stat.reminderCount30d,
+        })
+      }
+    }
+
+    const enrichedCustomers = pagedCustomers.map((c) => {
+      const stats = reminderMap.get(c.customerId)
+      return {
+        ...c,
+        language: c.customerLanguage || "en",
+        whatsappOptOut: Boolean(c.whatsappOptOut),
+        lastReminderAt: stats?.lastReminderAt || null,
+        reminderCount30d: stats?.reminderCount30d || 0,
+      }
+    })
+
+    const enrichedRows = pagedRows.map((r) => {
+      const stats = reminderMap.get(r.customerId)
+      return {
+        ...r,
+        language: r.customerLanguage || "en",
+        whatsappOptOut: Boolean(r.whatsappOptOut),
+        lastReminderAt: stats?.lastReminderAt || null,
+        reminderCount30d: stats?.reminderCount30d || 0,
+      }
+    })
+
     res.json({
       success: true,
       meta: {
@@ -340,8 +405,8 @@ router.get("/outstanding", verifyToken, reportLimiter, async (req, res) => {
         bucketTotals: report.bucketTotals,
         bucketCounts: report.bucketCounts,
       },
-      customers: pagedCustomers,
-      rows: pagedRows,
+      customers: enrichedCustomers,
+      rows: enrichedRows,
     })
   } catch (error) {
     console.error("Outstanding report generation error:", error.name, error.code || "")

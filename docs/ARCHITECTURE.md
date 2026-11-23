@@ -678,5 +678,37 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - `src/components/customers/CustomerDrawer.jsx`:
     - Added "Statement" button opening the statement preview modal directly from the customer profile drawer.
 
+---
+
+## 10. WhatsApp Payment Reminders Architecture (Phase 5c)
+
+Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
+- **Zero WhatsApp Business API / Zero Automation**: The app constructs clean `https://wa.me/91<10 digits>?text=<encoded message>` links and opens them in the browser. The tour operator clicks send inside WhatsApp personally.
+- **Strict Data Privacy**:
+  - `ReminderLog` documents in MongoDB store strictly metadata: `{ userId, customerId, bookingIds, tone, language, amount, templateSource, status, openedAt, markedSentAt }`.
+  - Under no circumstances is customer phone number or message body persisted in the database or audit logs.
+  - 400-day TTL index on `createdAt` automatically purges reminder logs.
+- **Pure Reminders Engine (`shared/reminders.js`)**:
+  - `REMINDER_TONES`: `friendly`, `due-soon`, `overdue`.
+  - `REMINDER_LANGUAGES`: `en` (English), `hi` (Hindi), `gu` (Gujarati).
+  - `DEFAULT_REMINDER_TEMPLATES`: 9 polite, concise templates (< 600 chars).
+  - `renderReminder({ template, values })`: substitutes placeholders, sanitizes control/bidi-override characters (`\u202A`–`\u202E`, `\u2066`–`\u2069`, zero-width chars), safely omits UPI clause if `upiId` is absent, and truncates cleanly at word boundaries (max 900 chars).
+  - `buildWhatsAppUrl(phone, text)`: validates 10-digit Indian mobile and generates encoded `wa.me` URL.
+  - `suggestTone({ daysOverdue, daysToJourney, remindersSent })`: suggests appropriate tone based on payment aging and upcoming trip dates.
+- **Backend Endpoints (`backend/routes/reminderTemplates.js` & `backend/routes/reminders.js`)**:
+  - `GET /api/reminder-templates`: Returns merged map of 9 templates for current tenant (custom if saved in `ReminderTemplate`, else defaults).
+  - `PUT /api/reminder-templates/:language/:tone`: Validates placeholder syntax (< 600 chars) and persists custom template.
+  - `DELETE /api/reminder-templates/:language/:tone`: Resets template to default by deleting custom record.
+  - `POST /api/reminders`: Validates customer, checks `whatsappOptOut` (409 Conflict if true), validates Indian mobile (422), recomputes outstanding balance on server via `calculateBookingFinancials` (409 if <= 0), creates `ReminderLog`, and records non-PII audit log.
+  - `POST /api/reminders/:id/sent`: Updates status to `sent` and sets `markedSentAt`.
+  - `GET /api/reminders`: Returns chronological list for tenant.
+- **Enriched Analytical Receivables**:
+  - `GET /api/reports/outstanding` aggregates `ReminderLog` to enrich returned customer and booking records with `lastReminderAt` and `reminderCount30d`.
+  - `GET /api/customers/:id` returns last 5 reminder logs in customer profile.
+- **User Interface**:
+  - `src/components/reminders/ReminderModal.jsx`: Shared accessible dialog across Outstanding, Customer Drawer, and Statement Modal. Live editable preview, tone/language segmented selectors, tone suggestion hints, 24-hour reminder advisory, opt-out guard, and queue mode ("Customer X of Y", Skip, Next).
+  - `src/components/dashboard/ReminderTemplateEditor.jsx`: Lazy-loaded in SettingsPanel ("Reminders" tab). Interactive placeholder chips, real-time validation, live preview with simulated data, and TRAI/DND compliance advisory.
+
+
 
 

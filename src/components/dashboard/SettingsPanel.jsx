@@ -14,6 +14,7 @@ import {
   Trash2,
   Upload,
   Sparkles,
+  MessageSquare,
 } from "lucide-react"
 import { useToast } from "../common/ToastContext"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
@@ -33,6 +34,7 @@ import { cn } from "../../utils/cn"
 import { isValidUpiVpa } from "../../utils/validators"
 
 const InvoiceStudio = lazy(() => import("./InvoiceStudio"))
+const ReminderTemplateEditor = lazy(() => import("./ReminderTemplateEditor"))
 
 export default function SettingsPanel({
   user,
@@ -769,6 +771,22 @@ export default function SettingsPanel({
           }
         >
           <InvoiceStudio user={user} />
+        </Suspense>
+      ) : null,
+    },
+    {
+      id: "reminders",
+      label: "Reminders",
+      icon: <MessageSquare size={16} />,
+      content: activeTab === "reminders" ? (
+        <Suspense
+          fallback={
+            <div className="flex h-96 items-center justify-center">
+              <Spinner size="lg" />
+            </div>
+          }
+        >
+          <ReminderTemplateEditor user={user} />
         </Suspense>
       ) : null,
     },

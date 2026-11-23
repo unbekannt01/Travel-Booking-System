@@ -112,6 +112,7 @@ const ALL_SCREENS = [
   { id: "profit-loss", label: "Profit & Loss", isAnalyticsTab: "pnl" },
   { id: "settings", label: "Settings", tabId: "settings" },
   { id: "invoice-studio", label: "Invoice Studio", isSettingsTab: "studio" },
+  { id: "reminder-settings", label: "Reminder Settings", isSettingsTab: "reminders" },
   { id: "new-booking", label: "New Booking", isAction: "new-booking" },
   { id: "ui-kit", label: "Dev UI Kit", isRoute: "#/ui-kit" },
 ]
@@ -550,10 +551,18 @@ async function run() {
           await settingsNav.click()
           await page.waitForTimeout(300)
         }
-        const studioTab = await page.$('button:has-text("Invoice Studio")')
-        if (studioTab) {
-          await studioTab.click()
-          await page.waitForTimeout(300)
+        if (screen.isSettingsTab === "studio") {
+          const studioTab = await page.$('button:has-text("Invoice Studio")')
+          if (studioTab) {
+            await studioTab.click()
+            await page.waitForTimeout(300)
+          }
+        } else if (screen.isSettingsTab === "reminders") {
+          const remindersTab = await page.$('button:has-text("Reminders")')
+          if (remindersTab) {
+            await remindersTab.click()
+            await page.waitForTimeout(300)
+          }
         }
       } else if (screen.isAnalyticsTab) {
         if (page.url().includes("#/ui-kit")) {

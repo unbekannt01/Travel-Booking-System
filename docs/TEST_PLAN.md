@@ -450,9 +450,38 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.14 Manual Verification Checklist — Part 5c WhatsApp Payment Reminders
+
+- [ ] **Settings Reminders Tab (`ReminderTemplateEditor`)**:
+  - Navigate to Settings -> click "Reminders" tab; verify template editor loads with tone and language segmented controls.
+  - Click placeholder chips (`{customerName}`, `{balance}`, `{tourName}`, `{upiId}`); verify token is inserted at cursor position.
+  - Edit template body; observe character counter (`X / 600`) and live preview card updating immediately.
+  - Click "Save Template"; verify custom template persists. Click "Reset to Default"; verify default template is restored.
+  - Verify TRAI DND / Telecom Commercial Communications advisory is visible at the bottom.
+- [ ] **Outstanding Screen Reminders & Queue Mode**:
+  - On Outstanding screen, verify "Last Reminded" column displays relative time (e.g. "2d ago" or "Never").
+  - Click "Not reminded in 7 days" filter chip; verify customer list filters accordingly.
+  - Click "Remind" button on any customer row; verify `ReminderModal` opens with customer name, phone, and total due.
+  - Click "Reminder queue (N)"; verify modal opens in queue mode showing "Queue: 1 of N", with "Skip" and "Next" buttons.
+- [ ] **Customer Opt-Out Enforcement**:
+  - In Customer Drawer, toggle "WhatsApp Reminders" to "Opted Out".
+  - Attempt to open reminder from Customer Drawer; observe button is disabled.
+  - Open ReminderModal for an opted-out customer; verify prominent red alert is shown, and "Open WhatsApp" and "Copy message" buttons are suppressed.
+- [ ] **24-Hour Reminder Frequency Warning**:
+  - Send a reminder or set `lastReminderAt` to within 24 hours.
+  - Re-open ReminderModal; verify amber warning banner cautions operator against repeated messages within 24 hours.
+- [ ] **Statement Modal Integration**:
+  - Open StatementModal for a customer with outstanding balance; verify "Send Reminder" button appears in footer.
+  - Click "Send Reminder"; verify ReminderModal opens with the customer's closing balance.
+- [ ] **Data Privacy & TTL Verification**:
+  - Verify MongoDB `ReminderLog` documents contain no customer phone and no message body.
+  - Verify 400-day TTL index on `ReminderLog.createdAt`.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-With 293 unit & regression tests passing across 68 TAP test suites, 34 component tests passing across 11 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, the remaining gaps scheduled for future phases are:
+With 354 unit & regression tests passing across 92 TAP test suites, 67 component tests passing across 16 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 5 is officially completed. Remaining gaps scheduled for future phases:
 
 1. **Backend Integration / API Route Tests**:
    - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.

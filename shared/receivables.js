@@ -185,6 +185,8 @@ export function calculateReceivables({
     const customerName = (cDoc?.name || b.customerName || b.contactName || "Unknown Customer").trim()
     const customerPhone = (cDoc?.phone || b.customerPhone || b.contactPhone || "").trim()
     const customerCity = (cDoc?.city || b.customerCity || b.contactCity || "").trim()
+    const customerLanguage = cDoc?.language || "en"
+    const whatsappOptOut = Boolean(cDoc?.whatsappOptOut)
 
     allRows.push({
       bookingId: b._id ? b._id.toString() : (b.id || ""),
@@ -193,6 +195,8 @@ export function calculateReceivables({
       customerName,
       customerPhone,
       customerCity,
+      customerLanguage,
+      whatsappOptOut,
       tourName: b.tourName || "General",
       journeyDate: journeyDateStr,
       bookingDate: bookingDateStr,
@@ -224,6 +228,8 @@ export function calculateReceivables({
         customerName: isUnlinked && !row.customerPhone ? "No customer record" : row.customerName,
         customerPhone: row.customerPhone || "",
         customerCity: row.customerCity || "",
+        customerLanguage: row.customerLanguage || "en",
+        whatsappOptOut: Boolean(row.whatsappOptOut),
         isUnlinked,
         totalOutstanding: 0,
         overdueAmount: 0,

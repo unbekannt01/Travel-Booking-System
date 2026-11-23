@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit"
 import Customer from "../models/Customer.js"
 import Booking from "../models/Booking.js"
 import User from "../models/User.js"
+import ReminderLog from "../models/ReminderLog.js"
 import verifyToken from "../middleware/auth.js"
 import { logAudit } from "../models/AuditLog.js"
 import {
@@ -276,6 +277,25 @@ router.get("/:id", verifyToken, async (req, res) => {
       refundAmount: b.refundAmount || 0,
     }))
 
+    // Fetch last 5 reminder logs for this customer
+    const reminderLogs = await ReminderLog.find({
+      userId: req.user.id,
+      customerId: customer._id,
+    })
+      .sort({ openedAt: -1, createdAt: -1 })
+      .limit(5)
+      .lean()
+
+    const sanitizedReminders = reminderLogs.map((r) => ({
+      id: r._id.toString(),
+      tone: r.tone,
+      language: r.language,
+      amount: r.amount,
+      status: r.status,
+      openedAt: r.openedAt,
+      markedSentAt: r.markedSentAt || null,
+    }))
+
     res.json({
       customer: {
         ...customer,
@@ -284,6 +304,7 @@ router.get("/:id", verifyToken, async (req, res) => {
       },
       summary,
       bookings: sanitizedBookings,
+      reminders: sanitizedReminders,
     })
   } catch (error) {
     console.error("Customer detail fetch error:", error.name, error.code || "")

@@ -29,6 +29,7 @@ import {
 } from "../../../shared/receivables"
 import StatementModal from "../customers/StatementModal"
 import CustomerDrawer from "../customers/CustomerDrawer"
+import ReminderModal from "../reminders/ReminderModal"
 import {
   IndianRupee,
   Calendar,
@@ -44,6 +45,8 @@ import {
   BarChart3,
   Table as TableIcon,
   RefreshCw,
+  MessageSquare,
+  Bell,
 } from "lucide-react"
 
 const BUCKET_COLORS = {
@@ -84,11 +87,24 @@ const BUCKET_COLORS = {
   },
 }
 
+function formatTimeAgo(date) {
+  if (!date) return ""
+  const diffMs = Date.now() - new Date(date).getTime()
+  const diffMins = Math.floor(diffMs / (60 * 1000))
+  if (diffMins < 60) return `${Math.max(1, diffMins)}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
+}
+
 export function OutstandingManagerContent({
   bookings = [],
   tours = [],
+  user = null,
 }) {
-  const todayStr = useMemo(() => toDateString(new Date()), [])
+  const [now] = useState(() => Date.now())
+  const todayStr = useMemo(() => toDateString(new Date(now)), [now])
 
   // Filters state
   const [asOf, setAsOf] = useState(todayStr)
@@ -103,6 +119,10 @@ export function OutstandingManagerContent({
   const [showTableView, setShowTableView] = useState(false)
   const [activeStatementCustomer, setActiveStatementCustomer] = useState(null)
   const [activeDrawerCustomerId, setActiveDrawerCustomerId] = useState(null)
+  const [activeReminderCustomer, setActiveReminderCustomer] = useState(null)
+  const [activeReminderBookings, setActiveReminderBookings] = useState([])
+  const [reminderQueue, setReminderQueue] = useState(null)
+  const [filterNotReminded7d, setFilterNotReminded7d] = useState(false)
 
   // Server data & loading
   const [loading, setLoading] = useState(false)
@@ -153,9 +173,13 @@ export function OutstandingManagerContent({
   // Active report summary (server preferred, local fallback)
   const summary = serverReport?.summary || localReport
 
-  // Filtered customer groups based on search query
+  // Filtered customer groups based on search query & 7-day reminder filter
   const displayedCustomers = useMemo(() => {
-    const list = serverReport?.customers || localReport.customers || []
+    let list = serverReport?.customers || localReport.customers || []
+    if (filterNotReminded7d) {
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((c) => !c.lastReminderAt || new Date(c.lastReminderAt).getTime() < sevenDaysAgo)
+    }
     if (!searchQuery.trim()) return list
     const q = searchQuery.toLowerCase().trim()
     return list.filter((c) => {
@@ -169,11 +193,15 @@ export function OutstandingManagerContent({
       )
       return nameMatch || phoneMatch || cityMatch || bookingMatch
     })
-  }, [serverReport, localReport, searchQuery])
+  }, [serverReport, localReport, searchQuery, filterNotReminded7d, now])
 
-  // Filtered booking rows based on search query
+  // Filtered booking rows based on search query & 7-day reminder filter
   const displayedRows = useMemo(() => {
-    const list = serverReport?.rows || localReport.rows || []
+    let list = serverReport?.rows || localReport.rows || []
+    if (filterNotReminded7d) {
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((r) => !r.lastReminderAt || new Date(r.lastReminderAt).getTime() < sevenDaysAgo)
+    }
     if (!searchQuery.trim()) return list
     const q = searchQuery.toLowerCase().trim()
     return list.filter((r) => {
@@ -184,7 +212,12 @@ export function OutstandingManagerContent({
         (r.tourName || "").toLowerCase().includes(q)
       )
     })
-  }, [serverReport, localReport, searchQuery])
+  }, [serverReport, localReport, searchQuery, filterNotReminded7d, now])
+
+  // Queue candidates for semi-automated reminder workflow (max 30 customers)
+  const queueCandidates = useMemo(() => {
+    return displayedCustomers.filter((c) => !c.isUnlinked && c.totalOutstanding > 0).slice(0, 30)
+  }, [displayedCustomers])
 
   // Expand / collapse customer row
   const toggleCustomerExpand = (key) => {
@@ -622,6 +655,32 @@ export function OutstandingManagerContent({
 
             <Button
               type="button"
+              variant={filterNotReminded7d ? "primary" : "outline"}
+              size="sm"
+              onClick={() => setFilterNotReminded7d((prev) => !prev)}
+              className="gap-1.5 text-xs"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              Not reminded in 7 days
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setReminderQueue(queueCandidates)
+                setActiveReminderCustomer(queueCandidates[0] || null)
+              }}
+              disabled={queueCandidates.length === 0}
+              className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Reminder queue ({queueCandidates.length})
+            </Button>
+
+            <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
@@ -654,13 +713,14 @@ export function OutstandingManagerContent({
                   <TableHead align="right">Overdue Amount</TableHead>
                   <TableHead align="center">Oldest Dues</TableHead>
                   <TableHead align="center">Bookings</TableHead>
+                  <TableHead align="center">Last Reminded</TableHead>
                   <TableHead align="right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayedCustomers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-ink-muted">
+                    <TableCell colSpan={8} className="text-center py-8 text-ink-muted">
                       No customer records match your filter criteria.
                     </TableCell>
                   </TableRow>
@@ -738,8 +798,43 @@ export function OutstandingManagerContent({
                             {c.bookingsCount}
                           </TableCell>
 
+                          <TableCell align="center">
+                            {c.lastReminderAt ? (
+                              <div
+                                className="text-xs font-medium text-ink"
+                                title={new Date(c.lastReminderAt).toLocaleString("en-IN")}
+                              >
+                                {formatTimeAgo(c.lastReminderAt)}
+                                {c.reminderCount30d > 0 && (
+                                  <span className="block text-[10px] text-ink-muted">
+                                    ({c.reminderCount30d} in 30d)
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-ink-muted text-xs">Never</span>
+                            )}
+                          </TableCell>
+
                           <TableCell align="right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* Remind Action Button */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setReminderQueue(null)
+                                  setActiveReminderCustomer(c)
+                                  setActiveReminderBookings(c.bookings || [])
+                                }}
+                                disabled={c.isUnlinked || c.totalOutstanding <= 0}
+                                className="gap-1 text-xs px-2.5 py-1 h-7 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Remind
+                              </Button>
+
                               {/* Statement Action Button */}
                               <Button
                                 type="button"
@@ -773,7 +868,7 @@ export function OutstandingManagerContent({
                         {/* Expanded Bookings Nested Table */}
                         {isExpanded && (
                           <TableRow className="bg-surface-subtle/50">
-                            <TableCell colSpan={7} className="p-3 pl-10">
+                            <TableCell colSpan={8} className="p-3 pl-10">
                               <div className="rounded border border-border bg-surface overflow-hidden">
                                 <Table>
                                   <TableHeader>
@@ -895,6 +990,35 @@ export function OutstandingManagerContent({
                               type="button"
                               variant="outline"
                               size="sm"
+                              onClick={() => {
+                                setReminderQueue(null)
+                                setActiveReminderCustomer({
+                                  _id: r.customerId,
+                                  id: r.customerId,
+                                  name: r.customerName,
+                                  phone: r.customerPhone,
+                                  customerName: r.customerName,
+                                  customerPhone: r.customerPhone,
+                                  customerCity: r.customerCity,
+                                  language: r.language,
+                                  whatsappOptOut: r.whatsappOptOut,
+                                  lastReminderAt: r.lastReminderAt,
+                                  reminderCount30d: r.reminderCount30d,
+                                  totalOutstanding: r.outstanding,
+                                  bookings: [r],
+                                })
+                                setActiveReminderBookings([r])
+                              }}
+                              disabled={!r.customerId || r.outstanding <= 0}
+                              className="text-xs px-2 py-1 h-7 text-emerald-700 dark:text-emerald-400"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              Remind
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
                               onClick={() =>
                                 setActiveStatementCustomer({
                                   _id: r.customerId,
@@ -934,6 +1058,25 @@ export function OutstandingManagerContent({
           isOpen={!!activeDrawerCustomerId}
           onClose={() => setActiveDrawerCustomerId(null)}
           customerId={activeDrawerCustomerId}
+        />
+      )}
+
+      {/* Payment Reminder Modal */}
+      {activeReminderCustomer && (
+        <ReminderModal
+          isOpen={!!activeReminderCustomer}
+          onClose={() => {
+            setActiveReminderCustomer(null)
+            setReminderQueue(null)
+          }}
+          customer={activeReminderCustomer}
+          bookings={activeReminderBookings}
+          company={user}
+          user={user}
+          queue={reminderQueue}
+          onReminderLogged={() => {
+            fetchReport()
+          }}
         />
       )}
     </div>

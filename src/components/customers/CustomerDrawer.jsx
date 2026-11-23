@@ -14,11 +14,12 @@ import {
   TableCell,
 } from "../ui"
 import { RateLimitNotice } from "../common/RateLimitNotice"
-import { getCustomer, deleteCustomer } from "../../data/customers"
+import { getCustomer, deleteCustomer, updateCustomer } from "../../data/customers"
 import { formatINR } from "../../utils/formatters"
 import { useToast } from "../common/ToastContext"
 import { useConfirm } from "../common/useConfirm"
 import StatementModal from "./StatementModal"
+import ReminderModal from "../reminders/ReminderModal"
 import {
   Phone,
   Mail,
@@ -51,6 +52,17 @@ const TAG_VARIANTS = {
   regular: "neutral",
 }
 
+function formatTimeAgo(date) {
+  if (!date) return ""
+  const diffMs = Date.now() - new Date(date).getTime()
+  const diffMins = Math.floor(diffMs / (60 * 1000))
+  if (diffMins < 60) return `${Math.max(1, diffMins)}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
+}
+
 export default function CustomerDrawer({
   isOpen,
   onClose,
@@ -68,6 +80,8 @@ export default function CustomerDrawer({
   const [isRateLimited, setIsRateLimited] = useState(false)
   const [copiedPhone, setCopiedPhone] = useState(false)
   const [showStatementModal, setShowStatementModal] = useState(false)
+  const [showReminderModal, setShowReminderModal] = useState(false)
+  const [updatingOptOut, setUpdatingOptOut] = useState(false)
 
   const fetchCustomerDetails = useCallback(async () => {
     if (!customerId) return
@@ -212,6 +226,15 @@ export default function CustomerDrawer({
               <Button
                 variant="outline"
                 size="sm"
+                leftIcon={<MessageSquare className="w-4 h-4" />}
+                onClick={() => setShowReminderModal(true)}
+                disabled={customer.whatsappOptOut || (summary && summary.totalOutstanding <= 0)}
+              >
+                Remind
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 leftIcon={<Edit2 className="w-4 h-4" />}
                 onClick={() => {
                   if (onEdit) onEdit(customer)
@@ -301,9 +324,43 @@ export default function CustomerDrawer({
                 <MessageSquare className="w-3.5 h-3.5" />
                 WhatsApp Reminders:
               </span>
-              <span className={customer.whatsappOptOut ? "text-danger font-semibold" : "text-success font-semibold"}>
-                {customer.whatsappOptOut ? "Opted Out" : "Enabled"}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={customer.whatsappOptOut ? "text-danger font-semibold" : "text-success font-semibold"}>
+                  {customer.whatsappOptOut ? "Opted Out" : "Enabled"}
+                </span>
+                <button
+                  type="button"
+                  disabled={updatingOptOut}
+                  onClick={async () => {
+                    setUpdatingOptOut(true)
+                    try {
+                      const updated = await updateCustomer(customer.id, {
+                        whatsappOptOut: !customer.whatsappOptOut,
+                      })
+                      setData((prev) => ({
+                        ...prev,
+                        customer: {
+                          ...prev.customer,
+                          whatsappOptOut: updated.whatsappOptOut,
+                        },
+                      }))
+                      toast.show(
+                        updated.whatsappOptOut
+                          ? "Customer opted out of WhatsApp reminders"
+                          : "WhatsApp reminders enabled for customer",
+                        "info"
+                      )
+                    } catch (err) {
+                      toast.show(err.message || "Failed to update opt-out status", "error")
+                    } finally {
+                      setUpdatingOptOut(false)
+                    }
+                  }}
+                  className="text-[11px] text-brand hover:underline cursor-pointer disabled:opacity-50"
+                >
+                  {customer.whatsappOptOut ? "Enable" : "Opt Out"}
+                </button>
+              </div>
             </div>
 
             {customer.notes && (
@@ -421,6 +478,72 @@ export default function CustomerDrawer({
               </div>
             )}
           </Card>
+
+          {/* Payment Reminders Section */}
+          <Card elevation="sm" padding="md" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
+                Payment Reminders ({data.reminders?.length || 0})
+              </h3>
+              {!customer.whatsappOptOut && summary && summary.totalOutstanding > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowReminderModal(true)}
+                  className="gap-1 text-xs px-2 py-0.5 h-6 text-emerald-700 dark:text-emerald-400"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  Send Reminder
+                </Button>
+              )}
+            </div>
+
+            {!data.reminders || data.reminders.length === 0 ? (
+              <div className="py-4 text-center text-xs text-ink-muted">
+                No reminders recorded for this customer yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {data.reminders.map((r) => (
+                  <div
+                    key={r.id}
+                    className="p-2.5 rounded-lg border border-border-subtle bg-surface-subtle flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          r.tone === "overdue"
+                            ? "danger"
+                            : r.tone === "due-soon"
+                            ? "warning"
+                            : "neutral"
+                        }
+                        size="sm"
+                      >
+                        {r.tone}
+                      </Badge>
+                      <span className="font-mono font-semibold text-ink">
+                        {formatINR(r.amount)}
+                      </span>
+                      <span className="text-ink-muted">
+                        ({r.language?.toUpperCase()})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-ink-muted">
+                      <span title={new Date(r.openedAt).toLocaleString("en-IN")}>
+                        {formatTimeAgo(r.openedAt)}
+                      </span>
+                      <Badge variant={r.status === "sent" ? "success" : "neutral"} size="sm">
+                        {r.status === "sent" ? "Sent" : "Opened"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       )}
 
@@ -429,6 +552,18 @@ export default function CustomerDrawer({
           isOpen={showStatementModal}
           onClose={() => setShowStatementModal(false)}
           customer={customer}
+        />
+      )}
+
+      {showReminderModal && customer && (
+        <ReminderModal
+          isOpen={showReminderModal}
+          onClose={() => setShowReminderModal(false)}
+          customer={customer}
+          bookings={bookings}
+          onReminderLogged={() => {
+            fetchCustomerDetails()
+          }}
         />
       )}
     </Drawer>
