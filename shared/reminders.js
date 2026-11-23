@@ -66,7 +66,7 @@ export const DEFAULT_REMINDER_TEMPLATES = Object.freeze({
     "due-soon":
       "નમસ્તે {customerName} જી, {companyName} તરફથી સાદર પ્રણામ! 🙏 આપનો {tourName} નો પ્રવાસ {journeyDate} ના રોજ છે (બુકિંગ #{invoiceNo}). કૃપા કરીને આપની બાકી રકમ {balance} (કુલ: {totalAmount}, જમા: {paidAmount}) સમયસર ચૂકવવા વિનંતી. UPI ID: {upiId}। સહાય માટે {companyPhone} પર સંપર્ક કરો. આપની યાત્રા સુખદ રહે!",
     overdue:
-      "નમસ્તે {customerName} જી, {companyName} તરફથી ચુકવણી માટે જરૂરી યાદી. 🙏 {tourName} ના બુકિંગ #{invoiceNo} પેટે {balance} ની રકમ {daysOverdue} દિવસથી બાકી છે. કૃપા કરીને આ રકમ તાત્કાલિક UPI ID: {upiId} પર જમા કરો અથવા {companyPhone} પર સંપર્ક કરો. આભાર!",
+      "નમસ્તે {customerName} જી, {companyName} તરફથી બાકી ચુકવણી યાદ અપાવવા માટેનો સંદેશ. 🙏 {tourName} ના બુકિંગ #{invoiceNo} પેટે {balance} ની રકમ {daysOverdue} દિવસથી બાકી છે. કૃપા કરીને આ રકમ UPI ID: {upiId} પર જમા કરો અથવા {companyPhone} પર સંપર્ક કરો. આભાર!",
   }),
 })
 

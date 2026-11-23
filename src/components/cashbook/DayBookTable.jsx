@@ -40,7 +40,13 @@ export default function DayBookTable({
   const showBank = accountFilter === "all" || accountFilter === "bank"
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+    <div
+      role="region"
+      aria-label="Day book table, scrollable"
+      /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be keyboard focusable */
+      tabIndex={0}
+      className="overflow-x-auto rounded-xl border border-border bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+    >
       <table className="w-full border-collapse text-left text-xs" role="table">
         <thead className="bg-surface-subtle border-b border-border text-ink-muted">
           <tr>

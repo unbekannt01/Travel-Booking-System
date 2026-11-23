@@ -19,6 +19,7 @@ import { PanelErrorBoundary } from "../../src/components/common/PanelErrorBounda
 import { ToastProvider } from "../../src/components/common/ToastProvider"
 import { ThemeProvider } from "../../src/theme/ThemeProvider"
 import Dashboard from "../../src/components/Dashboard"
+import CashBook from "../../src/components/cashbook/CashBook"
 
 // Data APIs to mock
 import * as reportData from "../../src/data/reports"
@@ -27,6 +28,7 @@ import * as expenseData from "../../src/data/expenses"
 import * as documentData from "../../src/data/documents"
 import * as bookingData from "../../src/data/bookings"
 import * as tourData from "../../src/data/tours"
+import * as cashbookData from "../../src/data/cashbook"
 
 describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
   let consoleErrors = []
@@ -296,6 +298,43 @@ describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
       </ThemeProvider>,
       25
     )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    assertNoRenderLoop()
+  })
+
+  it("CashBook commits bounded times and never causes update depth error", async () => {
+    vi.spyOn(cashbookData, "getCashBook").mockResolvedValue({
+      startDate: "2026-11-23",
+      endDate: "2026-11-23",
+      account: "all",
+      dayBook: {
+        startDate: "2026-11-23",
+        endDate: "2026-11-23",
+        opening: { cash: 1000, bank: 5000, total: 6000 },
+        closing: { cash: 1000, bank: 5000, total: 6000 },
+        totals: {
+          receipts: { cash: 0, bank: 0, total: 0 },
+          refunds: { cash: 0, bank: 0, total: 0 },
+          expenses: { cash: 0, bank: 0, total: 0 },
+          transfers: { cashToBank: 0, bankToCash: 0 },
+          owner: { ownerIn: 0, ownerOut: 0 },
+          adjustments: { cash: 0, bank: 0, total: 0 },
+        },
+        entries: [],
+        entriesCount: 0,
+      },
+      lockDate: null,
+      lastClose: null,
+      setup: { openingCash: 1000, openingBank: 5000, asOfDate: "2026-11-01" },
+    })
+    vi.spyOn(cashbookData, "getCashBookSetup").mockResolvedValue({
+      setup: { openingCash: 1000, openingBank: 5000, asOfDate: "2026-11-01" },
+      latestClose: null,
+    })
+
+    const { assertNoRenderLoop } = renderWithProfiler(<CashBook />, 15)
     await act(async () => {
       await Promise.resolve()
     })

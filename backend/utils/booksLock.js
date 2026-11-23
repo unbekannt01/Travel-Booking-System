@@ -26,11 +26,26 @@ export async function getEffectiveLockDate(userId) {
 }
 
 /**
+ * Formats a YYYY-MM-DD date into DD-MM-YYYY for calm operator-facing messages.
+ * @param {string} isoDateStr
+ * @returns {string}
+ */
+export function formatLockDateDisplay(isoDateStr) {
+  if (!isoDateStr) return ""
+  const parts = String(isoDateStr).slice(0, 10).split("-")
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`
+  }
+  return isoDateStr
+}
+
+/**
  * Custom error class for HTTP 423 Locked.
  */
 export class BooksLockedError extends Error {
   constructor(lockDate, transactionDate) {
-    super(`Books are closed up to ${lockDate}. Transactions on or before this date cannot be created, modified, or deleted.`)
+    const displayDate = formatLockDateDisplay(lockDate)
+    super(`Books are closed up to ${displayDate}. Reopen the books to change this.`)
     this.name = "BooksLockedError"
     this.statusCode = 423
     this.lockDate = lockDate

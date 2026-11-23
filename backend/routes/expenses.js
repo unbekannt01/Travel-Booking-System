@@ -236,8 +236,6 @@ router.post("/", verifyToken, expenseWriteLimiter, async (req, res) => {
 
     if (input.status === "paid") {
       await assertBooksOpen(req.user.id, paidOn)
-    } else {
-      await assertBooksOpen(req.user.id, input.date)
     }
 
     const expense = await Expense.create({
@@ -299,8 +297,6 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Expense not found" })
     }
 
-    await assertBooksOpen(req.user.id, expense.paidOn || expense.date)
-
     const input = updateExpenseSchema.parse(req.body)
 
     // Handle paidOn synchronization
@@ -312,10 +308,25 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       paidOn = null
     }
 
-    if (newStatus === "paid") {
-      await assertBooksOpen(req.user.id, paidOn)
-    } else if (input.date) {
-      await assertBooksOpen(req.user.id, input.date)
+    const isOldPaid = expense.status === "paid"
+    const isNewPaid = newStatus === "paid"
+    const oldDate = expense.paidOn || expense.date
+    const newDate = paidOn || input.date || oldDate
+
+    const isMoneyChanging =
+      (input.amount !== undefined && input.amount !== expense.amount) ||
+      (input.paymentMode !== undefined && input.paymentMode !== expense.paymentMode) ||
+      (input.status !== undefined && input.status !== expense.status) ||
+      (input.paidOn !== undefined && input.paidOn !== expense.paidOn) ||
+      (input.date !== undefined && input.date !== expense.date)
+
+    if (isMoneyChanging) {
+      if (isOldPaid) {
+        await assertBooksOpen(req.user.id, oldDate)
+      }
+      if (isNewPaid) {
+        await assertBooksOpen(req.user.id, newDate)
+      }
     }
 
     Object.assign(expense, input, {
@@ -376,7 +387,9 @@ router.delete("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Expense not found" })
     }
 
-    await assertBooksOpen(req.user.id, expense.paidOn || expense.date)
+    if (expense.status === "paid") {
+      await assertBooksOpen(req.user.id, expense.paidOn || expense.date)
+    }
 
     expense.deletedAt = new Date()
     expense.deletedBy = req.user.id

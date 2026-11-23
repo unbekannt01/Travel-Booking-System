@@ -48,17 +48,23 @@ async function fetchDayBookDependencies(userId) {
       BooksClose.findOne({ userId, status: "active" }).sort({ closedUpTo: -1 }).lean(),
       Booking.find({ userId, deletedAt: null }).lean(),
       Payment.find({ userId, isVoid: false })
-        .populate("bookingId", "invoiceNo tourName contactName contactPhone")
+        .populate("bookingId", "invoiceNo tourName contactName contactPhone deletedAt")
         .lean(),
       Expense.find({ userId, deletedAt: null, status: "paid" }).lean(),
       CashEntry.find({ userId, deletedAt: null }).lean(),
     ])
 
+  // Exclude payments that belong to soft-deleted bookings
+  const activePayments = payments.filter((p) => {
+    if (!p.bookingId) return true
+    return p.bookingId.deletedAt === null || p.bookingId.deletedAt === undefined
+  })
+
   return {
     setup,
     latestActiveClose,
     bookings,
-    payments,
+    payments: activePayments,
     expenses,
     manualEntries,
   }
@@ -604,9 +610,9 @@ router.post("/reopen", verifyToken, closeStepUpLimiter, async (req, res) => {
       userId: req.user.id,
       action: "BOOKS_REOPENED",
       req,
-      details: {
+      meta: {
         closedUpTo: latestActiveClose.closedUpTo,
-        reopenReason: reason.trim(),
+        reasonLength: reason.trim().length,
       },
     })
 

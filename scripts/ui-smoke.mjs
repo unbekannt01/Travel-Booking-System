@@ -694,9 +694,15 @@ async function run() {
           if (!isVisible) continue
           tabsFound++
           const raw = (await tabLoc.innerText().catch(() => "")) || ""
-          const clean =
+          const singleLineLabel =
             raw
-              .trim()
+              .split(/\r?\n+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .join(" ")
+              .replace(/\s+/g, " ") || `Tab ${i + 1}`
+          const clean =
+            singleLineLabel
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/^-|-$/g, "") || `tab-${i + 1}`
@@ -707,7 +713,7 @@ async function run() {
             .catch(() => false)
           tabsToCrawl.push({
             id: clean,
-            label: raw.trim() || `Tab ${i + 1}`,
+            label: singleLineLabel,
             locator: tabLoc,
             disabled: isDisabled,
           })

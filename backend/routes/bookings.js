@@ -347,7 +347,10 @@ router.post("/", verifyToken, async (req, res) => {
     }
 
     const bookingDate = req.body.date || new Date()
-    await assertBooksOpen(req.user.id, bookingDate)
+    const checkAdvance = Math.round(Number(advanceReceived || 0) * 100) / 100
+    if (checkAdvance > 0) {
+      await assertBooksOpen(req.user.id, bookingDate)
+    }
 
     if (!validateIndianPhone(contactPhone)) {
       return res.status(400).json({ message: "Please provide a valid 10-digit Indian mobile number." })
@@ -575,9 +578,14 @@ router.put("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to update this booking" })
     }
 
-    await assertBooksOpen(req.user.id, booking.date)
-    if (req.body.date) {
-      await assertBooksOpen(req.user.id, req.body.date)
+    // Check books lock ONLY if money-affecting fields are being updated
+    const isMoneyFieldChanging =
+      req.body.cancellationCharge !== undefined ||
+      req.body.refundAmount !== undefined ||
+      (req.body.paymentMode !== undefined && req.body.paymentMode !== booking.paymentMode && (booking.advanceReceived || 0) > 0)
+
+    if (isMoneyFieldChanging) {
+      await assertBooksOpen(req.user.id, booking.cancelledAt || booking.date)
     }
 
     const effectiveTourName = req.body.tourName || booking.tourName
@@ -792,8 +800,6 @@ router.put("/:bookingId/passengers/:passengerIdentifier/checkin", verifyToken, a
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
 
-    await assertBooksOpen(req.user.id, booking.date)
-
     // Look up by subdocument _id or index
     let passenger = booking.passengers.id(passengerIdentifier)
     if (!passenger && /^\d+$/.test(passengerIdentifier)) {
@@ -820,8 +826,6 @@ router.put("/:bookingId/passengers/batch-checkin", verifyToken, async (req, res)
     const booking = await Booking.findById(req.params.bookingId)
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
-
-    await assertBooksOpen(req.user.id, booking.date)
 
     const { checkedIn } = req.body
     const newState = checkedIn !== false // default to true if not explicitly false
@@ -852,8 +856,6 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
 
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
-
-    await assertBooksOpen(req.user.id, booking.date)
 
     let passenger = booking.passengers.id(passengerIdentifier)
     if (!passenger && /^\d+$/.test(passengerIdentifier)) {
@@ -961,9 +963,6 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to cancel this booking" })
     }
 
-    await assertBooksOpen(req.user.id, booking.date)
-    await assertBooksOpen(req.user.id, new Date())
-
     const { reason, cancellationCharge, refundPaymentMode = "Cash" } = req.body
     const totalPaid = Math.round((booking.advanceReceived || 0) * 100) / 100
     let calc
@@ -975,6 +974,17 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
 
     const fee = calc.cancellationCharge
     const refundAmount = calc.refundAmount
+
+    // Check books lock ONLY if money is being refunded or legacy advance on booking.date is altered
+    if (refundAmount > 0) {
+      await assertBooksOpen(req.user.id, new Date())
+    }
+    if (totalPaid > 0) {
+      const hasPayments = (await Payment.countDocuments({ bookingId: booking._id, userId: req.user.id, isVoid: false })) > 0
+      if (!hasPayments) {
+        await assertBooksOpen(req.user.id, booking.date)
+      }
+    }
 
     booking.status = "Cancelled"
     booking.cancellationReason = reason || "Cancelled by operator"
@@ -1048,10 +1058,9 @@ router.post("/:id/payments", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to update this booking" })
     }
 
-    await assertBooksOpen(req.user.id, booking.date)
-    if (req.body.date) {
-      await assertBooksOpen(req.user.id, req.body.date)
-    }
+    // Only check the payment's effective date
+    const targetDate = req.body.paymentDate || req.body.date || new Date()
+    await assertBooksOpen(req.user.id, targetDate)
 
     const { amount, mode = "Cash", notes = "", type, referenceNo = "" } = req.body
     const numAmount = Math.round(Number(amount) * 100) / 100
@@ -1111,12 +1120,27 @@ router.delete("/:id", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to delete this booking" })
     }
 
-    await assertBooksOpen(req.user.id, booking.date)
+    // Check books lock ONLY if this booking carries money (payments or legacy advance)
+    const activePayments = await Payment.find({ bookingId: booking._id, userId: req.user.id, isVoid: false }).select("paymentDate").lean()
+    if (activePayments.length > 0) {
+      for (const p of activePayments) {
+        await assertBooksOpen(req.user.id, p.paymentDate)
+      }
+    } else if ((booking.advanceReceived || 0) > 0) {
+      await assertBooksOpen(req.user.id, booking.date)
+    }
 
     booking.deletedAt = new Date()
     await booking.save()
     res.json({ message: "Booking moved to trash", id: booking._id, invoiceNo: booking.invoiceNo })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
@@ -1131,7 +1155,15 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to restore this booking" })
     }
 
-    await assertBooksOpen(req.user.id, booking.date)
+    // Check books lock ONLY if this booking carries money (payments or legacy advance)
+    const activePayments = await Payment.find({ bookingId: booking._id, userId: req.user.id, isVoid: false }).select("paymentDate").lean()
+    if (activePayments.length > 0) {
+      for (const p of activePayments) {
+        await assertBooksOpen(req.user.id, p.paymentDate)
+      }
+    } else if ((booking.advanceReceived || 0) > 0) {
+      await assertBooksOpen(req.user.id, booking.date)
+    }
 
     booking.deletedAt = null
     await booking.save()

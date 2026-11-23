@@ -396,4 +396,132 @@ describe("Cash Book Pure Engine (Part 6a)", () => {
     assert.ok(html.includes("Customer Receipt"))
     assert.ok(!html.includes("<script"))
   })
+
+  test("IST date handling at midnight and ISO strings normalization", () => {
+    assert.equal(toDateString("2026-11-23"), "2026-11-23")
+    assert.equal(toDateString("2026-11-23T00:00:00.000Z"), "2026-11-23")
+    assert.equal(toDateString("2026-11-23T23:59:59.999Z"), "2026-11-23")
+    assert.equal(toDateString(""), "")
+    assert.equal(toDateString(null), "")
+    assert.equal(toDateString(undefined), "")
+  })
+
+  test("Same-day entry ordering adheres strictly to TYPE_SORT_ORDER", () => {
+    const rawEntries = [
+      { id: "e1", date: "2026-11-23", type: "adjustment", amount: 100, account: "cash" },
+      { id: "e2", date: "2026-11-23", type: "receipt", amount: 500, account: "cash" },
+      { id: "e3", date: "2026-11-23", type: "expense", amount: 200, account: "cash" },
+      { id: "e4", date: "2026-11-23", type: "transfer-to-bank", amount: 300, account: "cash" },
+      { id: "e5", date: "2026-11-23", type: "refund", amount: 50, account: "cash" },
+      { id: "e6", date: "2026-11-23", type: "owner-in", amount: 1000, account: "cash" },
+    ]
+
+    const dayBook = buildDayBook({
+      startDate: "2026-11-23",
+      endDate: "2026-11-23",
+      opening: { cash: 1000, bank: 2000, total: 3000 },
+      manualEntries: rawEntries.filter((e) => MANUAL_ENTRY_TYPES.includes(e.type)),
+      payments: [
+        { _id: "p1", paymentDate: "2026-11-23", amount: 500, paymentMode: "cash", receiptNo: "R-1", type: "advance" },
+        { _id: "p2", paymentDate: "2026-11-23", amount: 50, paymentMode: "cash", receiptNo: "REF-1", type: "refund" },
+      ],
+      expenses: [{ _id: "x1", paidOn: "2026-11-23", amount: 200, paymentMode: "cash", status: "paid" }],
+    })
+
+    const types = dayBook.entries.map((e) => e.type || e.sourceType)
+    // Receipts (1) -> Transfer (2) -> Refund (3) -> Expense (4) -> Owner-in (5) -> Adjustment (6)
+    assert.deepEqual(types, [
+      "receipt",
+      "transfer-to-bank",
+      "refund",
+      "expense",
+      "owner-in",
+      "adjustment",
+    ])
+  })
+
+  test("Integer paise rounding and precision eliminates floating point drift", () => {
+    // 0.1 + 0.2 floating point anomaly
+    assert.equal(0.1 + 0.2 === 0.3, false)
+    assert.equal(toPaise(0.1) + toPaise(0.2), 30)
+    assert.equal(fromPaise(30), 0.3)
+
+    assert.equal(toPaise("1500.75"), 150075)
+    assert.equal(toPaise(1500.75), 150075)
+    assert.equal(toPaise(0), 0)
+    assert.equal(fromPaise(150075), 1500.75)
+    assert.equal(fromPaise(0), 0)
+
+    assert.equal(round2(1.005), 1.01)
+    assert.equal(round2(1.004), 1)
+  })
+
+  test("Label sets completeness for en, hi, and gu", () => {
+    const enKeys = Object.keys(CASHBOOK_LABELS.en)
+    const hiKeys = Object.keys(CASHBOOK_LABELS.hi)
+    const guKeys = Object.keys(CASHBOOK_LABELS.gu)
+
+    assert.deepEqual(hiKeys.sort(), enKeys.sort())
+    assert.deepEqual(guKeys.sort(), enKeys.sort())
+
+    // Check all manual entry types are present
+    for (const type of MANUAL_ENTRY_TYPES) {
+      assert.ok(CASHBOOK_LABELS.en[type], `Missing EN label for ${type}`)
+      assert.ok(CASHBOOK_LABELS.hi[type], `Missing HI label for ${type}`)
+      assert.ok(CASHBOOK_LABELS.gu[type], `Missing GU label for ${type}`)
+    }
+  })
+
+  test("renderDayBookHtml strictly escapes hostile strings and prevents XSS", () => {
+    const dayBook = {
+      startDate: "2026-11-23",
+      endDate: "2026-11-23",
+      opening: { cash: 1000, bank: 2000, total: 3000 },
+      totals: {
+        receipts: { cash: 500, bank: 0, total: 500 },
+        refunds: { cash: 0, bank: 0, total: 0 },
+        expenses: { cash: 0, bank: 0, total: 0 },
+        transfers: { cash: 0, bank: 0 },
+        owner: { cash: 0, bank: 0 },
+        adjustments: { cash: 0, bank: 0 },
+        netCashChange: 500,
+        netBankChange: 0,
+      },
+      closing: { cash: 1500, bank: 2000, total: 3500 },
+      entries: [
+        {
+          id: "hostile-1",
+          date: "2026-11-23",
+          type: "receipt",
+          account: "cash",
+          amount: 500,
+          voucherNo: '<script>alert("xss-voucher")</script>',
+          partyName: '<img src=x onerror="alert(\'xss-party\')">',
+          description: '<svg/onload=alert("xss-desc")>',
+          cashDelta: 500,
+          bankDelta: 0,
+          cashBalance: 1500,
+          bankBalance: 2000,
+        },
+      ],
+    }
+
+    const html = renderDayBookHtml({
+      dayBook,
+      company: {
+        companyName: '<b onmouseover=alert("xss-co")>Hacked Co</b>',
+        companyPhone: '9825012345"><script>alert(1)</script>',
+      },
+      language: "en",
+    })
+
+    assert.ok(!html.includes("<script>"))
+    assert.ok(!html.includes("<img src=x"))
+    assert.ok(!html.includes("<svg/onload"))
+    assert.ok(!html.includes("<b onmouseover="))
+    assert.ok(html.includes("&lt;b onmouseover=&quot;alert(&apos;xss-co&apos;)&quot;&gt;Hacked Co&lt;/b&gt;") || html.includes("&lt;b onmouseover=alert(&quot;xss-co&quot;)&gt;Hacked Co&lt;/b&gt;"))
+    assert.ok(html.includes("&lt;script&gt;alert(&quot;xss-voucher&quot;)&lt;/script&gt;"))
+    assert.ok(html.includes("&lt;img src=x"))
+    assert.ok(html.includes("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline';\">"))
+  })
 })

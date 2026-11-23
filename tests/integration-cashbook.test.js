@@ -23,10 +23,13 @@ let Expense
 let CashEntry
 let CashBookSetup
 let BooksClose
+let AuditLog
 
 describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: Cash Book & Books Close)", () => {
   let userAId
   let userAToken
+  let userBId
+  let userBToken
   const rawPassword = "TestPassword123!"
 
   before(async () => {
@@ -52,6 +55,7 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     CashEntry = (await import("../backend/models/CashEntry.js")).default
     CashBookSetup = (await import("../backend/models/CashBookSetup.js")).default
     BooksClose = (await import("../backend/models/BooksClose.js")).default
+    AuditLog = (await import("../backend/models/AuditLog.js")).default
 
     const appModule = await import("../backend/index.js")
     app = appModule.app || appModule.default
@@ -69,6 +73,7 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     await CashEntry.deleteMany({ partyName: /CashbookTest/ })
     await CashBookSetup.deleteMany({})
     await BooksClose.deleteMany({})
+    await AuditLog.deleteMany({ action: "CASHBOOK_REOPEN_DAY" })
 
     // Seed test user A
     const hashedPassword = await bcrypt.hash(rawPassword, 10)
@@ -81,6 +86,19 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     })
     userAId = userA._id
     userAToken = jwt.sign({ id: userAId.toString(), email: userA.email }, JWT_SECRET, {
+      expiresIn: "1h",
+    })
+
+    // Seed test user B for tenant isolation
+    const userB = await User.create({
+      userName: "Cashbook Operator B",
+      email: "cashbook_test_b@example.com",
+      password: hashedPassword,
+      companyName: "Dwarka Travels",
+      companyPhone: "9825099999",
+    })
+    userBId = userB._id
+    userBToken = jwt.sign({ id: userBId.toString(), email: userB.email }, JWT_SECRET, {
       expiresIn: "1h",
     })
   })
@@ -97,6 +115,7 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
       await CashEntry.deleteMany({ partyName: /CashbookTest/ })
       await CashBookSetup.deleteMany({})
       await BooksClose.deleteMany({})
+      await AuditLog.deleteMany({ action: "CASHBOOK_REOPEN_DAY" })
       await mongoose.disconnect()
     }
   })
@@ -238,9 +257,9 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     })
     assert.equal(lockedEntryRes.status, 423)
     const lockedEntryData = await lockedEntryRes.json()
-    assert.ok(lockedEntryData.message.includes("closed up to 2026-11-10"))
+    assert.equal(lockedEntryData.message, "Books are closed up to 10-11-2026. Reopen the books to change this.")
 
-    // Attempt to create booking on 2026-11-08 (<= 2026-11-10) -> 423
+    // Booking with advance > 0 on closed date (2026-11-08 <= 2026-11-10) -> 423
     const lockedBookingRes = await fetch(`${baseUrl}/api/bookings`, {
       method: "POST",
       headers: {
@@ -260,7 +279,84 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     })
     assert.equal(lockedBookingRes.status, 423)
 
-    // Attempt to create expense on 2026-11-09 (<= 2026-11-10) -> 423
+    // BUT booking with advance = 0 on closed date touches NO money -> 201!
+    const openAdvanceZeroRes = await fetch(`${baseUrl}/api/bookings`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contactName: "Locked Traveler Free",
+        contactPhone: "9988776655",
+        tourName: "Somnath Yatra",
+        journeyDate: "2026-11-20",
+        date: "2026-11-08",
+        totalAmount: 5000,
+        advanceReceived: 0,
+        passengers: [{ name: "Traveler Zero", age: 35, gender: "Male", city: "Surat" }],
+      }),
+    })
+    assert.equal(openAdvanceZeroRes.status, 201)
+    const zeroBooking = await openAdvanceZeroRes.json()
+
+    // Editing non-money field (e.g. contactName) on closed date booking -> 200!
+    const updateNonMoneyRes = await fetch(`${baseUrl}/api/bookings/${zeroBooking._id}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contactName: "Renamed Free Traveler",
+      }),
+    })
+    assert.equal(updateNonMoneyRes.status, 200)
+
+    // Editing money field (e.g. cancellationCharge) on closed date booking -> 423
+    const updateMoneyRes = await fetch(`${baseUrl}/api/bookings/${zeroBooking._id}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        cancellationCharge: 500,
+      }),
+    })
+    assert.equal(updateMoneyRes.status, 423)
+
+    // Recording payment on closed date (2026-11-09) -> 423
+    const paymentClosedRes = await fetch(`${baseUrl}/api/bookings/${zeroBooking._id}/payments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: 1000,
+        paymentDate: "2026-11-09",
+        paymentMode: "cash",
+      }),
+    })
+    assert.equal(paymentClosedRes.status, 423)
+
+    // Recording payment on OPEN date (2026-11-15) for historical booking -> 201!
+    const paymentOpenRes = await fetch(`${baseUrl}/api/bookings/${zeroBooking._id}/payments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: 1000,
+        paymentDate: "2026-11-15",
+        paymentMode: "cash",
+      }),
+    })
+    assert.equal(paymentOpenRes.status, 201)
+
+    // Attempt to create paid expense on 2026-11-09 (<= 2026-11-10) -> 423
     const lockedExpenseRes = await fetch(`${baseUrl}/api/expenses`, {
       method: "POST",
       headers: {
@@ -278,6 +374,38 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
       }),
     })
     assert.equal(lockedExpenseRes.status, 423)
+
+    // Pending expense on closed date moves no money -> 201!
+    const pendingExpenseRes = await fetch(`${baseUrl}/api/expenses`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        date: "2026-11-09",
+        amount: 800,
+        category: "fuel",
+        vendor: "CashbookTest Pending Vendor",
+        status: "pending",
+      }),
+    })
+    assert.equal(pendingExpenseRes.status, 201)
+    const pendingExp = await pendingExpenseRes.json()
+
+    // Editing vendor on pending expense -> 200!
+    const expenseId = pendingExp.expense?._id || pendingExp.expense?.id || pendingExp._id
+    const updateExpVendorRes = await fetch(`${baseUrl}/api/expenses/${expenseId}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vendor: "CashbookTest Renamed Vendor",
+      }),
+    })
+    assert.equal(updateExpVendorRes.status, 200)
 
     // BUT an entry on 2026-11-15 (> 2026-11-10) succeeds with 201!
     const openEntryRes = await fetch(`${baseUrl}/api/cashbook/entries`, {
@@ -333,6 +461,13 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     assert.equal(reopenData.reopenedClose.status, "reopened")
     assert.equal(reopenData.newLockDate, null)
 
+    // Audit log verifies NO personal data (reasonLength recorded, no raw reason text)
+    const auditEntry = await AuditLog.findOne({ action: "BOOKS_REOPENED", userId: userAId })
+    assert.ok(auditEntry, "AuditLog entry for BOOKS_REOPENED must exist")
+    assert.equal(auditEntry.meta.closedUpTo, "2026-11-10")
+    assert.equal(typeof auditEntry.meta.reasonLength, "number")
+    assert.equal(auditEntry.meta.reason, undefined, "AuditLog must not store raw reason or PII")
+
     // Now, entry on 2026-11-05 is unlocked and succeeds!
     const unlockedEntryRes = await fetch(`${baseUrl}/api/cashbook/entries`, {
       method: "POST",
@@ -349,5 +484,29 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
       }),
     })
     assert.equal(unlockedEntryRes.status, 201)
+  })
+
+  it("7. Tenant Isolation: User B cannot access User A's cash book data or settings", async (t) => {
+    if (!isMongoAvailable) return t.skip("MongoDB offline")
+
+    // User B daybook is empty
+    const resB = await fetch(`${baseUrl}/api/cashbook?startDate=2026-11-01&endDate=2026-11-30`, {
+      headers: { Authorization: `Bearer ${userBToken}` },
+    })
+    assert.equal(resB.status, 200)
+    const dataB = await resB.json()
+    assert.equal(dataB.dayBook.entries.length, 0)
+    assert.equal(dataB.dayBook.closing.cash, 0)
+    assert.equal(dataB.dayBook.closing.bank, 0)
+
+    // User B setup has clean 0 defaults and is isolated from User A's setup
+    const setupResB = await fetch(`${baseUrl}/api/cashbook/setup`, {
+      headers: { Authorization: `Bearer ${userBToken}` },
+    })
+    assert.equal(setupResB.status, 200)
+    const setupDataB = await setupResB.json()
+    assert.equal(setupDataB.setup.cashOpening, 0)
+    assert.equal(setupDataB.setup.bankOpening, 0)
+    assert.equal(setupDataB.isEditable, true)
   })
 })

@@ -283,6 +283,22 @@ describe("DayBookTable Component", () => {
     expect(screen.getByText(/CLOSING BALANCE/i)).toBeDefined()
     expect(screen.getByText("Booking INV-001 Ramesh")).toBeDefined()
   })
+
+  it("table wrapper has role='region', tabIndex={0}, and aria-label='Day book table, scrollable'", () => {
+    const { container } = renderWithProviders(
+      <DayBookTable
+        entries={mockDayBook.entries}
+        opening={mockDayBook.opening}
+        totals={mockDayBook.totals}
+        closing={mockDayBook.closing}
+      />
+    )
+
+    const region = container.querySelector('[role="region"]')
+    expect(region).toBeDefined()
+    expect(region.getAttribute("tabindex")).toBe("0")
+    expect(region.getAttribute("aria-label")).toBe("Day book table, scrollable")
+  })
 })
 
 describe("PrintDayBookModal Component", () => {
