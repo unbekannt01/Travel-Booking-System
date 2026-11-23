@@ -22,6 +22,7 @@ import {
   calculatePricing,
 } from "../../shared/businessLogic.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
+import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
 
 export {
   generateTourCode,
@@ -245,6 +246,13 @@ router.get("/invoice/:invoiceNo", verifyToken, async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
@@ -337,6 +345,9 @@ router.post("/", verifyToken, async (req, res) => {
     if (!contactName || !contactPhone || !tourName || !journeyDate) {
       return res.status(400).json({ message: "Contact name, phone, tour name, and journey date are required." })
     }
+
+    const bookingDate = req.body.date || new Date()
+    await assertBooksOpen(req.user.id, bookingDate)
 
     if (!validateIndianPhone(contactPhone)) {
       return res.status(400).json({ message: "Please provide a valid 10-digit Indian mobile number." })
@@ -541,6 +552,13 @@ router.post("/", verifyToken, async (req, res) => {
 
     res.status(201).json(maskBookingPaxAadhaar(savedBooking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -555,6 +573,11 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     if (booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to update this booking" })
+    }
+
+    await assertBooksOpen(req.user.id, booking.date)
+    if (req.body.date) {
+      await assertBooksOpen(req.user.id, req.body.date)
     }
 
     const effectiveTourName = req.body.tourName || booking.tourName
@@ -749,6 +772,13 @@ router.put("/:id", verifyToken, async (req, res) => {
     const { booking: syncedBooking } = await syncBookingPayments(booking._id, req.user.id)
     res.json(maskBookingPaxAadhaar(syncedBooking || booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -761,6 +791,8 @@ router.put("/:bookingId/passengers/:passengerIdentifier/checkin", verifyToken, a
 
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
+
+    await assertBooksOpen(req.user.id, booking.date)
 
     // Look up by subdocument _id or index
     let passenger = booking.passengers.id(passengerIdentifier)
@@ -789,6 +821,8 @@ router.put("/:bookingId/passengers/batch-checkin", verifyToken, async (req, res)
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
 
+    await assertBooksOpen(req.user.id, booking.date)
+
     const { checkedIn } = req.body
     const newState = checkedIn !== false // default to true if not explicitly false
 
@@ -799,6 +833,13 @@ router.put("/:bookingId/passengers/batch-checkin", verifyToken, async (req, res)
     await booking.save()
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -811,6 +852,8 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
 
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
+
+    await assertBooksOpen(req.user.id, booking.date)
 
     let passenger = booking.passengers.id(passengerIdentifier)
     if (!passenger && /^\d+$/.test(passengerIdentifier)) {
@@ -869,6 +912,13 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
     await booking.save()
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -881,6 +931,8 @@ router.put("/:bookingId/toggle-payment", verifyToken, async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) return res.status(403).json({ message: "Unauthorized" })
 
+    await assertBooksOpen(req.user.id, booking.date)
+
     booking.isPaid = !booking.isPaid
     if (booking.isPaid) {
       booking.advanceReceived = booking.totalAmount
@@ -889,6 +941,13 @@ router.put("/:bookingId/toggle-payment", verifyToken, async (req, res) => {
     await booking.save()
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -901,6 +960,9 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
     if (booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to cancel this booking" })
     }
+
+    await assertBooksOpen(req.user.id, booking.date)
+    await assertBooksOpen(req.user.id, new Date())
 
     const { reason, cancellationCharge, refundPaymentMode = "Cash" } = req.body
     const totalPaid = Math.round((booking.advanceReceived || 0) * 100) / 100
@@ -966,6 +1028,13 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
 
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })
@@ -977,6 +1046,11 @@ router.post("/:id/payments", verifyToken, async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" })
     if (booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to update this booking" })
+    }
+
+    await assertBooksOpen(req.user.id, booking.date)
+    if (req.body.date) {
+      await assertBooksOpen(req.user.id, req.body.date)
     }
 
     const { amount, mode = "Cash", notes = "", type, referenceNo = "" } = req.body
@@ -1016,6 +1090,13 @@ router.post("/:id/payments", verifyToken, async (req, res) => {
     const { booking: updatedBooking } = await syncBookingPayments(booking._id, req.user.id)
     res.status(201).json(updatedBooking || booking)
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -1029,6 +1110,8 @@ router.delete("/:id", verifyToken, async (req, res) => {
     if (booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to delete this booking" })
     }
+
+    await assertBooksOpen(req.user.id, booking.date)
 
     booking.deletedAt = new Date()
     await booking.save()
@@ -1048,10 +1131,19 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to restore this booking" })
     }
 
+    await assertBooksOpen(req.user.id, booking.date)
+
     booking.deletedAt = null
     await booking.save()
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })

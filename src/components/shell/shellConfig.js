@@ -88,6 +88,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: false,
   },
   {
+    id: "cashbook",
+    label: "Cash Book",
+    title: "Cash Book & Books Close",
+    description: "Daily cash & bank ledger, physical cash verification, and books close.",
+    iconName: "BookOpen",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "settings",
     label: "Settings",
     title: "Settings",
@@ -210,6 +219,7 @@ export function getSkeletonVariant(activeTab) {
     case "journey":
     case "expenses":
     case "outstanding":
+    case "cashbook":
       return "table"
     case "dashboard":
     default:

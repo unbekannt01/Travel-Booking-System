@@ -688,4 +688,68 @@ export async function markReminderSent(id) {
   })
 }
 
+// --- CASH BOOK & BOOKS CLOSE (Part 6a) ---
+export async function getCashBook(params = {}) {
+  const query = new URLSearchParams()
+  if (params.startDate) query.set("startDate", params.startDate)
+  if (params.endDate) query.set("endDate", params.endDate)
+  if (params.account) query.set("account", params.account)
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return request(`/api/cashbook${qs}`)
+}
+
+export async function getCashBookSetup() {
+  return request("/api/cashbook/setup")
+}
+
+export async function saveCashBookSetup(data) {
+  return request("/api/cashbook/setup", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function createCashEntry(data) {
+  return request("/api/cashbook/entries", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function updateCashEntry(id, data) {
+  return request(`/api/cashbook/entries/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteCashEntry(id) {
+  return request(`/api/cashbook/entries/${id}`, {
+    method: "DELETE",
+  })
+}
+
+export async function getClosePreview(params = {}) {
+  const query = new URLSearchParams()
+  if (params.asOfDate) query.set("asOfDate", params.asOfDate)
+  if (params.countedCash !== undefined) query.set("countedCash", String(params.countedCash))
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return request(`/api/cashbook/close/preview${qs}`)
+}
+
+export async function closeDay(data) {
+  return request("/api/cashbook/close", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function reopenDay(data) {
+  return request("/api/cashbook/reopen", {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+
 

@@ -7,6 +7,7 @@ import {
   TrendingUp,
   ReceiptText,
   ReceiptIndianRupee,
+  BookOpen,
   Settings,
   LogOut,
   PanelLeftClose,
@@ -26,6 +27,7 @@ const ICON_MAP = {
   TrendingUp,
   ReceiptText,
   ReceiptIndianRupee,
+  BookOpen,
   Settings,
 }
 

@@ -10,6 +10,7 @@ import {
   calculateNextReceiptNo,
   computeLedgerTotals,
 } from "../../shared/businessLogic.js"
+import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
 
 const router = express.Router()
 
@@ -101,6 +102,9 @@ router.post("/", verifyToken, async (req, res) => {
       notes = "",
     } = req.body
 
+    const targetDate = req.body.paymentDate || new Date()
+    await assertBooksOpen(req.user.id, targetDate)
+
     const numAmount = Math.round(Number(amount) * 100) / 100
     if (isNaN(numAmount) || numAmount <= 0) {
       return res.status(400).json({ message: "Payment amount must be greater than zero." })
@@ -165,6 +169,13 @@ router.post("/", verifyToken, async (req, res) => {
       booking: updatedBooking,
     })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(400).json({ message: error.message })
   }
 })
@@ -178,6 +189,9 @@ router.post("/:id/void", verifyToken, async (req, res) => {
     if (!payment) {
       return res.status(404).json({ message: "Payment record not found." })
     }
+
+    await assertBooksOpen(req.user.id, payment.paymentDate)
+    await assertBooksOpen(req.user.id, new Date())
 
     if (payment.isVoid) {
       return res.status(400).json({ message: "This payment has already been voided." })
@@ -205,6 +219,13 @@ router.post("/:id/void", verifyToken, async (req, res) => {
       message: "Payment voided successfully.",
     })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
   }
 })

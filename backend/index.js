@@ -16,6 +16,7 @@ import reportRoutes from "./routes/reports.js"
 import customerRoutes from "./routes/customers.js"
 import reminderTemplateRoutes from "./routes/reminderTemplates.js"
 import reminderRoutes from "./routes/reminders.js"
+import cashbookRoutes from "./routes/cashbook.js"
 
 const app = express()
 
@@ -69,6 +70,7 @@ app.use("/api/reports", reportRoutes)
 app.use("/api/customers", customerRoutes)
 app.use("/api/reminder-templates", reminderTemplateRoutes)
 app.use("/api/reminders", reminderRoutes)
+app.use("/api/cashbook", cashbookRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()
@@ -91,6 +93,13 @@ app.use((err, req, res, _next) => {
   console.error("Internal Server Error:", err.message)
   if (err.type === "entity.too.large") {
     return res.status(413).json({ message: "Payload size exceeds maximum allowed limit" })
+  }
+  if (err.statusCode === 423 || err.name === "BooksLockedError") {
+    return res.status(423).json({
+      message: err.message,
+      lockDate: err.lockDate,
+      transactionDate: err.transactionDate,
+    })
   }
   const isProduction = process.env.NODE_ENV === "production"
   const statusCode = err.statusCode || err.status || 500

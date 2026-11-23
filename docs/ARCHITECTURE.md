@@ -709,6 +709,68 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - `src/components/reminders/ReminderModal.jsx`: Shared accessible dialog across Outstanding, Customer Drawer, and Statement Modal. Live editable preview, tone/language segmented selectors, tone suggestion hints, 24-hour reminder advisory, opt-out guard, and queue mode ("Customer X of Y", Skip, Next).
   - `src/components/dashboard/ReminderTemplateEditor.jsx`: Lazy-loaded in SettingsPanel ("Reminders" tab). Interactive placeholder chips, real-time validation, live preview with simulated data, and TRAI/DND compliance advisory.
 
+---
+
+## 21. Cash Book, Books Close & Ledger Lock Architecture (Part 6a)
+
+- **Pure Cash Book Engine (`shared/cashbook.js`)**:
+  - **Account Model**: Two-account ledger (`ACCOUNTS = Object.freeze(["cash", "bank"])`).
+  - **Payment Mode Mapping (`modeToAccount(mode)`)**: Case-insensitive normalization mapping `"cash"` -> `"cash"`, while `"upi"`, `"bank"`, `"card"`, `"cheque"`, `"net banking"`, and digital variations map to `"bank"`. Unrecognized modes safely fallback to `"bank"` with a fallback flag.
+  - **Integer Paise Arithmetic**: All intermediate running balances, opening balances, daily totals, and closing balances are calculated strictly in integer paise (`toPaise`, `fromPaise`), preventing floating-point arithmetic errors.
+  - **Same-Day Deterministic Chronological Sort (`buildDayBook`)**:
+    - Transactions on the same calendar day are ordered deterministically:
+      `opening` -> `receipt` -> `transfer-to-bank` / `transfer-to-cash` -> `refund` -> `expense` -> `owner-in` / `owner-out` -> `adjustment`.
+    - Transactions within the same type category are sorted chronologically by timestamp, followed by reference identifier.
+  - **Ledger-Authoritative Deduplication**:
+    - For bookings that have payment records in the `Payment` collection, receipts are driven authoritatively by the individual payment records to prevent double-counting booking advances.
+    - Legacy bookings lacking records in the `Payment` collection fall back gracefully to `booking.advanceReceived` on the booking date.
+    - Expense cashflow vs accrual parity: only `status === "paid"` expenses affect cashbook balances; effective date uses `expense.paidOn` if present, falling back to `expense.date`.
+  - **Balance Rolling**: Transactions prior to the start of the query date range are rolled into the dynamic opening cash and bank balances.
+  - **Books Close Calculation (`computeClosePreview`)**:
+    - Calculates `systemCash`, compares with operator-entered `countedCash`, computes `difference` (`countedCash - systemCash`).
+    - Classifies day status: `balanced` (difference === 0), `excess` (difference > 0), or `short` (difference < 0).
+    - Recommends automatic balancing adjustment entry of type `"adjustment"` with integer paise amount.
+  - **Printable Day Book HTML Renderer (`renderDayBookHtml`)**:
+    - Generates standalone, self-contained HTML document.
+    - Strict CSP meta tag: `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">`.
+    - Trilingual labels (`CASHBOOK_LABELS`) supporting English (`en`), Hindi (`hi`), and Gujarati (`gu`).
+    - Clean A4 landscape print CSS stylesheet with running balance columns, tabular numbers, and signoff blocks.
+
+- **Backend Models (`backend/models/`)**:
+  - `CashEntry.js`: Manual cash/bank entries (`transfer-to-bank`, `transfer-to-cash`, `owner-in`, `owner-out`, `adjustment`). Includes `userId`, `date`, `type`, `amount` (integer paise), `account`, `contraAccount`, `notes`, `isAutoAdjustment`, `closeId`, `deletedAt`, `deletedBy`.
+  - `CashBookSetup.js`: Tenant-isolated opening balance setup containing `userId`, `cashOpening`, `bankOpening`, `asOfDate`, `notes`.
+  - `BooksClose.js`: Formal day close records storing `userId`, `closedUpTo` (YYYY-MM-DD), `closedAt`, `systemCash`, `systemBank`, `countedCash`, `difference`, `status` (`"active"` | `"reopened"`), `adjustmentEntryId`, and `reopenAudit` history.
+
+- **Books Lock Boundary & Step-Up Auth (`backend/utils/booksLock.js`)**:
+  - `getEffectiveLockDate(userId)`: Resolves the latest `closedUpTo` date across active close records for the tenant.
+  - `assertBooksOpen(userId, transactionDate)`: Checks whether `transactionDate <= lockDate`. If locked, throws `BooksLockedError` returning HTTP 423 Locked with `{ message, lockDate, transactionDate }`.
+  - **Guarded Money-Changing Routes**:
+    - All 12 financial routes strictly enforce `assertBooksOpen`:
+      - Bookings: `POST /api/bookings`, `PUT /api/bookings/:id`, `PUT /api/bookings/:bookingId/toggle-payment`, `PUT /api/bookings/:id/cancel`, `POST /api/bookings/:id/payments`, `DELETE /api/bookings/:id`, `PUT /api/bookings/:id/restore`.
+      - Payments: `POST /api/payments`, `POST /api/payments/:id/void`.
+      - Expenses: `POST /api/expenses`, `PUT /api/expenses/:id`, `DELETE /api/expenses/:id`.
+  - **Step-Up Authentication (`verifyStepUpAuth`)**:
+    - Books close and reopen operations require mandatory password re-verification.
+    - If operator has 2FA (TOTP) enabled, verifies the 6-digit TOTP token against decrypted AES-256-GCM secret via `speakeasy.totp.verify`.
+
+- **REST API (`backend/routes/cashbook.js`)**:
+  - Rate limited with `cashbookReadLimiter` (120 req/15min) and `cashbookWriteLimiter` (60 req/15min).
+  - `GET /api/cashbook`: Fetches day book entries, running balances, latest close, and lock date for given date range and account filter.
+  - `GET /api/cashbook/setup` & `POST /api/cashbook/setup`: Read and configure initial cash/bank opening balances (locked once active closes exist).
+  - `POST /api/cashbook/entries`, `PUT /api/cashbook/entries/:id`, `DELETE /api/cashbook/entries/:id`: Create, edit, and soft-delete manual entries with date lock checks.
+  - `GET /api/cashbook/close-preview`: Previews counted vs system cash discrepancy.
+  - `POST /api/cashbook/close`: Performs formal day close with step-up authentication and optional auto-adjustment entry.
+  - `POST /api/cashbook/reopen`: Reopens closed books with mandatory audit reason (>= 5 chars) and step-up authentication.
+
+- **User Interface (`src/components/cashbook/`)**:
+  - `CashBook.jsx`: Main view, date picker navigator (Single Day stepper / Date Range presets), account filter (All/Cash/Bank), 4 StatCards, lock alert banner, quick action buttons, modal triggers.
+  - `DayBookTable.jsx`: Accessible table, opening balance row, entry type badges, In/Out amounts, running Cash/Bank balances, row-level lock indicators, manual entry edit/delete actions, closing balance row.
+  - `ManualEntryModal.jsx`: Add/Edit manual entry with validation and lock checks.
+  - `CloseDayModal.jsx`: Counted cash input, live discrepancy preview, auto-adjust checkbox, password + TOTP step-up authentication.
+  - `ReopenCloseModal.jsx`: Audit reason input (>=5 chars), warning banner, password + TOTP step-up authorization.
+  - `SetupModal.jsx`: Opening cash & bank balances, as-of date, lock enforcement when closes exist.
+  - `PrintDayBookModal.jsx`: Sandboxed iframe preview (`renderDayBookHtml`), trilingual selector, native print trigger.
+
 
 
 

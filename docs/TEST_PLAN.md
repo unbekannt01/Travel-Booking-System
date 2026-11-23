@@ -484,12 +484,54 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.15 Manual Verification Checklist — Part 6a Cash Book & Books Close
+
+- [ ] **Navigation & Screen Loading**:
+  - Open app; click "Cash Book" in the sidebar (icon `BookOpen`, `#cashbook`).
+  - Verify heading "Daily Cash & Bank Book" and subtitle render cleanly.
+  - Verify 4 StatCards: "Opening Balance", "Total Receipts / Inflow", "Total Payments / Outflow", "Closing Balance".
+  - If no transactions exist for the selected date, verify clean empty state: "No cash or bank transactions recorded for this period."
+- [ ] **Date Navigation & Stepper**:
+  - Click `<` (Previous day) and `>` (Next day); verify date updates and day book queries new date.
+  - Click "Today" button; verify date resets to today's date.
+  - Switch view mode to "Date Range"; verify "Start date" and "End date" pickers appear along with quick preset buttons ("Today", "Yesterday", "7 Days", "This Month").
+- [ ] **Account Filters**:
+  - Click "All Accounts", "Cash Only", and "Bank / Digital" radio buttons; verify running balances and displayed rows filter accordingly.
+- [ ] **Manual Entry Flow**:
+  - Click "Add Entry" button; verify `ManualEntryModal` opens.
+  - Select entry type (e.g. "Cash to Bank Transfer", "Bank to Cash Transfer", "Capital Introduced", "Drawings", "Adjustment").
+  - Enter amount (e.g. ₹5,000) and mandatory notes.
+  - Submit; verify entry appears in the table with correct badge and running balance.
+- [ ] **Daily Books Close Flow & Step-Up Auth**:
+  - Click "Close Day" button; verify `CloseDayModal` opens displaying system calculated cash balance.
+  - Enter counted physical cash; observe live discrepancy calculation (balanced / excess / short).
+  - Check "Post adjustment entry for discrepancy" if difference is non-zero.
+  - Enter operator password (and TOTP token if 2FA enabled); submit.
+  - Verify day is officially closed, lock banner appears, and books lock date advances.
+- [ ] **Ledger Lock Enforcement (HTTP 423)**:
+  - Attempt to record a new booking, payment, or expense with a date on or before the closed lock date.
+  - Verify mutation is rejected with HTTP 423 Locked and a clear error message.
+  - Verify locked entries in the Cash Book table display a lock icon and edit/delete actions are disabled.
+- [ ] **Reopening Closed Books**:
+  - Click "Reopen Last Close" in the lock banner; verify `ReopenCloseModal` opens.
+  - Enter audit reason (minimum 5 characters) and step-up password.
+  - Submit; verify lock date lowers to the previous close (or unlocks completely) and auto-adjustment entry is reversed.
+- [ ] **Printable Day Book & Sandboxed Iframe**:
+  - Click "Print" button; verify `PrintDayBookModal` opens.
+  - Verify preview is rendered inside an iframe with strict sandbox (`sandbox="allow-same-origin allow-modals"`).
+  - Switch document language between English, हिन्दी, and ગુજરાતી; verify table headers and labels update immediately.
+  - Click "Print Day Book" to trigger browser print dialog.
+- [ ] **CSV Export**:
+  - Click "Export CSV" button; verify downloaded CSV (`DayBook-YYYY-MM-DD.csv`) includes opening balance, chronological rows with running balances, closing balance, and formula injection protection.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
-With 354 unit & regression tests passing across 92 TAP test suites, 67 component tests passing across 16 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 5 is officially completed. Remaining gaps scheduled for future phases:
+With 361 unit & regression tests passing across 93 TAP test suites, 78 component tests passing across 17 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 6 Part 6a is officially completed. Remaining gaps scheduled for future phases:
 
 1. **Backend Integration / API Route Tests**:
-   - Currently, API endpoints (`/api/bookings`, `/api/payments`, `/api/auth`) are validated against business logic and security unit tests.
-   - *Phase 7 Plan*: Introduce automated integration tests using an in-memory MongoDB runner (`mongodb-memory-server`) to test Express route handlers, auth cookies, and Mongoose schema validations end-to-end.
+   - Cash Book routes (`/api/cashbook`, `/api/cashbook/close`, `/api/cashbook/reopen`) and money-changing route locks are validated against `tests/integration-cashbook.test.js` and pure unit tests.
+   - *Phase 7 Plan*: Introduce automated integration tests using an in-memory MongoDB runner (`mongodb-memory-server`) to test all remaining Express route handlers, auth cookies, and Mongoose schema validations end-to-end.
 2. **Visual Regression Snapshot Testing**:
    - *Phase 7 Plan*: Compare screenshots captured by `npm run ui:smoke` against golden baseline images to catch unintended visual regressions automatically.

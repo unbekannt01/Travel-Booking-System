@@ -14,6 +14,7 @@ import {
   groupByMonth,
   round2,
 } from "../../shared/expenses.js"
+import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
 
 const router = express.Router()
 
@@ -233,6 +234,12 @@ router.post("/", verifyToken, expenseWriteLimiter, async (req, res) => {
       paidOn = null
     }
 
+    if (input.status === "paid") {
+      await assertBooksOpen(req.user.id, paidOn)
+    } else {
+      await assertBooksOpen(req.user.id, input.date)
+    }
+
     const expense = await Expense.create({
       ...input,
       paidOn,
@@ -261,6 +268,13 @@ router.post("/", verifyToken, expenseWriteLimiter, async (req, res) => {
       },
     })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Validation failed" })
     }
@@ -285,6 +299,8 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Expense not found" })
     }
 
+    await assertBooksOpen(req.user.id, expense.paidOn || expense.date)
+
     const input = updateExpenseSchema.parse(req.body)
 
     // Handle paidOn synchronization
@@ -294,6 +310,12 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       paidOn = input.date || expense.date || new Date()
     } else if (newStatus === "pending") {
       paidOn = null
+    }
+
+    if (newStatus === "paid") {
+      await assertBooksOpen(req.user.id, paidOn)
+    } else if (input.date) {
+      await assertBooksOpen(req.user.id, input.date)
     }
 
     Object.assign(expense, input, {
@@ -323,6 +345,13 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       },
     })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     if (error.name === "ZodError") {
       return res.status(400).json({ message: error.errors[0]?.message || "Validation failed" })
     }
@@ -347,6 +376,8 @@ router.delete("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Expense not found" })
     }
 
+    await assertBooksOpen(req.user.id, expense.paidOn || expense.date)
+
     expense.deletedAt = new Date()
     expense.deletedBy = req.user.id
     await expense.save()
@@ -367,6 +398,13 @@ router.delete("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       id: expense._id.toString(),
     })
   } catch (error) {
+    if (error.statusCode === 423 || error.name === "BooksLockedError") {
+      return res.status(423).json({
+        message: error.message,
+        lockDate: error.lockDate,
+        transactionDate: error.transactionDate,
+      })
+    }
     console.error("Expense deletion error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to delete expense" })
   }

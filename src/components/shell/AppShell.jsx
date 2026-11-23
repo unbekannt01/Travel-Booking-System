@@ -8,6 +8,7 @@ import {
   TrendingUp,
   ReceiptText,
   ReceiptIndianRupee,
+  BookOpen,
   Settings,
   LogOut,
   Plus,
@@ -39,6 +40,7 @@ const DRAWER_ICONS = {
   TrendingUp,
   ReceiptText,
   ReceiptIndianRupee,
+  BookOpen,
   Settings,
 }
 
