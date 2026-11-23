@@ -38,16 +38,17 @@ export const REMINDER_PLACEHOLDERS = Object.freeze([
 /**
  * Default reminder templates (3 languages x 3 tones = 9 templates).
  * Max 600 characters each.
- * All Hindi and Gujarati templates marked for native-speaker review.
+ * All English, Hindi and Gujarati templates marked as needs native-speaker review.
  */
 export const DEFAULT_REMINDER_TEMPLATES = Object.freeze({
+  // Note: English templates need native-speaker review
   en: Object.freeze({
     friendly:
       "Dear {customerName}, greetings from {companyName}! 🙏 This is a gentle reminder regarding your booking #{invoiceNo} for {tourName} (Journey: {journeyDate}). The total amount is {totalAmount}, with {paidAmount} received. The remaining balance is {balance}. Please settle before departure. For UPI payments, use UPI ID: {upiId}. For assistance, contact {companyPhone}. Thank you!",
     "due-soon":
       "Dear {customerName}, greetings from {companyName}! 🙏 Your journey for {tourName} is scheduled on {journeyDate} (Booking #{invoiceNo}). Kindly settle the pending balance of {balance} (Total: {totalAmount}, Paid: {paidAmount}). UPI ID: {upiId}. Please call {companyPhone} for any help. Wishing you a pleasant yatra!",
     overdue:
-      "Dear {customerName}, this is an urgent payment reminder from {companyName}. 🙏 Balance of {balance} on booking #{invoiceNo} for {tourName} is overdue by {daysOverdue} days. Kindly clear the outstanding amount immediately via UPI ID: {upiId} or call {companyPhone} to confirm your payment. Thank you!",
+      "Dear {customerName}, this is a payment reminder from {companyName}. 🙏 Balance of {balance} on booking #{invoiceNo} for {tourName} is overdue by {daysOverdue} days. Kindly clear the outstanding amount via UPI ID: {upiId} or call {companyPhone} to confirm your payment. Thank you!",
   }),
   // Note: Hindi templates need native-speaker review
   hi: Object.freeze({

@@ -410,16 +410,13 @@ export default function ReminderTemplateEditor({ user = null }) {
             </div>
           </div>
 
-          {/* Legal and TRAI / DND Consent Advisory */}
+          {/* Plain Communication Advisory */}
           <div className="p-3.5 rounded-lg border border-border-subtle bg-slate-50 dark:bg-slate-900/60 text-[11px] text-ink-muted flex items-start gap-2.5">
             <ShieldAlert className="w-4 h-4 text-brand shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <strong className="text-ink block">Compliance & Communication Advisory:</strong>
+              <strong className="text-ink block">Communication Advisory:</strong>
               <p>
-                WhatsApp reminders are semi-automated and dispatched manually via official wa.me links
-                by the tour operator. In accordance with TRAI Telecom Commercial Communications Customer
-                Preference Regulations (TCCCPR) and customer privacy guidelines, always respect customer
-                opt-outs and avoid transmitting unsolicited commercial communications.
+                Send reminders only to customers who agreed to receive messages from you and respect opt-outs. Opted-out customers are blocked in this app.
               </p>
             </div>
           </div>

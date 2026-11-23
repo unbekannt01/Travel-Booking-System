@@ -211,8 +211,9 @@ describe("Payment Reminders UI Components", () => {
     const chip = screen.getByRole("button", { name: "{customerName}" })
     expect(chip).toBeDefined()
 
-    // Compliance advisory check
-    expect(screen.getByText(/Compliance & Communication Advisory/i)).toBeDefined()
+    // Communication advisory check
+    expect(screen.getByText(/Communication Advisory/i)).toBeDefined()
+    expect(screen.getByText(/Send reminders only to customers who agreed to receive messages/i)).toBeDefined()
     expect(screen.getByText(/Live Preview/i)).toBeDefined()
   })
 })

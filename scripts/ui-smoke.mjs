@@ -7,6 +7,7 @@ import path from "node:path"
 const args = process.argv.slice(2)
 const isQuick = args.includes("--quick")
 const isSkipAxe = args.includes("--skip-axe")
+const isStrict = args.includes("--strict")
 
 let onlyScreen = null
 const onlyArg = args.find((a) => a.startsWith("--only="))
@@ -140,6 +141,7 @@ console.log(`  Step Timeout: ${STEP_TIMEOUT_MS}ms | Base Screen Budget: ${BASE_B
 console.log(`  Screens (${activeScreens.length}): ${activeScreens.map((s) => s.label).join(", ")}`)
 console.log(`  Viewports (${activeViewports.length}): ${activeViewports.map((v) => `${v.width}px`).join(", ")}`)
 console.log(`  Themes (${activeThemes.length}): ${activeThemes.join(", ")}`)
+console.log(`  Strict Mode: ${isStrict ? "ENABLED (--strict: warnings fatal)" : "DISABLED"}`)
 console.log(`  axe-core analysis: ${isSkipAxe ? "SKIPPED (--skip-axe)" : "ENABLED (excluding iframe)"}`)
 
 let isInterrupted = false
@@ -259,6 +261,7 @@ async function run() {
       `**Configuration**: ${[
         isQuick ? "--quick" : null,
         isSkipAxe ? "--skip-axe" : null,
+        isStrict ? "--strict" : null,
         onlyScreen ? `--only=${onlyScreen}` : null,
       ]
         .filter(Boolean)
@@ -523,6 +526,35 @@ async function run() {
     process.exit(1)
   }
 
+  // Step 1.1: Backend API preflight check
+  console.log("[ui:smoke] Running backend API preflight checks...")
+  const preflightEndpoints = [
+    "/api/health",
+    "/api/customers?limit=1",
+    "/api/expenses?limit=1",
+    "/api/reminder-templates",
+    "/api/reports/outstanding?limit=1",
+    "/api/reports/tour-pnl?limit=1",
+    "/api/document-templates",
+    "/api/documents?limit=1",
+  ]
+  for (const ep of preflightEndpoints) {
+    try {
+      const res = await page.request.get(`${TARGET_URL}${ep}`)
+      if (res.status() === 404) {
+        console.error(`\n[ui:smoke] FATAL PREFLIGHT ERROR: Route GET ${ep} returned HTTP 404 Not Found!`)
+        console.error("[ui:smoke] The backend server does not have this route mounted.")
+        console.error("[ui:smoke] Please restart the backend server ('npm run server' or node backend/index.js) so recently added routes take effect.")
+        writeReport(true, `Preflight check 404 on ${ep}`)
+        await browser.close()
+        process.exit(1)
+      }
+    } catch (preErr) {
+      console.warn(`[ui:smoke] Preflight check warning for ${ep}: ${preErr.message}`)
+    }
+  }
+  console.log("[ui:smoke] Backend API preflight passed.")
+
   // 2. Iterate through screens, themes, and viewports (READ-ONLY)
   for (const screen of activeScreens) {
     if (isInterrupted) break
@@ -605,12 +637,16 @@ async function run() {
     }
 
     // Probe initial tab count on screen to compute dynamic budget (Task C.2)
-    const initialTabsCount = await page.locator('[role="tab"]').count().catch(() => 0)
-    const discoveredTabCount = Math.max(1, initialTabsCount)
+    let initialTabsCount = await page.locator('[role="tab"]').count().catch(() => 0)
+    if (screen.isSettingsTab) {
+      initialTabsCount = 1
+    }
+    const discoveredTabCount = initialTabsCount
+    const budgetTabCount = Math.max(1, discoveredTabCount)
     const screenBudgetMs = Math.max(
       BASE_BUDGET_MS,
       BASE_BUDGET_MS +
-        PER_TAB_BUDGET_MS * discoveredTabCount * activeViewports.length * activeThemes.length,
+        PER_TAB_BUDGET_MS * budgetTabCount * activeViewports.length * activeThemes.length,
     )
 
     let screenBudgetExceeded = false
@@ -645,7 +681,7 @@ async function run() {
         await page.waitForTimeout(300)
         const tabLocators = page.locator('[role="tab"]')
         const totalTabs = await tabLocators.count().catch(() => 0)
-        const tabsToCrawl = []
+        let tabsToCrawl = []
         let tabsFound = 0
         let tabsClicked = 0
         let tabsSkipped = 0
@@ -675,9 +711,21 @@ async function run() {
           })
         }
 
+        // If screen is a dedicated single-tab view (e.g. Invoice Studio or Reminder Settings)
+        if (screen.isSettingsTab) {
+          const kw = screen.isSettingsTab === "studio" ? "studio" : "reminder"
+          const matched = tabsToCrawl.filter(
+            (t) => t.id.toLowerCase().includes(kw) || t.label.toLowerCase().includes(kw),
+          )
+          if (matched.length > 0) {
+            tabsToCrawl = matched
+            tabsFound = matched.length
+          }
+        }
+
         if (tabsToCrawl.length === 0) {
           tabsToCrawl.push({ id: "main", label: "Main", locator: null, disabled: false })
-          tabsFound = 1
+          tabsFound = 0
         }
 
         const unvisitedTabsForCombo = []
@@ -871,17 +919,19 @@ async function run() {
     const totalScreenErrors = screenConsoleErrors + screenPageErrors
     const screenBreaches = budgetBreaches.filter((b) => b.screen === screen.label).length
 
+    const tabLabel = discoveredTabCount === 1 ? "1 tab" : `${discoveredTabCount} tabs`
+
     // Task C.4 Terminal Summary: 1 summary line per screen
     if (totalScreenErrors === 0 && screenBreaches === 0 && !screenBudgetExceeded) {
       console.log(
-        `[ui:smoke] ✓ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${discoveredTabCount} tab${discoveredTabCount > 1 ? "s" : ""}): ${totalStatesEvaluated} states, 0 errors, ${(screenDuration / 1000).toFixed(1)}s`,
+        `[ui:smoke] ✓ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${tabLabel}): ${totalStatesEvaluated} states, 0 errors, ${(screenDuration / 1000).toFixed(1)}s`,
       )
     } else {
       const parts = []
       if (totalScreenErrors > 0) parts.push(`${totalScreenErrors} error${totalScreenErrors > 1 ? "s" : ""}`)
       if (screenBreaches > 0) parts.push(`${screenBreaches} budget breach`)
       console.log(
-        `[ui:smoke] ✗ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${discoveredTabCount} tab${discoveredTabCount > 1 ? "s" : ""}): ${totalStatesEvaluated} states, ${parts.join(", ")}, ${(screenDuration / 1000).toFixed(1)}s`,
+        `[ui:smoke] ✗ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${tabLabel}): ${totalStatesEvaluated} states, ${parts.join(", ")}, ${(screenDuration / 1000).toFixed(1)}s`,
       )
     }
 
@@ -894,19 +944,32 @@ async function run() {
   writeReport(false)
   console.log(`[ui:smoke] Summary report written to ${reportPath}`)
 
+  const consoleErrors = consoleEntries.filter((c) => c.type === "error")
+  const consoleWarnings = consoleEntries.filter((c) => c.type === "warning")
   const hasCoverageFailures = coverageRecords.some((r) => r.status === "FAIL")
+  const hasErrors = pageErrors.length > 0 || consoleErrors.length > 0
+  const hasStrictWarnings = isStrict && consoleWarnings.length > 0
+
   const hasFailures =
     overflowFindings.length > 0 ||
     groupedAxeViolations.size > 0 ||
     fallbackFindings.length > 0 ||
     hasCoverageFailures ||
     budgetBreaches.length > 0 ||
-    pageErrors.length > 0
+    hasErrors ||
+    hasStrictWarnings
 
   if (hasFailures) {
-    console.error(
-      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, UI fallbacks, tab coverage, budget, or page errors.",
-    )
+    const reasons = []
+    if (hasErrors) reasons.push(`${consoleErrors.length} console error(s), ${pageErrors.length} page error(s)`)
+    if (hasStrictWarnings) reasons.push(`${consoleWarnings.length} console warning(s) (--strict)`)
+    if (overflowFindings.length > 0) reasons.push(`${overflowFindings.length} overflow finding(s)`)
+    if (groupedAxeViolations.size > 0) reasons.push(`${groupedAxeViolations.size} axe violation(s)`)
+    if (fallbackFindings.length > 0) reasons.push(`${fallbackFindings.length} UI fallback(s)`)
+    if (hasCoverageFailures) reasons.push("tab coverage failure(s)")
+    if (budgetBreaches.length > 0) reasons.push(`${budgetBreaches.length} budget breach(es)`)
+
+    console.error(`[ui:smoke] FAILED: Issues found in ${reasons.join(", ")}.`)
     process.exit(1)
   } else {
     console.log("[ui:smoke] SUCCESS: All checks passed cleanly.")

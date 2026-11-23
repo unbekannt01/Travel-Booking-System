@@ -442,9 +442,14 @@ npm run ui:smoke -- --quick
   - Render ExpenseTracker, OutstandingManager, SettingsPanel, and Dashboard across all tab states.
   - Verify React does not trigger "Maximum update depth exceeded" error.
   - Run `npm run test:ui` to confirm all 12 profiler commit-count assertions in `render-loop.test.jsx` pass.
-- [ ] **Honest Smoke Test Execution**:
+- [ ] **Honest Smoke Test Execution & Preflight Checks**:
   - Run `npm run ui:smoke -- --quick`.
+  - Verify preflight check tests `/api/health` and 7 read-only routes immediately after login, failing with clear restart guidance if any return 404.
   - Verify Section 4 attributes every console message with screen, tab, viewport, and theme.
+  - Verify run fails if any console `error` or uncaught `pageerror` occurs; terminal never reports SUCCESS when errors exist.
+  - Verify `--strict` flag makes warnings fatal.
+  - Verify Settings screen crawls all tabs once under "Settings", while "Invoice Studio" and "Reminder Settings" only test their single tab.
+  - Verify terminal "N tabs" label accurately displays "0 tabs" for screens without sub-tabs.
   - Verify Section 6 prints tabular tab coverage and exits non-zero if any non-disabled tab was unvisited.
   - Verify terminal output prints exactly 1 summary line per screen.
 
@@ -457,7 +462,7 @@ npm run ui:smoke -- --quick
   - Click placeholder chips (`{customerName}`, `{balance}`, `{tourName}`, `{upiId}`); verify token is inserted at cursor position.
   - Edit template body; observe character counter (`X / 600`) and live preview card updating immediately.
   - Click "Save Template"; verify custom template persists. Click "Reset to Default"; verify default template is restored.
-  - Verify TRAI DND / Telecom Commercial Communications advisory is visible at the bottom.
+  - Verify Communication Advisory is visible at the bottom ("Send reminders only to customers who agreed to receive messages from you and respect opt-outs. Opted-out customers are blocked in this app.").
 - [ ] **Outstanding Screen Reminders & Queue Mode**:
   - On Outstanding screen, verify "Last Reminded" column displays relative time (e.g. "2d ago" or "Never").
   - Click "Not reminded in 7 days" filter chip; verify customer list filters accordingly.

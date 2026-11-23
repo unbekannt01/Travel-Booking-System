@@ -70,6 +70,16 @@ app.use("/api/customers", customerRoutes)
 app.use("/api/reminder-templates", reminderTemplateRoutes)
 app.use("/api/reminders", reminderRoutes)
 
+// Minimal health check endpoint
+const serverStartedAt = new Date().toISOString()
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    startedAt: serverStartedAt,
+    version: "1.0.0",
+  })
+})
+
 // 404 handler for unknown API endpoints
 app.use("/api", (req, res) => {
   res.status(404).json({ message: "API endpoint not found" })
