@@ -20,6 +20,7 @@ import { ToastProvider } from "../../src/components/common/ToastProvider"
 import { ThemeProvider } from "../../src/theme/ThemeProvider"
 import Dashboard from "../../src/components/Dashboard"
 import CashBook from "../../src/components/cashbook/CashBook"
+import Trash from "../../src/components/trash/Trash"
 
 // Data APIs to mock
 import * as reportData from "../../src/data/reports"
@@ -29,6 +30,7 @@ import * as documentData from "../../src/data/documents"
 import * as bookingData from "../../src/data/bookings"
 import * as tourData from "../../src/data/tours"
 import * as cashbookData from "../../src/data/cashbook"
+import * as trashData from "../../src/data/trash"
 
 describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
   let consoleErrors = []
@@ -335,6 +337,23 @@ describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
     })
 
     const { assertNoRenderLoop } = renderWithProfiler(<CashBook />, 15)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    assertNoRenderLoop()
+  })
+
+  it("Trash commits bounded times and never causes update depth error", async () => {
+    vi.spyOn(trashData, "getTrash").mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      counts: { all: 0, booking: 0, expense: 0, customer: 0, cashEntry: 0 },
+      lockDate: null,
+    })
+
+    const { assertNoRenderLoop } = renderWithProfiler(<Trash />, 15)
     await act(async () => {
       await Promise.resolve()
     })

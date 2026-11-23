@@ -97,6 +97,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: false,
   },
   {
+    id: "trash",
+    label: "Trash",
+    title: "Trash & Recycle Bin",
+    description: "Restore soft-deleted bookings, expenses, customers, and cash transactions.",
+    iconName: "Trash2",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "settings",
     label: "Settings",
     title: "Settings",

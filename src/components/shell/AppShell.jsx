@@ -10,6 +10,7 @@ import {
   ReceiptIndianRupee,
   BookOpen,
   Settings,
+  Trash2,
   LogOut,
   Plus,
   AlertTriangle,
@@ -41,6 +42,7 @@ const DRAWER_ICONS = {
   ReceiptText,
   ReceiptIndianRupee,
   BookOpen,
+  Trash2,
   Settings,
 }
 

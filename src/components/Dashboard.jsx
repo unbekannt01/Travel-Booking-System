@@ -33,6 +33,7 @@ const SCREEN_LOADERS = {
   analytics: () => import("./TourAnalytics"),
   outstanding: () => import("./analytics/OutstandingManager"),
   cashbook: () => import("./cashbook/CashBook"),
+  trash: () => import("./trash/Trash"),
   settings: () => import("./dashboard/SettingsPanel"),
 }
 
@@ -46,6 +47,7 @@ const JourneyManager = lazy(SCREEN_LOADERS.journey)
 const TourAnalytics = lazy(SCREEN_LOADERS.analytics)
 const OutstandingManager = lazy(SCREEN_LOADERS.outstanding)
 const CashBook = lazy(SCREEN_LOADERS.cashbook)
+const Trash = lazy(SCREEN_LOADERS.trash)
 const SettingsPanel = lazy(SCREEN_LOADERS.settings)
 
 const InvoiceView = lazy(() => import("./InvoiceView"))
@@ -76,7 +78,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined" && window.location.hash) {
       const h = window.location.hash.replace(/^#\/?/, "")
-      if (["expenses", "dashboard", "passengers", "journey", "tours", "analytics", "settings"].includes(h)) {
+      if (["expenses", "dashboard", "passengers", "customers", "journey", "tours", "analytics", "outstanding", "cashbook", "trash", "settings"].includes(h)) {
         return h
       }
     }
@@ -87,7 +89,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     const handleHashChange = () => {
       if (typeof window !== "undefined" && window.location.hash) {
         const h = window.location.hash.replace(/^#\/?/, "")
-        if (["expenses", "dashboard", "passengers", "journey", "tours", "analytics", "settings"].includes(h)) {
+        if (["expenses", "dashboard", "passengers", "customers", "journey", "tours", "analytics", "outstanding", "cashbook", "trash", "settings"].includes(h)) {
           setActiveTab(h)
         }
       }
@@ -619,6 +621,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
 
             {activeTab === "cashbook" && (
               <CashBook user={user} />
+            )}
+
+            {activeTab === "trash" && (
+              <Trash user={user} />
             )}
 
             {activeTab === "settings" && (

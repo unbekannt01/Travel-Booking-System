@@ -110,6 +110,7 @@ const ALL_SCREENS = [
   { id: "tours", label: "Destinations", tabId: "tours" },
   { id: "expenses", label: "Expenses", tabId: "expenses" },
   { id: "cashbook", label: "Cash Book", tabId: "cashbook" },
+  { id: "trash", label: "Trash", tabId: "trash" },
   { id: "analytics", label: "Analytics", tabId: "analytics" },
   { id: "profit-loss", label: "Profit & Loss", isAnalyticsTab: "pnl" },
   { id: "settings", label: "Settings", tabId: "settings" },

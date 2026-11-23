@@ -20,6 +20,7 @@ import { useToast } from "../common/ToastContext"
 import { useConfirm } from "../common/useConfirm"
 import StatementModal from "./StatementModal"
 import ReminderModal from "../reminders/ReminderModal"
+import HistoryDrawer from "../history/HistoryDrawer"
 import {
   Phone,
   Mail,
@@ -34,6 +35,7 @@ import {
   FileText,
   AlertCircle,
   MessageSquare,
+  History,
 } from "lucide-react"
 
 const LANGUAGE_LABELS = {
@@ -81,6 +83,7 @@ export default function CustomerDrawer({
   const [copiedPhone, setCopiedPhone] = useState(false)
   const [showStatementModal, setShowStatementModal] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [updatingOptOut, setUpdatingOptOut] = useState(false)
 
   const fetchCustomerDetails = useCallback(async () => {
@@ -231,6 +234,14 @@ export default function CustomerDrawer({
                 disabled={customer.whatsappOptOut || (summary && summary.totalOutstanding <= 0)}
               >
                 Remind
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<History className="w-4 h-4" />}
+                onClick={() => setShowHistoryModal(true)}
+              >
+                History
               </Button>
               <Button
                 variant="outline"
@@ -564,6 +575,16 @@ export default function CustomerDrawer({
           onReminderLogged={() => {
             fetchCustomerDetails()
           }}
+        />
+      )}
+
+      {showHistoryModal && customer && (
+        <HistoryDrawer
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          entityType="customer"
+          entityId={customer._id || customer.id}
+          title={`${customer.name || "Customer"} History`}
         />
       )}
     </Drawer>

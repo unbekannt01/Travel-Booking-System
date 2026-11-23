@@ -751,5 +751,31 @@ export async function reopenDay(data) {
   })
 }
 
+export async function getTrash(params = {}) {
+  const query = new URLSearchParams()
+  if (params.type) query.set("type", params.type)
+  if (params.q) query.set("q", params.q)
+  if (params.page) query.set("page", String(params.page))
+  if (params.limit) query.set("limit", String(params.limit))
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return request(`/api/trash${qs}`)
+}
+
+export async function restoreTrashItem(type, id) {
+  return request(`/api/trash/${encodeURIComponent(type)}/${encodeURIComponent(id)}/restore`, {
+    method: "POST",
+  })
+}
+
+export async function getRecordHistory(params = {}) {
+  const query = new URLSearchParams()
+  if (params.entityType) query.set("entityType", params.entityType)
+  if (params.entityId) query.set("entityId", String(params.entityId))
+  if (params.limit) query.set("limit", String(params.limit))
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return request(`/api/history${qs}`)
+}
+
+
 
 

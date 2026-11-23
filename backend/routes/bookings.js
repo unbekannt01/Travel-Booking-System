@@ -23,6 +23,7 @@ import {
 } from "../../shared/businessLogic.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
 import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
+import recordHistory from "../utils/recordHistory.js"
 
 export {
   generateTourCode,
@@ -553,6 +554,14 @@ router.post("/", verifyToken, async (req, res) => {
       }
     }
 
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "booking",
+      entityId: savedBooking._id,
+      action: "created",
+      user: req.user,
+    })
+
     res.status(201).json(maskBookingPaxAadhaar(savedBooking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
@@ -577,6 +586,8 @@ router.put("/:id", verifyToken, async (req, res) => {
     if (booking.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to update this booking" })
     }
+
+    const before = booking.toObject()
 
     // Check books lock ONLY if money-affecting fields are being updated
     const isMoneyFieldChanging =
@@ -778,6 +789,18 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     await booking.save()
     const { booking: syncedBooking } = await syncBookingPayments(booking._id, req.user.id)
+    const after = syncedBooking ? (syncedBooking.toObject ? syncedBooking.toObject() : syncedBooking) : booking.toObject()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "booking",
+      entityId: booking._id,
+      action: "updated",
+      before,
+      after,
+      user: req.user,
+    })
+
     res.json(maskBookingPaxAadhaar(syncedBooking || booking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
@@ -963,6 +986,8 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to cancel this booking" })
     }
 
+    const before = booking.toObject()
+
     const { reason, cancellationCharge, refundPaymentMode = "Cash" } = req.body
     const totalPaid = Math.round((booking.advanceReceived || 0) * 100) / 100
     let calc
@@ -1028,6 +1053,16 @@ router.put("/:id/cancel", verifyToken, async (req, res) => {
     }
 
     await booking.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "booking",
+      entityId: booking._id,
+      action: "cancelled",
+      before,
+      after: booking.toObject(),
+      user: req.user,
+    })
 
     await logAudit({
       userId: req.user.id,
@@ -1132,6 +1167,15 @@ router.delete("/:id", verifyToken, async (req, res) => {
 
     booking.deletedAt = new Date()
     await booking.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "booking",
+      entityId: booking._id,
+      action: "deleted",
+      user: req.user,
+    })
+
     res.json({ message: "Booking moved to trash", id: booking._id, invoiceNo: booking.invoiceNo })
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
@@ -1167,6 +1211,15 @@ router.put("/:id/restore", verifyToken, async (req, res) => {
 
     booking.deletedAt = null
     await booking.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "booking",
+      entityId: booking._id,
+      action: "restored",
+      user: req.user,
+    })
+
     res.json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {

@@ -21,6 +21,7 @@ import {
   toDateString,
   round2,
 } from "../../shared/cashbook.js"
+import recordHistory from "../utils/recordHistory.js"
 
 const router = express.Router()
 
@@ -259,6 +260,14 @@ router.post("/entries", verifyToken, cashbookWriteLimiter, async (req, res) => {
 
     await entry.save()
 
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "cashEntry",
+      entityId: entry._id,
+      action: "created",
+      user: req.user,
+    })
+
     res.status(201).json(entry)
   } catch (error) {
     if (error instanceof BooksLockedError) {
@@ -286,6 +295,8 @@ router.put("/entries/:id", verifyToken, cashbookWriteLimiter, async (req, res) =
     if (!entry) {
       return res.status(404).json({ message: "Entry not found" })
     }
+
+    const before = entry.toObject()
 
     // Check existing date
     await assertBooksOpen(req.user.id, entry.date)
@@ -320,6 +331,17 @@ router.put("/entries/:id", verifyToken, cashbookWriteLimiter, async (req, res) =
     entry.updatedBy = req.user.id
 
     await entry.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "cashEntry",
+      entityId: entry._id,
+      action: "updated",
+      before,
+      after: entry.toObject(),
+      user: req.user,
+    })
+
     res.json(entry)
   } catch (error) {
     if (error instanceof BooksLockedError) {
@@ -353,6 +375,14 @@ router.delete("/entries/:id", verifyToken, cashbookWriteLimiter, async (req, res
     entry.deletedAt = new Date()
     entry.deletedBy = req.user.id
     await entry.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "cashEntry",
+      entityId: entry._id,
+      action: "deleted",
+      user: req.user,
+    })
 
     res.json({ message: "Entry deleted successfully", id: entry._id })
   } catch (error) {

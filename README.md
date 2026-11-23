@@ -69,10 +69,10 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (330 tests across 79 suites)
+# Run all unit, security, crypto, and business logic tests (388 tests across 96 suites)
 npm test
 
-# Run component test safety net (47 tests across 14 Vitest suites)
+# Run component test safety net (87 tests across 18 Vitest suites)
 npm run test:ui
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -85,10 +85,12 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**361 unit tests + 78 component tests across 94 total suites**):
+### Test Coverage Summary (**388 unit tests + 87 component tests across 114 total suites**):
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
-   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Outstanding & Aging, Cash Book, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
-1. **Cash Book, Books Close & Ledger Lock** (`tests/cashbook-pure.test.js`, `tests/integration-cashbook.test.js`, `tests/components/cashbook.test.jsx`):
+   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Outstanding & Aging, Cash Book, Trash & History, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, bounded render commits via React Profiler, and 3-second toast deduplication.
+1. **Trash & Restore Engine, Edit History & Whitelist Audit** (`tests/history-pure.test.js`, `tests/integration-trash.test.js`, `tests/components/trash.test.jsx`):
+   - Whitelist-based diffing engine across Bookings, Expenses, Customers, and Cash Entries; strict PII preservation policy recording only `changed: true` for free-text and personal fields without leaking values; integer paise comparisons for monetary fields; trilingual change summaries in English, Hindi, and Gujarati; deterministic restore classifier preventing restorations on closed book dates (HTTP 423) or unique collisions (HTTP 409); Mongoose `RecordHistory` model with compound indexing and 730-day TTL; responsive desktop table with WCAG 2.1 keyboard scroll region and mobile stacked cards; accessible `HistoryDrawer` slide-over timeline.
+2. **Cash Book, Books Close & Ledger Lock** (`tests/cashbook-pure.test.js`, `tests/integration-cashbook.test.js`, `tests/components/cashbook.test.jsx`):
    - Pure two-account (`cash` and `bank`) cashbook engine with integer paise arithmetic, deterministic same-day sorting, ledger-authoritative deduplication, dynamic opening balance rolling, counted vs system discrepancy calculation, and trilingual standalone printable HTML renderer with strict CSP; backend lock boundary throwing HTTP 423 Locked across all 12 money-changing routes upon closed dates; step-up auth with bcrypt and TOTP 2FA verification; and full UI with date stepper, range presets, account filters, stat cards, manual entries modal, day close modal, reopen modal, setup modal, and sandboxed print preview.
 2. **Outstanding Receivables, Aging & Customer Statements** (`tests/receivables-pure.test.js`, `tests/statements-pure.test.js`, `tests/integration-outstanding.test.js`, `tests/components/outstanding.test.jsx`):
    - Pure aging bucket engine (`not-due`, `0-30`, `31-60`, `61-90`, `90-plus`) under journey and booking dates; customer statement engine with chronological timeline, same-day debits-before-credits sort, cancellation reconciliation, and zero-float-drift balance parity; pure HTML statement renderer with strict CSP and trilingual dictionary (en/hi/gu); Express report endpoint with Zod validation, rate limiting, and zero-Aadhaar projection; and full UI with StatCards, interactive aging cards, stacked bar chart, accessible table view, expandable customer ledgers, and statement preview modal.

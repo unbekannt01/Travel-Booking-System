@@ -17,6 +17,8 @@ import customerRoutes from "./routes/customers.js"
 import reminderTemplateRoutes from "./routes/reminderTemplates.js"
 import reminderRoutes from "./routes/reminders.js"
 import cashbookRoutes from "./routes/cashbook.js"
+import trashRoutes from "./routes/trash.js"
+import historyRoutes from "./routes/history.js"
 
 const app = express()
 
@@ -71,6 +73,8 @@ app.use("/api/customers", customerRoutes)
 app.use("/api/reminder-templates", reminderTemplateRoutes)
 app.use("/api/reminders", reminderRoutes)
 app.use("/api/cashbook", cashbookRoutes)
+app.use("/api/trash", trashRoutes)
+app.use("/api/history", historyRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()

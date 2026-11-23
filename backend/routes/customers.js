@@ -13,6 +13,7 @@ import {
 } from "../utils/customerValidation.js"
 import { normalizeIndianMobile, summarizeCustomer, CUSTOMER_TAGS } from "../../shared/customers.js"
 import { buildCustomerStatement } from "../../shared/statements.js"
+import recordHistory from "../utils/recordHistory.js"
 
 const router = express.Router()
 
@@ -441,6 +442,14 @@ router.post("/", verifyToken, customerWriteLimiter, async (req, res) => {
       },
     })
 
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "customer",
+      entityId: saved._id,
+      action: "created",
+      user: req.user,
+    })
+
     res.status(201).json({
       ...saved.toObject(),
       id: saved._id.toString(),
@@ -478,6 +487,8 @@ router.put("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Customer not found" })
     }
 
+    const before = customer.toObject()
+
     // If phone is being changed, ensure it doesn't collide with another customer
     if (input.phone && input.phone !== customer.phone) {
       const duplicate = await Customer.findOne({
@@ -494,6 +505,16 @@ router.put("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
 
     Object.assign(customer, input)
     const updated = await customer.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "customer",
+      entityId: updated._id,
+      action: "updated",
+      before,
+      after: updated.toObject(),
+      user: req.user,
+    })
 
     await logAudit({
       userId: req.user.id,
@@ -543,6 +564,14 @@ router.delete("/:id", verifyToken, customerWriteLimiter, async (req, res) => {
     customer.deletedAt = new Date()
     customer.deletedBy = req.user.id
     await customer.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "customer",
+      entityId: customer._id,
+      action: "deleted",
+      user: req.user,
+    })
 
     await logAudit({
       userId: req.user.id,

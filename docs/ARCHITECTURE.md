@@ -771,6 +771,63 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - `SetupModal.jsx`: Opening cash & bank balances, as-of date, lock enforcement when closes exist.
   - `PrintDayBookModal.jsx`: Sandboxed iframe preview (`renderDayBookHtml`), trilingual selector, native print trigger.
 
+---
+
+## 22. Trash & Restore Engine, Edit History & Whitelist Audit Architecture (Part 6b)
+
+- **Pure History & Diff Engine (`shared/history.js`)**:
+  - **Supported Entity Types (`HISTORY_ENTITIES`)**: `"booking"`, `"expense"`, `"customer"`, `"cashEntry"`.
+  - **Whitelist-Based Field Tracking (`TRACKED_FIELDS`)**:
+    - Strictly tracks pre-approved business fields per entity type.
+    - Fields are categorized by data type: `"money"`, `"date"`, `"status"`, `"enum"`, `"text"`, or `"passengers"`.
+  - **Zero Personal Data Leakage (Strict PII Policy)**:
+    - Free-text and personal fields (`contactName`, `contactPhone`, `contactEmail`, `notes`, `vendor`, `name`, `phone`, `city`, `address`, `partyName`) are categorized as `"text"`.
+    - When a `"text"` field changes, `diffRecord` records ONLY `{ field, kind: "text", changed: true }`.
+    - `from` and `to` values are NEVER emitted or stored for `"text"` fields, preventing personal identifiable information (PII) from accumulating in history audit logs.
+  - **Integer Paise Money Comparison**:
+    - Fields categorized as `"money"` (`totalAmount`, `advanceReceived`, `discount`, `refundAmount`, `amount`) are converted to integer paise (`toPaise`) before comparison.
+    - When values differ, outputs `{ field, kind: "money", from, to }` formatted in standard decimal rupee units via `fromPaise`.
+  - **Trilingual Change Summaries (`summarizeChanges`)**:
+    - Translates granular diff objects into clear operator-readable sentence fragments across three supported languages: English (`en`), Hindi (`hi`), and Gujarati (`gu`).
+    - Uses localized field labels from `HISTORY_LABELS` and formatted currency strings (`₹`).
+  - **Deterministic Restore Classification (`classifyRestore`)**:
+    - Pre-evaluates whether a soft-deleted item can be safely restored without database collision or lock violations.
+    - Rejection reasons:
+      - `BOOKS_LOCKED`: When a booking with advance/refund, a paid expense, or a cash entry has an effective monetary date on or before the tenant's `lockDate`.
+      - `NUMBER_CONFLICT`: When an active booking already exists with the same invoice number, or an active customer exists with the same phone.
+      - `SEAT_CONFLICT`: When coach seats are no longer available on the departure.
+      - `PARENT_DELETED`: When the parent record has been removed.
+      - `ALREADY_ACTIVE`: When the record is not in trash (`deletedAt` is null).
+
+- **Data Models & Utilities (`backend/models/`, `backend/utils/`)**:
+  - `RecordHistory.js`: Mongoose model storing `userId`, `entityType`, `entityId`, `action` (`"created"`, `"updated"`, `"deleted"`, `"restored"`, `"cancelled"`), `changes` (array of diff objects), `summary`, `performedBy`, `at`.
+  - **Compound Indexing & Automatic TTL**:
+    - Compound index `{ userId: 1, entityType: 1, entityId: 1, at: -1 }` for high-performance timeline queries.
+    - Automatic 730-day (2-year) TTL expiration index (`expireAfterSeconds: 63072000`) on the `at` timestamp field for regulatory data hygiene.
+  - `backend/utils/recordHistory.js`: Non-blocking audit logger helper. Catches errors internally and logs only the error code/name, ensuring audit logging failures never break primary user mutations.
+
+- **Backend REST Routes (`backend/routes/`)**:
+  - `GET /api/trash`: Tenant-isolated endpoint returning paginated soft-deleted items across bookings, expenses, customers, and cash entries with tab counts (`all`, `bookings`, `expenses`, `customers`, `cash`), search filtering, and pre-computed `restore` safety evaluation for each item.
+  - `POST /api/trash/:type/:id/restore`: Restores soft-deleted items with strict books lock checks (HTTP 423) and collision detection (HTTP 409). Emits `"restored"` history event upon success.
+  - `GET /api/history`: Returns chronological audit timeline for a specific entity record (`?type=...&id=...`), sorted newest first. Tenant-isolated and rate-limited.
+
+- **Client Layer & UI Components (`src/components/trash/`, `src/components/history/`)**:
+  - `src/components/trash/Trash.jsx`:
+    - Responsive dual-view: Accessible desktop table with WCAG 2.1 keyboard scroll region (`tabIndex={0}`, `role="region"`) and mobile-friendly stacked cards.
+    - Real-time tab counters for Bookings, Expenses, Customers, and Cash Entries.
+    - Debounced search input (~400ms) with clean empty states.
+    - Intelligent restore buttons: Disabled with inline warning text when `restore.allowed === false` (e.g. "Books are closed for this date", "Phone number already in use by active customer").
+    - Action confirmation via `ConfirmDialog` and direct trigger to launch `HistoryDrawer`.
+  - `src/components/history/HistoryDrawer.jsx`:
+    - Accessible slide-over drawer showing vertical timeline dots and action badges (`Created`, `Updated`, `Moved to Trash`, `Restored`).
+    - Trilingual language toggle (`English`, `हिन्दी`, `ગુજરાતી`) dynamically re-rendering change summaries using `summarizeChanges`.
+    - Sanitized modification bullet points with formatted currency values.
+  - **Navigation & App Shell Integration**:
+    - Trash item added to `NAV_ITEMS` in `shellConfig.js`, sidebar in `AppSidebar.jsx`, and mobile drawer in `AppShell.jsx` with `Trash2` icon.
+    - Lazy chunk code-splitting for `Trash.jsx` and `HistoryDrawer.jsx` in `Dashboard.jsx`.
+    - Quick "History" launch button embedded directly in `CustomerDrawer.jsx`.
+
+
 
 
 

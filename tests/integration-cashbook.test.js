@@ -65,15 +65,19 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     const port = server.address().port
     baseUrl = `http://127.0.0.1:${port}`
 
-    // Cleanup past test data
-    await User.deleteMany({ email: /cashbook_test_/ })
-    await Booking.deleteMany({ contactPhone: "9988776655" })
-    await Payment.deleteMany({ notes: /CashbookTest/ })
-    await Expense.deleteMany({ vendor: /CashbookTest/ })
-    await CashEntry.deleteMany({ partyName: /CashbookTest/ })
-    await CashBookSetup.deleteMany({})
-    await BooksClose.deleteMany({})
-    await AuditLog.deleteMany({ action: "CASHBOOK_REOPEN_DAY" })
+    // Cleanup past test data strictly scoped to this test suite's users
+    const existingUsers = await User.find({ email: /cashbook_test_/ }).select("_id").lean()
+    const existingIds = existingUsers.map((u) => u._id)
+    if (existingIds.length > 0) {
+      await Booking.deleteMany({ userId: { $in: existingIds } })
+      await Payment.deleteMany({ userId: { $in: existingIds } })
+      await Expense.deleteMany({ userId: { $in: existingIds } })
+      await CashEntry.deleteMany({ userId: { $in: existingIds } })
+      await CashBookSetup.deleteMany({ userId: { $in: existingIds } })
+      await BooksClose.deleteMany({ userId: { $in: existingIds } })
+      await AuditLog.deleteMany({ userId: { $in: existingIds } })
+      await User.deleteMany({ _id: { $in: existingIds } })
+    }
 
     // Seed test user A
     const hashedPassword = await bcrypt.hash(rawPassword, 10)
@@ -108,14 +112,17 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
       await new Promise((resolve) => server.close(resolve))
     }
     if (isMongoAvailable && mongoose.connection.readyState !== 0) {
-      await User.deleteMany({ email: /cashbook_test_/ })
-      await Booking.deleteMany({ contactPhone: "9988776655" })
-      await Payment.deleteMany({ notes: /CashbookTest/ })
-      await Expense.deleteMany({ vendor: /CashbookTest/ })
-      await CashEntry.deleteMany({ partyName: /CashbookTest/ })
-      await CashBookSetup.deleteMany({})
-      await BooksClose.deleteMany({})
-      await AuditLog.deleteMany({ action: "CASHBOOK_REOPEN_DAY" })
+      const ids = [userAId, userBId].filter(Boolean)
+      if (ids.length > 0) {
+        await Booking.deleteMany({ userId: { $in: ids } })
+        await Payment.deleteMany({ userId: { $in: ids } })
+        await Expense.deleteMany({ userId: { $in: ids } })
+        await CashEntry.deleteMany({ userId: { $in: ids } })
+        await CashBookSetup.deleteMany({ userId: { $in: ids } })
+        await BooksClose.deleteMany({ userId: { $in: ids } })
+        await AuditLog.deleteMany({ userId: { $in: ids } })
+        await User.deleteMany({ _id: { $in: ids } })
+      }
       await mongoose.disconnect()
     }
   })

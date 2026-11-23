@@ -15,6 +15,7 @@ import {
   round2,
 } from "../../shared/expenses.js"
 import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
+import recordHistory from "../utils/recordHistory.js"
 
 const router = express.Router()
 
@@ -258,6 +259,14 @@ router.post("/", verifyToken, expenseWriteLimiter, async (req, res) => {
       },
     })
 
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "expense",
+      entityId: expense._id,
+      action: "created",
+      user: req.user,
+    })
+
     res.status(201).json({
       message: "Expense recorded successfully",
       expense: {
@@ -296,6 +305,8 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
     if (!expense) {
       return res.status(404).json({ message: "Expense not found" })
     }
+
+    const before = expense.toObject()
 
     const input = updateExpenseSchema.parse(req.body)
 
@@ -348,6 +359,16 @@ router.put("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
       },
     })
 
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "expense",
+      entityId: expense._id,
+      action: "updated",
+      before,
+      after: expense.toObject(),
+      user: req.user,
+    })
+
     res.json({
       message: "Expense updated successfully",
       expense: {
@@ -394,6 +415,14 @@ router.delete("/:id", verifyToken, expenseWriteLimiter, async (req, res) => {
     expense.deletedAt = new Date()
     expense.deletedBy = req.user.id
     await expense.save()
+
+    await recordHistory({
+      userId: req.user.id,
+      entityType: "expense",
+      entityId: expense._id,
+      action: "deleted",
+      user: req.user,
+    })
 
     await logAudit({
       userId: req.user.id,
