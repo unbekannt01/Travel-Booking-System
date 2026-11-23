@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 68 test suites (293 tests), the Vitest component test safety net (`npm run test:ui`, 34 tests across 11 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 79 test suites (330 tests), the Vitest component test safety net (`npm run test:ui`, 47 tests across 14 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -31,10 +31,11 @@ npm run test:ui
 
 ## 2. Test Suites & Coverage Map
 
-### 2.1 Component Test Layer (31 Tests / 11 Suites)
+### 2.1 Component Test Layer (47 Tests / 14 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/components/outstanding.test.jsx`** | 5 | **Outstanding Receivables & Aging Screen (Part 5b)**: Renders OutstandingManager with 4 StatCards, 5 aging bucket cards, and customer rows; toggles between horizontal stacked bar chart and accessible table view; expands customer row to reveal individual booking ledgers; opens StatementModal when Statement action button is clicked; renders RateLimitNotice when API returns HTTP 429. |
 | **`tests/components/profit-loss.test.jsx`** | 4 | **Tour Analytics & Profit/Loss (Part 4b)**: Switches between Analytics Overview and Profit & Loss tabs; verifies 4 KPI StatCards and P&L heading; toggles between Recharts bar chart view and accessible table alternative; opens Detail Drawer on clicking a row and verifies income/expense ledger strictly without customer PII; renders JourneyManager departure card with compact Trip Financials and opens Add Trip Expense modal with prefilled context. |
 | **`tests/components/customers.test.jsx`** | 4 | **Customer Directory & Drawer (Part 5a)**: Renders Customer Directory with StatCards, filters, and customer rows; opens Add Customer modal on button click and validates fields; opens CustomerDrawer on row click and displays contact profile and booking history without Aadhaar PII; renders calm inline RateLimitNotice when listCustomers encounters HTTP 429. |
 | **`tests/components/expenses.test.jsx`** | 5 | Renders ExpenseTracker with data, StatCards, and table rows; renders EmptyState cleanly when no expenses exist; renders calm inline error card with Retry button when loading fails; opens Add Expense modal and validates required fields; allows interacting with filter chips and search input. |
@@ -48,10 +49,13 @@ npm run test:ui
 | **`tests/components/booking-steps.test.jsx`** | 2 | Renders Step 1 (Tour & Departure Selection); renders edit booking mode with pre-populated passengers and seats without crashing. |
 | **`tests/components/toast-dedup.test.jsx`** | 2 | Verifies 3-second toast deduplication suppresses duplicate alerts; verifies distinct messages trigger toasts independently. |
 
-### 2.2 Pure Logic & Unit Test Suites (290 Tests / 28 Test Files / 68 TAP Suites)
+### 2.2 Pure Logic & Unit Test Suites (330 Tests / 31 Test Files / 79 TAP Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/receivables-pure.test.js`** | 6 | **Receivables & Aging Pure Engine (Part 5b)**: Frozen `AGING_BUCKETS` and labels; `toDateString` utility; integer day diff via UTC midnight; bucket classification under `journey` (0-day threshold) and `booking` (30-day credit term) bases; `calculateReceivables` bucket grouping, customer aggregation, unlinked booking grouping, and exact equality with P&L `totalOutstanding`. |
+| **`tests/statements-pure.test.js`** | 4 | **Customer Statements & HTML Renderer Pure Logic (Part 5b)**: Chronological transaction ledger with opening balance calculation; same-day deterministic ordering (debits before credits); cancellation flow (reversal, retained cancellation fee, refund) netting to zero; statement closing balance strictly matches receivables total outstanding; pure HTML statement rendering with CSP meta tag and trilingual translations (en, hi, gu). |
+| **`tests/integration-outstanding.test.js`** | 5 | **Outstanding & Statement Express Integration Harness (Part 5b)**: Rejects unauthenticated requests with HTTP 401; `GET /api/reports/outstanding` multi-tenant isolation, query schema validation, and zero-Aadhaar PII projection; `GET /api/customers/:id/statement` statement generation and company operator details; statement closing balance parity against receivables engine. |
 | **`tests/customers-pure.test.js`** | 8 | **Customer Master Pure Logic (Part 5a)**: `normalizeIndianMobile` stripping prefix/spaces/symbols and rejecting invalid inputs; `isValidEmail` format validation; `pickDisplayName` candidate selection; `CUSTOMER_TAGS` and `CUSTOMER_LANGUAGES` frozen arrays; `summarizeCustomer` accounting metrics calculation matching `shared/profitLoss.js` integer paise rules without float drift; graceful handling of cancelled/empty bookings. |
 | **`tests/customers-backend.test.js`** | 7 | **Customer Master Backend Validation & Pure Accounting (Part 5a)**: Zod schemas (`createCustomerSchema`, `updateCustomerSchema`, `customerQuerySchema`) rejecting invalid mobile, tag limit (>5), invalid GSTIN, unknown keys; coerces query params with defaults; verifies customer summary financial rules against cancellation fees and refunds. |
 | **`tests/integration-customers.test.js`** | 6 | **Customer Master Express + MongoDB Integration Harness (Part 5a)**: Rejects unauthenticated requests with HTTP 401; creates customer via `POST /api/customers` with CSRF defense and tenant isolation; prevents duplicate phone collision for same tenant (409 Conflict); verifies cross-tenant isolation (different users can register same phone); verifies lookup endpoint `GET /api/customers/lookup?phone=` returns profile strictly without Aadhaar; verifies soft deletion and subsequent re-registration of phone number. |

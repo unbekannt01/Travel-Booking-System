@@ -31,6 +31,7 @@ const SCREEN_LOADERS = {
   expenses: () => import("./ExpenseTracker"),
   journey: () => import("./JourneyManager"),
   analytics: () => import("./TourAnalytics"),
+  outstanding: () => import("./analytics/OutstandingManager"),
   settings: () => import("./dashboard/SettingsPanel"),
 }
 
@@ -42,6 +43,7 @@ const TourInventory = lazy(SCREEN_LOADERS.tours)
 const ExpenseTracker = lazy(SCREEN_LOADERS.expenses)
 const JourneyManager = lazy(SCREEN_LOADERS.journey)
 const TourAnalytics = lazy(SCREEN_LOADERS.analytics)
+const OutstandingManager = lazy(SCREEN_LOADERS.outstanding)
 const SettingsPanel = lazy(SCREEN_LOADERS.settings)
 
 const InvoiceView = lazy(() => import("./InvoiceView"))
@@ -609,6 +611,10 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
 
             {activeTab === "analytics" && <TourAnalytics bookings={bookings} tours={tours} user={user} />}
 
+            {activeTab === "outstanding" && (
+              <OutstandingManager bookings={bookings} tours={tours} user={user} />
+            )}
+
             {activeTab === "settings" && (
               <SettingsPanel
                 user={user}
@@ -624,7 +630,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
               />
             )}
 
-            {!["dashboard", "form", "passengers", "tours", "journey", "analytics", "settings", "expenses"].includes(activeTab) && (
+            {!["dashboard", "form", "passengers", "customers", "tours", "journey", "analytics", "outstanding", "settings", "expenses"].includes(activeTab) && (
               <NotFoundPage onGoOverview={() => setActiveTab("dashboard")} />
             )}
           </Suspense>

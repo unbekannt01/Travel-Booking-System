@@ -4,7 +4,9 @@ import { z } from "zod"
 import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
 import Expense from "../models/Expense.js"
+import Customer from "../models/Customer.js"
 import { calculateProfitLoss } from "../../shared/profitLoss.js"
+import { calculateReceivables } from "../../shared/receivables.js"
 
 const router = express.Router()
 
@@ -68,9 +70,10 @@ router.get("/tour-pnl", verifyToken, reportLimiter, async (req, res) => {
   try {
     const parsed = tourPnlQuerySchema.safeParse(req.query)
     if (!parsed.success) {
+      const issues = parsed.error.issues || parsed.error.errors || []
       return res.status(400).json({
-        message: parsed.error.errors[0]?.message || "Invalid report query parameters",
-        errors: parsed.error.errors,
+        message: issues[0]?.message || "Invalid report query parameters",
+        errors: issues,
       })
     }
 
@@ -229,6 +232,120 @@ router.get("/tour-pnl", verifyToken, reportLimiter, async (req, res) => {
   } catch (error) {
     console.error("Tour P&L report generation error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to generate Profit & Loss report" })
+  }
+})
+
+/**
+ * Strict Zod validation schema for Outstanding & Aging report queries.
+ */
+export const outstandingReportQuerySchema = z
+  .object({
+    asOf: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid asOf date format (YYYY-MM-DD)")
+      .optional(),
+    basis: z.enum(["journey", "booking"]).optional().default("journey"),
+    tourName: z.string().max(120, "Tour name cannot exceed 120 characters").optional(),
+    customerId: z.string().optional(),
+    bucket: z
+      .enum(["all", "not-due", "0-30", "31-60", "61-90", "90-plus"])
+      .optional()
+      .default("all"),
+    groupBy: z.enum(["customer", "booking"]).optional().default("customer"),
+    page: z.coerce.number().int().positive().optional().default(1),
+    limit: z.coerce.number().int().positive().max(200).optional().default(50),
+  })
+  .strict({ message: "Unknown query parameters are not allowed" })
+
+/**
+ * GET /api/reports/outstanding
+ * Generates Outstanding Receivables and Aging Analysis.
+ * Tenant isolated, rate-limited, strictly zero Aadhaar/PII projection.
+ */
+router.get("/outstanding", verifyToken, reportLimiter, async (req, res) => {
+  try {
+    const parsed = outstandingReportQuerySchema.safeParse(req.query)
+    if (!parsed.success) {
+      const issues = parsed.error.issues || parsed.error.errors || []
+      return res.status(400).json({
+        message: issues[0]?.message || "Invalid outstanding report query parameters",
+        errors: issues,
+      })
+    }
+
+    const { asOf, basis, tourName, customerId, bucket, groupBy, page, limit } = parsed.data
+
+    // 1. Fetch active bookings strictly excluding Aadhaar
+    const bookings = await Booking.find({
+      userId: req.user.id,
+      deletedAt: null,
+      status: { $ne: "Cancelled" },
+    })
+      .select("-passengers.aadhar -passengers.aadhaar")
+      .lean()
+
+    // 2. Fetch customers for linking & metadata
+    const customers = await Customer.find({
+      userId: req.user.id,
+      deletedAt: null,
+    })
+      .select("_id name phone email city")
+      .lean()
+
+    // 3. Run pure receivables aging calculation
+    const report = calculateReceivables({
+      bookings,
+      asOfDate: asOf,
+      basis,
+      customers,
+      tourName,
+      bucket,
+    })
+
+    // 4. Optional customerId filter
+    let filteredCustomers = report.customers
+    let filteredRows = report.rows
+    if (customerId) {
+      filteredCustomers = filteredCustomers.filter((c) => c.customerId === customerId)
+      filteredRows = filteredRows.filter((r) => r.customerId === customerId)
+    }
+
+    // 5. Pagination
+    const totalItems = groupBy === "customer" ? filteredCustomers.length : filteredRows.length
+    const totalPages = Math.ceil(totalItems / limit) || 1
+    const startIndex = (page - 1) * limit
+    const pagedCustomers = filteredCustomers.slice(startIndex, startIndex + limit)
+    const pagedRows = filteredRows.slice(startIndex, startIndex + limit)
+
+    res.json({
+      success: true,
+      meta: {
+        asOf: report.asOfDate,
+        basis: report.basis,
+        tourName: tourName || "all",
+        bucket,
+        groupBy,
+        page,
+        limit,
+        totalItems,
+        totalPages,
+      },
+      summary: {
+        totalOutstanding: report.totalOutstanding,
+        totalOverdue: report.totalOverdue,
+        notDueAmount: report.notDueAmount,
+        oldestOverdueDays: report.oldestOverdueDays,
+        customersOwingCount: report.customersOwingCount,
+        totalBookingsOwing: report.totalBookingsOwing,
+        bucketTotals: report.bucketTotals,
+        bucketCounts: report.bucketCounts,
+      },
+      customers: pagedCustomers,
+      rows: pagedRows,
+    })
+  } catch (error) {
+    console.error("Outstanding report generation error:", error.name, error.code || "")
+    res.status(500).json({ message: "Failed to generate Outstanding report" })
   }
 })
 

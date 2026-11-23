@@ -79,6 +79,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: false,
   },
   {
+    id: "outstanding",
+    label: "Outstanding",
+    title: "Outstanding & Aging",
+    description: "Track unpaid balances, overdue aging buckets, and customer account statements.",
+    iconName: "ReceiptIndianRupee",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "settings",
     label: "Settings",
     title: "Settings",
@@ -200,6 +209,7 @@ export function getSkeletonVariant(activeTab) {
     case "tours":
     case "journey":
     case "expenses":
+    case "outstanding":
       return "table"
     case "dashboard":
     default:

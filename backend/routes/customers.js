@@ -2,6 +2,7 @@ import express from "express"
 import rateLimit from "express-rate-limit"
 import Customer from "../models/Customer.js"
 import Booking from "../models/Booking.js"
+import User from "../models/User.js"
 import verifyToken from "../middleware/auth.js"
 import { logAudit } from "../models/AuditLog.js"
 import {
@@ -10,6 +11,7 @@ import {
   customerQuerySchema,
 } from "../utils/customerValidation.js"
 import { normalizeIndianMobile, summarizeCustomer, CUSTOMER_TAGS } from "../../shared/customers.js"
+import { buildCustomerStatement } from "../../shared/statements.js"
 
 const router = express.Router()
 
@@ -286,6 +288,71 @@ router.get("/:id", verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Customer detail fetch error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to retrieve customer details" })
+  }
+})
+
+/**
+ * GET /api/customers/:id/statement
+ * Generates an account statement for a customer over a date range.
+ * Tenant isolated, strictly zero Aadhaar/PII projection.
+ */
+router.get("/:id/statement", verifyToken, async (req, res) => {
+  try {
+    const customer = await Customer.findOne({
+      _id: req.params.id,
+      userId: req.user.id,
+      deletedAt: null,
+    }).lean()
+
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found" })
+    }
+
+    // Fetch customer bookings (by customerId OR normalized phone fallback)
+    const bookings = await Booking.find({
+      userId: req.user.id,
+      deletedAt: null,
+      $or: [
+        { customerId: customer._id },
+        { contactPhone: { $regex: new RegExp(customer.phone + "$") } },
+      ],
+    })
+      .select("-passengers.aadhar -passengers.aadhaar")
+      .sort({ date: 1, createdAt: 1 })
+      .lean()
+
+    // Fetch operator settings for branding
+    const user = await User.findById(req.user.id)
+      .select("companyName companyTagline companyHeadquarters companyPhone companyLogo gstNumber email")
+      .lean()
+
+    const operatorSettings = {
+      companyName: user?.companyName || "YatraHub Tours & Travels",
+      companyTagline: user?.companyTagline || "",
+      address: user?.companyHeadquarters || "",
+      phone: user?.companyPhone || "",
+      email: user?.email || "",
+      gstin: user?.gstNumber || "",
+      companyLogo: user?.companyLogo || "",
+    }
+
+    const { from, to } = req.query
+    const statement = buildCustomerStatement({
+      customer,
+      bookings,
+      from,
+      to,
+    })
+
+    res.json({
+      success: true,
+      customer: statement.customer,
+      statement,
+      operatorSettings,
+    })
+  } catch (error) {
+    console.error("Customer statement generation error:", error.name, error.code || "")
+    res.status(500).json({ message: "Failed to generate customer statement" })
   }
 })
 

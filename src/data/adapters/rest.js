@@ -551,6 +551,24 @@ export async function getTourPnl(params = {}, options = {}) {
   }
 }
 
+export async function getOutstandingReport(params = {}, options = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/reports/outstanding${qs}`, options)
+  return res || {
+    success: false,
+    meta: {},
+    summary: {},
+    customers: [],
+    rows: [],
+  }
+}
+
 // --- CUSTOMERS ---
 function normalizeCustomer(c) {
   if (!c) return null
@@ -584,6 +602,21 @@ export async function lookupCustomerByPhone(phone, options = {}) {
 
 export async function getCustomer(id, options = {}) {
   const res = await request(`/api/customers/${id}`, options)
+  return {
+    ...res,
+    customer: normalizeCustomer(res?.customer),
+  }
+}
+
+export async function getCustomerStatement(id, params = {}, options = {}) {
+  const query = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      query.set(key, String(val))
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  const res = await request(`/api/customers/${id}/statement${qs}`, options)
   return {
     ...res,
     customer: normalizeCustomer(res?.customer),

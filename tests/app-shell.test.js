@@ -25,6 +25,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
           { id: "tours", label: "Destinations" },
           { id: "expenses", label: "Expenses" },
           { id: "analytics", label: "Analytics" },
+          { id: "outstanding", label: "Outstanding" },
           { id: "settings", label: "Settings" },
         ],
       )
@@ -44,6 +45,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
       assert.equal(resolvePageMeta("tours").title, "Destinations")
       assert.equal(resolvePageMeta("expenses").title, "Expense Management")
       assert.equal(resolvePageMeta("analytics").title, "Analytics")
+      assert.equal(resolvePageMeta("outstanding").title, "Outstanding & Aging")
       assert.equal(resolvePageMeta("settings").title, "Settings")
       assert.equal(resolvePageMeta("nonexistent").title, "Overview")
     })

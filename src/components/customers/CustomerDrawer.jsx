@@ -18,6 +18,7 @@ import { getCustomer, deleteCustomer } from "../../data/customers"
 import { formatINR } from "../../utils/formatters"
 import { useToast } from "../common/ToastContext"
 import { useConfirm } from "../common/useConfirm"
+import StatementModal from "./StatementModal"
 import {
   Phone,
   Mail,
@@ -66,6 +67,7 @@ export default function CustomerDrawer({
   const [error, setError] = useState(null)
   const [isRateLimited, setIsRateLimited] = useState(false)
   const [copiedPhone, setCopiedPhone] = useState(false)
+  const [showStatementModal, setShowStatementModal] = useState(false)
 
   const fetchCustomerDetails = useCallback(async () => {
     if (!customerId) return
@@ -198,6 +200,14 @@ export default function CustomerDrawer({
                 }}
               >
                 New Booking
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<FileText className="w-4 h-4" />}
+                onClick={() => setShowStatementModal(true)}
+              >
+                Statement
               </Button>
               <Button
                 variant="outline"
@@ -412,6 +422,14 @@ export default function CustomerDrawer({
             )}
           </Card>
         </div>
+      )}
+
+      {showStatementModal && customer && (
+        <StatementModal
+          isOpen={showStatementModal}
+          onClose={() => setShowStatementModal(false)}
+          customer={customer}
+        />
       )}
     </Drawer>
   )

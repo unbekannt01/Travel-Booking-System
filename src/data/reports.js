@@ -1,3 +1,3 @@
-import { getTourPnl } from "./adapters/rest.js"
+import { getTourPnl, getOutstandingReport } from "./adapters/rest.js"
 
-export { getTourPnl }
+export { getTourPnl, getOutstandingReport }

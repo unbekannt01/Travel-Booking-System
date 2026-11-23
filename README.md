@@ -69,10 +69,10 @@ Open your browser at **`http://localhost:5173`**.
 YatraHub includes a comprehensive automated test suite powered by the native Node test runner (`node:test`) and Playwright for UI smoke testing:
 
 ```bash
-# Run all unit, security, crypto, and business logic tests (293 tests across 68 suites)
+# Run all unit, security, crypto, and business logic tests (330 tests across 79 suites)
 npm test
 
-# Run component test safety net (34 tests across 11 Vitest suites)
+# Run component test safety net (47 tests across 14 Vitest suites)
 npm run test:ui
 
 # Static analysis & accessibility linting (ESLint with eslint-plugin-jsx-a11y)
@@ -85,10 +85,12 @@ npm run build
 npm run ui:smoke
 ```
 
-### Test Coverage Summary (**313 unit tests + 42 component tests across 91 total suites**):
+### Test Coverage Summary (**330 unit tests + 47 component tests across 93 total suites**):
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
-   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
-1. **Customer Master, Validation & Integration** (`tests/customers-pure.test.js`, `tests/customers-backend.test.js`, `tests/integration-customers.test.js`):
+   - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Outstanding & Aging, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, and 3-second toast deduplication.
+1. **Outstanding Receivables, Aging & Customer Statements** (`tests/receivables-pure.test.js`, `tests/statements-pure.test.js`, `tests/integration-outstanding.test.js`, `tests/components/outstanding.test.jsx`):
+   - Pure aging bucket engine (`not-due`, `0-30`, `31-60`, `61-90`, `90-plus`) under journey and booking dates; customer statement engine with chronological timeline, same-day debits-before-credits sort, cancellation reconciliation, and zero-float-drift balance parity; pure HTML statement renderer with strict CSP and trilingual dictionary (en/hi/gu); Express report endpoint with Zod validation, rate limiting, and zero-Aadhaar projection; and full UI with StatCards, interactive aging cards, stacked bar chart, accessible table view, expandable customer ledgers, and statement preview modal.
+2. **Customer Master, Validation & Integration** (`tests/customers-pure.test.js`, `tests/customers-backend.test.js`, `tests/integration-customers.test.js`):
    - Pure mobile normalization (`normalizeIndianMobile` stripping prefix/symbols), candidate display name resolution, zero-divergence financial summary matching `shared/profitLoss.js` integer paise rules, strict Zod schemas, duplicate mobile prevention (409 Conflict), tenant isolation, soft delete, and live Express integration harness.
 2. **Expense Management & Backend Validation** (`tests/expenses-backend.test.js`):
    - Pure helpers (13 categories trilingual registry, integer paise sum without drift, category & monthly FY aggregation, in-memory filters), strict Zod schemas (`createExpenseSchema`, `updateExpenseSchema`, `listExpenseQuerySchema`), CSV formula injection protection, tenant isolation, soft delete, and audit logging.

@@ -617,4 +617,66 @@ Core financial and domain rules are centralized in a zero-dependency ESM module 
   - `src/components/customers/CustomerDrawer.jsx`: Slide-over detail drawer displaying contact details, copy-to-clipboard mobile shortcut, authoritative financial KPIs, complete booking history table, and "New Booking for this Customer" prefill trigger.
   - `src/components/BookingForm.jsx`: Non-blocking phone lookup: queries customer profile on 10-digit mobile entry and displays a subtle suggestion banner to auto-fill primary contact details with a single click.
 
+## 20. Outstanding Receivables Aging & Customer Statements (Part 5b)
+
+- **Pure Receivables & Aging Engine (`shared/receivables.js`)**:
+  - `AGING_BUCKETS`: Frozen array `["not-due", "0-30", "31-60", "61-90", "90-plus"]`.
+  - `AGING_BUCKET_LABELS`: Human-readable labels across basis types (`"Not Due"`, `"0–30 Days"`, `"31–60 Days"`, `"61–90 Days"`, `"90+ Days"`).
+  - Date arithmetic: `calculateDayDiff(dateStr, asOfStr)` uses integer day differences via UTC midnight epoch timestamps to eliminate timezone offsets and DST drift.
+  - Aging bases supported:
+    - `journey` (default): Commercial due date. Diff days = `asOf - journeyDate`. If `diffDays <= 0`, classified as `not-due`. If `diffDays > 0`, mapped into overdue buckets (`0-30`, `31-60`, `61-90`, `90-plus`).
+    - `booking`: Strict accrual basis. Diff days = `asOf - bookingDate`. If `diffDays <= 30`, classified as `not-due` (30-day standard credit term). If `diffDays > 30`, mapped into overdue buckets.
+  - Financial consistency:
+    - Every booking's financials are calculated via `calculateBookingFinancials` from `shared/profitLoss.js`.
+    - Active bookings calculate `balanceDue = Math.max(0, totalAmount - totalPaid)`.
+    - Cancelled bookings strictly contribute `0` to `balanceDue` and are excluded from aging buckets.
+    - Total outstanding across all buckets matches `totalOutstanding` with zero float drift.
+  - Grouping options:
+    - `"customer"` (default): Aggregates receivables by customer (`customerId`), resolving unlinked bookings into a stable `"unlinked"` customer object (`name: "No customer record"`).
+    - `"booking"`: Flat granular list of individual booking dues.
+
+- **Customer Statements Engine (`shared/statements.js`)**:
+  - `buildCustomerStatement({ customer, bookings, from, to })`:
+    - Strict date range filtering: computes opening balance for historical transactions prior to `from` (`debits - credits`).
+    - Chronological transaction ledger: entries for booking creation (`debit`), payments recorded (`credit`), cancellation charges (`debit`), and cancellation refunds (`credit`).
+    - Same-day deterministic sort order: ensures `debit` transactions (booking creation / cancellation fees) appear before `credit` transactions (payments / refunds) on identical calendar dates.
+    - Cancellation reconciliation: booking debit is balanced by payment credits, cancellation charges, and cancellation reversals, netting out to ₹0 closing balance.
+    - Financial invariant: A statement evaluated over an all-time date range produces a `closingBalance` identical to the customer's receivables `totalOutstanding`.
+
+- **Pure HTML Statement Renderer (`shared/statementRenderer.js`)**:
+  - Pure zero-dependency ESM module producing self-contained, printable HTML documents.
+  - Strict Content-Security-Policy (CSP) meta tag: `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">`.
+  - Strict XSS defense: all customer details, company details, tour names, invoice numbers, and payment notes are escaped via `escapeHtml`.
+  - Trilingual dictionary (`STATEMENT_I18N`) providing full key parity across English (`en`), Hindi (`hi`), and Gujarati (`gu`).
+  - Professional A4 print stylesheet: tabular numeric alignment, summary callouts, payment summary boxes, bank transfer counterfoil, and `@media print` rules.
+
+- **Backend Endpoints (`backend/routes/reports.js` & `backend/routes/customers.js`)**:
+  - `GET /api/reports/outstanding`:
+    - Query parameters validated via Zod (`outstandingReportQuerySchema`): `asOf` (ISO date), `basis` (`journey` | `booking`), `tourName`, `groupBy` (`customer` | `booking`), `bucket`, `page`, `limit`.
+    - Rate-limited via `reportLimiter` (60 requests / 15 minutes per user).
+    - Tenant-scoped query strictly filtering by `userId: req.user.id`.
+    - Strict privacy protection: projection excludes sensitive passenger Aadhaar numbers (`-passengers.aadhar -passengers.aadhaar`).
+  - `GET /api/customers/:id/statement`:
+    - Generates customer statement ledger and fetches company operator profile for statement rendering.
+    - Query parameters: `from`, `to`, `lang` (`en`, `hi`, `gu`).
+    - Rate-limited via `customerReadLimiter` (120 requests / 15 minutes per user).
+
+- **User Interface Components**:
+  - `src/components/analytics/OutstandingManager.jsx` (`#outstanding` screen):
+    - Top StatCards: Total Outstanding, Overdue Receivables, Customers Owing, Oldest Overdue.
+    - Clickable Aging Bucket cards showing counts, amounts, percentage share, and interactive filter toggling.
+    - Horizontal stacked aging bar with accessible table view alternative for screen readers.
+    - Basis toggle ("By Journey Date" / "By Booking Date") with explanatory subtitle, As-of date picker, Tour select, Group by selector, debounced SearchInput, and RFC4180 CSV export.
+    - Customer table with expandable nested booking ledgers, unlinked booking support, and row action buttons ("Statement", "Profile").
+    - Wrapped in `PanelErrorBoundary` with `RateLimitNotice` support.
+  - `src/components/customers/StatementModal.jsx`:
+    - Accessible dialog for previewing and printing customer statements.
+    - Date presets: This FY, Last FY, This Month, All Time, Custom.
+    - Language switcher (`en`, `hi`, `gu`).
+    - Secure preview rendered in an isolated sandbox iframe (`<iframe sandbox="allow-same-origin allow-modals">`).
+    - One-click Browser Print/Save PDF and RFC4180 CSV export with formula injection sanitization.
+  - `src/components/customers/CustomerDrawer.jsx`:
+    - Added "Statement" button opening the statement preview modal directly from the customer profile drawer.
+
+
 
