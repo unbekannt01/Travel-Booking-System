@@ -231,7 +231,10 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
   }, [bookings, tours])
 
   // Active items according to groupBy
-  const rawItems = groupBy === "tour" ? report.tours : report.departures
+  const rawItems = useMemo(() => {
+    const items = groupBy === "tour" ? report?.tours : report?.departures
+    return Array.isArray(items) ? items : []
+  }, [groupBy, report])
 
   // Sorted items
   const sortedItems = useMemo(() => {

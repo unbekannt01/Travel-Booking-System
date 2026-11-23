@@ -31,6 +31,23 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/components/**/*.{js,jsx}'],
+    ignores: ['src/components/ui/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: 'Use <Select> from src/components/ui instead of raw <select>',
+        },
+        {
+          selector: "JSXOpeningElement[name.name='input']:has(JSXAttribute[name.name='type'][value.value='date'])",
+          message: 'Use <Input type="date"> from src/components/ui instead of raw <input type="date">',
+        },
+      ],
+    },
+  },
+  {
     files: ['backend/**/*.js', 'tests/*.test.js'],
     extends: [js.configs.recommended],
     languageOptions: {

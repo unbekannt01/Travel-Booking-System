@@ -3,6 +3,7 @@ import { screen, fireEvent, waitFor } from "@testing-library/react"
 import OutstandingManager from "../../src/components/analytics/OutstandingManager"
 import { renderWithProviders } from "../testUtils"
 import * as reportsData from "../../src/data/reports"
+import * as customerData from "../../src/data/customers"
 
 const mockReportData = {
   success: true,
@@ -206,5 +207,103 @@ describe("Outstanding Receivables & Aging Screen (OutstandingManager Component)"
     await waitFor(() => {
       expect(screen.getByText(/rate limit reached/i)).toBeDefined()
     })
+  })
+
+  it("renders all form controls with accessible labels (with data and empty)", async () => {
+    // 1. With data
+    const { unmount } = renderWithProviders(<OutstandingManager />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Ramesh Patel")).toBeDefined()
+    })
+
+    const asOfInput = screen.getByLabelText("As of date")
+    expect(asOfInput).toBeDefined()
+    expect(asOfInput.tagName).toBe("INPUT")
+
+    const tourSelect = screen.getByLabelText("Tour")
+    expect(tourSelect).toBeDefined()
+    expect(tourSelect.tagName).toBe("SELECT")
+
+    const agingRadiogroup = screen.getByRole("radiogroup", { name: /aging basis/i })
+    expect(agingRadiogroup).toBeDefined()
+
+    const groupByRadiogroup = screen.getByRole("radiogroup", { name: /group by/i })
+    expect(groupByRadiogroup).toBeDefined()
+
+    const searchInput = screen.getByLabelText("Search receivables")
+    expect(searchInput).toBeDefined()
+    expect(searchInput.tagName).toBe("INPUT")
+
+    unmount()
+
+    // 2. Empty state
+    vi.spyOn(reportsData, "getOutstandingReport").mockResolvedValueOnce({
+      success: true,
+      summary: {
+        totalOutstanding: 0,
+        totalOverdue: 0,
+        notDueAmount: 0,
+        oldestOverdueDays: 0,
+        customersOwingCount: 0,
+        totalBookingsOwing: 0,
+        bucketTotals: { "not-due": 0, "0-30": 0, "31-60": 0, "61-90": 0, "90-plus": 0 },
+        bucketCounts: { "not-due": 0, "0-30": 0, "31-60": 0, "61-90": 0, "90-plus": 0 },
+      },
+      customers: [],
+    })
+
+    renderWithProviders(<OutstandingManager />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("As of date")).toBeDefined()
+    })
+    expect(screen.getByLabelText("Tour")).toBeDefined()
+    expect(screen.getByRole("radiogroup", { name: /aging basis/i })).toBeDefined()
+    expect(screen.getByRole("radiogroup", { name: /group by/i })).toBeDefined()
+    expect(screen.getByLabelText("Search receivables")).toBeDefined()
+  })
+
+  it("renders StatementModal preview iframe with restrictive sandbox without scripts/popups/top-navigation/forms", async () => {
+    vi.spyOn(customerData, "getCustomerStatement").mockResolvedValue({
+      success: true,
+      statement: {
+        customer: { name: "Ramesh Patel", phone: "9876543210" },
+        openingBalance: 0,
+        closingBalance: 5000,
+        totalDebits: 15000,
+        totalCredits: 10000,
+        entries: [],
+      },
+      operatorSettings: {},
+    })
+
+    renderWithProviders(<OutstandingManager />)
+
+    await waitFor(() => {
+      expect(screen.getByText("Ramesh Patel")).toBeDefined()
+    })
+
+    const statementButtons = screen.getAllByRole("button", { name: /statement/i })
+    fireEvent.click(statementButtons[0])
+
+    await waitFor(() => {
+      expect(screen.getByText(/Customer Statement — Ramesh Patel/i)).toBeDefined()
+    })
+
+    // Find the preview iframe once statement HTML has rendered
+    await waitFor(() => {
+      const iframe = document.querySelector("iframe")
+      expect(iframe).not.toBeNull()
+    })
+
+    const iframe = document.querySelector("iframe")
+    const sandboxAttr = iframe.getAttribute("sandbox") || ""
+    expect(sandboxAttr).toContain("allow-same-origin")
+    expect(sandboxAttr).toContain("allow-modals")
+    expect(sandboxAttr).not.toContain("allow-scripts")
+    expect(sandboxAttr).not.toContain("allow-popups")
+    expect(sandboxAttr).not.toContain("allow-top-navigation")
+    expect(sandboxAttr).not.toContain("allow-forms")
   })
 })

@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 79 test suites (330 tests), the Vitest component test safety net (`npm run test:ui`, 47 tests across 14 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 79 test suites (331 tests), the Vitest component test safety net (`npm run test:ui`, 61 tests across 15 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -31,14 +31,15 @@ npm run test:ui
 
 ## 2. Test Suites & Coverage Map
 
-### 2.1 Component Test Layer (47 Tests / 14 Suites)
+### 2.1 Component Test Layer (61 Tests / 15 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
-| **`tests/components/outstanding.test.jsx`** | 5 | **Outstanding Receivables & Aging Screen (Part 5b)**: Renders OutstandingManager with 4 StatCards, 5 aging bucket cards, and customer rows; toggles between horizontal stacked bar chart and accessible table view; expands customer row to reveal individual booking ledgers; opens StatementModal when Statement action button is clicked; renders RateLimitNotice when API returns HTTP 429. |
-| **`tests/components/profit-loss.test.jsx`** | 4 | **Tour Analytics & Profit/Loss (Part 4b)**: Switches between Analytics Overview and Profit & Loss tabs; verifies 4 KPI StatCards and P&L heading; toggles between Recharts bar chart view and accessible table alternative; opens Detail Drawer on clicking a row and verifies income/expense ledger strictly without customer PII; renders JourneyManager departure card with compact Trip Financials and opens Add Trip Expense modal with prefilled context. |
+| **`tests/components/render-loop.test.jsx`** | 12 | **Targeted Render Loop & Commit Count Safety Net (Part 5b-fix)**: Bounded React commit counts measured via `<Profiler>`; verifies Tabs, RateLimitNotice, OutstandingManagerContent, StatementModal, CustomerDrawer, CustomerManager, ProfitLossTab, ExpenseTracker (with filters), InvoiceStudio, SettingsPanel, and Dashboard do not trigger infinite re-render loops; includes explicit regression test for ExpenseTracker without `expenses` prop (stable empty array fallback). |
+| **`tests/components/outstanding.test.jsx`** | 7 | **Outstanding Receivables & Aging Screen (Part 5b & 5b-fix)**: Renders OutstandingManager with 4 StatCards, 5 aging bucket cards, and customer rows; toggles between horizontal stacked bar chart and accessible table view; expands customer row to reveal individual booking ledgers; opens StatementModal when Statement action button is clicked; renders RateLimitNotice when API returns HTTP 429; asserts all form controls have accessible names (`getByLabelText` for "As of date", "Tour", "Search receivables", and `getByRole` for "Aging basis" and "Group by" radiogroups); verifies StatementModal preview iframe uses restrictive sandbox containing `allow-same-origin allow-modals` and strictly omitting `allow-scripts`, `allow-popups`, `allow-top-navigation`, and `allow-forms`. |
+| **`tests/components/profit-loss.test.jsx`** | 5 | **Tour Analytics & Profit/Loss (Part 4b)**: Switches between Analytics Overview and Profit & Loss tabs; verifies 4 KPI StatCards and P&L heading; toggles between Recharts bar chart view and accessible table alternative; opens Detail Drawer on clicking a row and verifies income/expense ledger strictly without customer PII; renders JourneyManager departure card with compact Trip Financials and opens Add Trip Expense modal with prefilled context. |
 | **`tests/components/customers.test.jsx`** | 4 | **Customer Directory & Drawer (Part 5a)**: Renders Customer Directory with StatCards, filters, and customer rows; opens Add Customer modal on button click and validates fields; opens CustomerDrawer on row click and displays contact profile and booking history without Aadhaar PII; renders calm inline RateLimitNotice when listCustomers encounters HTTP 429. |
-| **`tests/components/expenses.test.jsx`** | 5 | Renders ExpenseTracker with data, StatCards, and table rows; renders EmptyState cleanly when no expenses exist; renders calm inline error card with Retry button when loading fails; opens Add Expense modal and validates required fields; allows interacting with filter chips and search input. |
+| **`tests/components/expenses.test.jsx`** | 6 | Renders ExpenseTracker with data, StatCards, and table rows; renders EmptyState cleanly when no expenses exist; renders calm inline error card with Retry button when loading fails; opens Add Expense modal and validates required fields; allows interacting with filter chips and search input; regression test for bounded re-renders. |
 | **`tests/components/overview.test.jsx`** | 2 | Renders KPI metrics and recent bookings with full mock data; renders cleanly with empty state when bookings/tours array is empty. |
 | **`tests/components/travelers.test.jsx`** | 2 | Renders passenger manifest, search input, filter chips, and masked Aadhaar numbers; renders empty state cleanly. |
 | **`tests/components/journeys.test.jsx`** | 5 | Renders Coaches & Departures tab; switches to Boarding Manifest tab; displays manifest statistics; regression test for legacy bookings lacking `passengers` array without throwing. |
@@ -218,12 +219,15 @@ Verify the following manually across desktop & mobile viewports (`360px`, `768px
 An automated Playwright and `@axe-core/playwright` smoke runner is provided in `scripts/ui-smoke.mjs`.
 
 ### What it tests:
-1. **8 Application Views**: Overview (`dashboard`), Travelers (`passengers`), Journeys (`journey`), Destinations (`tours`), Analytics (`analytics`), Settings (`settings`), Stepped Booking Form (`form`), and Dev UI Kit (`ui-kit`).
+1. **13 Application Views**: Overview (`dashboard`), Travelers (`passengers`), Customers (`customers`), Outstanding (`outstanding`), Journeys (`journey`), Destinations (`tours`), Expenses (`expenses`), Analytics (`analytics`), Profit & Loss (`profit-loss`), Settings (`settings`), Invoice Studio (`invoice-studio`), Stepped Booking Form (`new-booking`), and Dev UI Kit (`ui-kit`).
 2. **4 Responsive Viewports**: Small mobile (`360x740`), Tablet (`768x1024`), Laptop/Desktop (`1024x768`), Wide Monitor (`1440x900`).
 3. **2 Themes**: Light mode and Dark mode (`data-theme="dark"`).
 4. **Horizontal Overflow Guard**: Asserts `document.documentElement.scrollWidth <= document.documentElement.clientWidth` across all viewports.
 5. **WCAG 2.1 AA Accessibility Analysis**: Executes `new AxeBuilder({ page })` with `['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']` tags to identify any remaining automated accessibility violations.
-6. **Report Generation**: Writes detailed markdown report to gitignored `docs/screenshots/report.md` with captured page screenshots.
+6. **Console Attribution & Uncaught Page Errors (Section 4)**: Captures console errors/warnings and `pageerror` events with full attribution (screen, tab, viewport, theme, and call site location). Arguments capped at 600 characters to prevent report bloat.
+7. **Honest Tab Coverage Table (Section 6)**: Tracks `tabsFound`, `tabsClicked`, and `tabsSkipped` per (screen, viewport, theme) combo; reports failures and unvisited tabs in a structured table and exits non-zero if any non-disabled tab is missed.
+8. **Dynamic Per-Screen Budget & Performance (Section 7)**: Scales budget with workload (`Math.max(baseBudgetMs, baseBudgetMs + 2500ms * tabs * viewports * themes)`), overridable via `UI_SMOKE_SCREEN_BUDGET_MS`. Breaches exit non-zero and list skipped sub-views. Also ranks top 5 slowest views, flagging visits > 5000ms.
+9. **Report Generation**: Writes detailed markdown report to gitignored `docs/screenshots/report.md` with captured page screenshots.
 
 ### Execution Instructions (Windows PowerShell):
 ```powershell
@@ -252,14 +256,17 @@ npm run ui:smoke
 # Fast smoke run (360px & 1440px, light theme only):
 npm run ui:smoke -- --quick
 
-# Target a single screen (e.g., profit-loss, settings, invoice-studio, expenses):
-npm run ui:smoke -- --only=profit-loss
+# Target a single screen (e.g., profit-loss, settings, invoice-studio, expenses, outstanding):
+npm run ui:smoke -- --only=outstanding
 
 # Target specific viewports and skip axe-core checks for visual inspection:
 npm run ui:smoke -- --widths=360,1440 --themes=light --skip-axe
 
 # Custom per-step timeout (default is 20,000ms / 20s):
 $env:UI_SMOKE_STEP_TIMEOUT_MS="30000"
+
+# Custom base screen budget (default is 90,000ms / 90s):
+$env:UI_SMOKE_SCREEN_BUDGET_MS="120000"
 npm run ui:smoke -- --quick
 ```
 
@@ -419,6 +426,27 @@ npm run ui:smoke -- --quick
   - In Customer Directory, click "Export CSV".
   - Verify exported CSV contains Customer Name, Phone, Email, City, Language, Tags, Total Bookings, Booked Revenue, Collected, Outstanding, and First/Last Booking dates.
   - Verify formula injection sanitization prefixes hostile characters with a single quote (`'`).
+
+## 3.13 Manual Verification Checklist — Part 5b & 5b-fix Receivables, Statements & Quality Polish
+- [ ] **Accessible Form Controls**:
+  - Navigate to Outstanding screen; inspect form controls.
+  - Verify "As of date" has visible `<Field>` label and native date picker (`<Input type="date">`).
+  - Verify "Tour" dropdown has visible `<Field>` label and styled `<Select>`.
+  - Verify "Aging basis" and "Group by" segments are accessible radio groups with clear legends.
+  - Verify "Search receivables" search input has an accessible label (`aria-label`).
+- [ ] **Statement Preview Sandbox Security**:
+  - Open StatementModal for any customer.
+  - Inspect the statement preview `<iframe>` element in browser DevTools.
+  - Verify `sandbox="allow-same-origin allow-modals"` is present, and verify `allow-scripts`, `allow-popups`, `allow-top-navigation`, and `allow-forms` are strictly absent.
+- [ ] **Render Loop & Infinite Update Depth Protection**:
+  - Render ExpenseTracker, OutstandingManager, SettingsPanel, and Dashboard across all tab states.
+  - Verify React does not trigger "Maximum update depth exceeded" error.
+  - Run `npm run test:ui` to confirm all 12 profiler commit-count assertions in `render-loop.test.jsx` pass.
+- [ ] **Honest Smoke Test Execution**:
+  - Run `npm run ui:smoke -- --quick`.
+  - Verify Section 4 attributes every console message with screen, tab, viewport, and theme.
+  - Verify Section 6 prints tabular tab coverage and exits non-zero if any non-disabled tab was unvisited.
+  - Verify terminal output prints exactly 1 summary line per screen.
 
 ---
 

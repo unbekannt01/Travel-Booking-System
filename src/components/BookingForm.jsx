@@ -2126,6 +2126,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                   <span className="text-[11px] text-ink-muted font-medium">Assigned:</span>
                   <input
                     type="text"
+                    aria-label={`Assigned seat for ${assign.passengerName || `Passenger #${assign.passengerIndex + 1}`}`}
                     value={assign.proposedSeatId}
                     onChange={(e) => {
                       const val = e.target.value.trim()

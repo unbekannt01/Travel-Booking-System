@@ -38,7 +38,10 @@ const TARGET_URL = process.env.UI_SMOKE_URL || "http://localhost:5173"
 const EMAIL = process.env.UI_SMOKE_EMAIL
 const PASSWORD = process.env.UI_SMOKE_PASSWORD
 const STEP_TIMEOUT_MS = parseInt(process.env.UI_SMOKE_STEP_TIMEOUT_MS, 10) || 20000
-const SCREEN_BUDGET_MS = 90000 // 90 seconds per screen
+
+// Dynamic budget config (Task C.2)
+const BASE_BUDGET_MS = parseInt(process.env.UI_SMOKE_SCREEN_BUDGET_MS, 10) || 90000
+const PER_TAB_BUDGET_MS = 2500
 
 // Enforce local-only target
 try {
@@ -47,7 +50,7 @@ try {
     console.error(`[ui:smoke] Refusing to run: Target host must be localhost or 127.0.0.1, got "${parsed.hostname}".`)
     process.exit(1)
   }
-} catch (e) {
+} catch {
   console.error(`[ui:smoke] Invalid TARGET_URL: ${TARGET_URL}`)
   process.exit(1)
 }
@@ -132,43 +135,86 @@ if (onlyScreen) {
 
 console.log("[ui:smoke] Configuration:")
 console.log(`  Target: ${TARGET_URL}`)
-console.log(`  Step Timeout: ${STEP_TIMEOUT_MS}ms | Screen Budget: ${SCREEN_BUDGET_MS}ms`)
+console.log(`  Step Timeout: ${STEP_TIMEOUT_MS}ms | Base Screen Budget: ${BASE_BUDGET_MS}ms`)
 console.log(`  Screens (${activeScreens.length}): ${activeScreens.map((s) => s.label).join(", ")}`)
 console.log(`  Viewports (${activeViewports.length}): ${activeViewports.map((v) => `${v.width}px`).join(", ")}`)
 console.log(`  Themes (${activeThemes.length}): ${activeThemes.join(", ")}`)
 console.log(`  axe-core analysis: ${isSkipAxe ? "SKIPPED (--skip-axe)" : "ENABLED (excluding iframe)"}`)
 
-let browserInstance = null
 let isInterrupted = false
 
 async function run() {
   console.log(`[ui:smoke] Launching browser smoke test on ${TARGET_URL}...`)
   const browser = await chromium.launch({ headless: true })
-  browserInstance = browser
 
   const context = await browser.newContext()
   const page = await context.newPage()
   page.setDefaultTimeout(STEP_TIMEOUT_MS)
 
+  // Current execution context for attribution
+  const currentContext = {
+    screen: "Init",
+    tab: "Init",
+    viewport: 0,
+    theme: "light",
+  }
+
+  const pageErrors = []
   const consoleEntries = []
   const failedRequests = []
   const httpFailures = [] // 429 and 5xx responses
   const overflowFindings = []
   const fallbackFindings = []
-  const tabCoverageWarnings = []
-  const budgetBreaches = []
+  const coverageRecords = [] // { screen, viewport, theme, tabsFound, tabsClicked, tabsSkipped, unvisitedTabs, status }
+  const budgetBreaches = [] // { screen, durationMs, budgetMs, skippedTabs }
+  const tabVisitDurations = [] // { screen, tab, viewport, theme, durationMs }
   const groupedAxeViolations = new Map()
   const completedScreens = []
   let totalScreenshots = 0
-  let currentScreenLabel = "Init"
 
+  // Capture uncaught page errors (Task C.1)
+  page.on("pageerror", (err) => {
+    const rawMsg = err.message || String(err)
+    const trimmedMsg = rawMsg.length > 600 ? rawMsg.slice(0, 597) + "..." : rawMsg
+    pageErrors.push({
+      message: trimmedMsg,
+      stack: (err.stack || "").slice(0, 1000),
+      screen: currentContext.screen,
+      tab: currentContext.tab,
+      viewport: currentContext.viewport,
+      theme: currentContext.theme,
+    })
+  })
+
+  // Capture console warnings and errors with attribution (Task C.1)
   page.on("console", (msg) => {
     const type = msg.type()
     if (type === "error" || type === "warning") {
+      const loc = msg.location()
+      let locStr = ""
+      if (loc && loc.url) {
+        try {
+          const u = new URL(loc.url)
+          locStr = `${u.pathname}:${loc.lineNumber || 0}`
+        } catch {
+          locStr = `${loc.url}:${loc.lineNumber || 0}`
+        }
+      }
+
+      // Trim message text to max 600 chars
+      let text = msg.text() || ""
+      if (text.length > 600) {
+        text = text.slice(0, 597) + "..."
+      }
+
       consoleEntries.push({
         type,
-        text: msg.text(),
-        url: page.url(),
+        text,
+        location: locStr || null,
+        screen: currentContext.screen,
+        tab: currentContext.tab,
+        viewport: currentContext.viewport,
+        theme: currentContext.theme,
       })
     }
   })
@@ -188,7 +234,7 @@ async function run() {
           status,
           path: cleanPath,
           retryAfter,
-          screen: currentScreenLabel,
+          screen: currentContext.screen,
         })
       } catch {}
     }
@@ -279,25 +325,78 @@ async function run() {
     }
 
     reportLines.push("")
-    reportLines.push("## 4. Console Errors & Warnings")
+    reportLines.push("## 4. Console Errors & Warnings (with Attribution)")
+
+    // Subsection 4a: Uncaught Page Errors
+    if (pageErrors.length > 0) {
+      reportLines.push(`### Uncaught Page Errors (${pageErrors.length})`)
+      const groupedPageErrors = new Map()
+      for (const pe of pageErrors) {
+        const key = pe.message
+        if (!groupedPageErrors.has(key)) {
+          groupedPageErrors.set(key, { message: pe.message, occurrences: [] })
+        }
+        groupedPageErrors
+          .get(key)
+          .occurrences.push(`${pe.screen} > ${pe.tab} (${pe.viewport}px, ${pe.theme})`)
+      }
+      for (const [, pe] of groupedPageErrors) {
+        const uniqueOcc = Array.from(new Set(pe.occurrences))
+        reportLines.push(`- ❌ **Uncaught Error**: \`${pe.message}\``)
+        reportLines.push(`  - **Occurrences**: ${uniqueOcc.join(", ")}`)
+      }
+      reportLines.push("")
+    }
+
+    // Subsection 4b: Console Errors
     const errorsOnly = consoleEntries.filter((c) => c.type === "error")
-    const warningsOnly = consoleEntries.filter((c) => c.type === "warning")
     reportLines.push(`- **Console Errors**: ${errorsOnly.length}`)
     if (errorsOnly.length > 0) {
       const groupedErrors = new Map()
       for (const err of errorsOnly) {
         const key = err.text
         if (!groupedErrors.has(key)) {
-          groupedErrors.set(key, { text: err.text, urls: new Set() })
+          groupedErrors.set(key, { text: err.text, locations: new Set(), occurrences: [] })
         }
-        groupedErrors.get(key).urls.add(err.url)
+        if (err.location) groupedErrors.get(key).locations.add(err.location)
+        groupedErrors
+          .get(key)
+          .occurrences.push(`${err.screen} > ${err.tab} (${err.viewport}px, ${err.theme})`)
       }
       for (const [, err] of groupedErrors) {
-        reportLines.push(`  - **Error**: \`${err.text}\``)
-        reportLines.push(`    - **Pages**: ${Array.from(err.urls).join(", ")}`)
+        const locStr =
+          err.locations.size > 0 ? ` [at ${Array.from(err.locations).join(", ")}]` : ""
+        reportLines.push(`  - ❌ **Error**: \`${err.text}\`${locStr}`)
+        const uniqueOcc = Array.from(new Set(err.occurrences))
+        reportLines.push(`    - **Occurrences**: ${uniqueOcc.join(", ")}`)
       }
     }
+
+    // Subsection 4c: Console Warnings
+    const warningsOnly = consoleEntries.filter((c) => c.type === "warning")
     reportLines.push(`- **Console Warnings**: ${warningsOnly.length}`)
+    if (warningsOnly.length > 0) {
+      const groupedWarnings = new Map()
+      for (const w of warningsOnly) {
+        const key = w.text
+        if (!groupedWarnings.has(key)) {
+          groupedWarnings.set(key, { text: w.text, locations: new Set(), occurrences: [] })
+        }
+        if (w.location) groupedWarnings.get(key).locations.add(w.location)
+        groupedWarnings
+          .get(key)
+          .occurrences.push(`${w.screen} > ${w.tab} (${w.viewport}px, ${w.theme})`)
+      }
+      for (const [, w] of groupedWarnings) {
+        const locStr =
+          w.locations.size > 0 ? ` [at ${Array.from(w.locations).join(", ")}]` : ""
+        reportLines.push(`  - ⚠️ **Warning**: \`${w.text}\`${locStr}`)
+        const uniqueOcc = Array.from(new Set(w.occurrences))
+        reportLines.push(`    - **Occurrences**: ${uniqueOcc.join(", ")}`)
+      }
+    }
+
+    // Subsection 4d: Failed Requests
     reportLines.push(`- **Failed Requests**: ${failedRequests.length}`)
     if (failedRequests.length > 0) {
       for (const req of failedRequests.slice(0, 10)) {
@@ -320,22 +419,52 @@ async function run() {
 
     reportLines.push("")
     reportLines.push("## 6. Tab Coverage")
-    if (tabCoverageWarnings.length === 0) {
+    const coverageFailures = coverageRecords.filter((r) => r.status === "FAIL")
+    if (coverageFailures.length === 0 && coverageRecords.length > 0) {
       reportLines.push("✅ **All non-disabled tabs were successfully clicked across evaluated screens.**")
+    } else if (coverageFailures.length > 0) {
+      reportLines.push(`❌ **Tab coverage failures detected (${coverageFailures.length} combinations with unvisited tabs):**`)
+    }
+
+    reportLines.push("")
+    reportLines.push("| Screen | Viewport | Theme | Tabs Found | Tabs Clicked | Tabs Skipped | Unvisited Tabs | Status |")
+    reportLines.push("| :--- | :---: | :---: | :---: | :---: | :---: | :--- | :---: |")
+    for (const r of coverageRecords) {
+      const unvisitedStr = r.unvisitedTabs.length > 0 ? r.unvisitedTabs.join(", ") : "—"
+      reportLines.push(
+        `| ${r.screen} | ${r.viewport}px | ${r.theme} | ${r.tabsFound} | ${r.tabsClicked} | ${r.tabsSkipped} | ${unvisitedStr} | ${r.status} |`,
+      )
+    }
+
+    reportLines.push("")
+    reportLines.push("## 7. Budget Breaches & Performance")
+    if (budgetBreaches.length === 0) {
+      reportLines.push("✅ **Zero screen budget breaches. All screens executed within dynamic budgets.**")
     } else {
-      reportLines.push(`⚠️ **${tabCoverageWarnings.length} tab click warnings detected:**`)
-      reportLines.push("| Screen | Tab | Reason |")
-      reportLines.push("| :--- | :--- | :--- |")
-      for (const w of tabCoverageWarnings) {
-        reportLines.push(`| ${w.screen} | ${w.tab} | ${w.reason} |`)
+      reportLines.push(`❌ **${budgetBreaches.length} screen budget breach(es) detected:**`)
+      for (const b of budgetBreaches) {
+        const skippedStr =
+          b.skippedTabs && b.skippedTabs.length > 0
+            ? ` | Skipped tabs: ${b.skippedTabs.join(", ")}`
+            : ""
+        reportLines.push(
+          `- ❌ **${b.screen}**: took ${(b.durationMs / 1000).toFixed(1)}s (dynamic budget ${(b.budgetMs / 1000).toFixed(1)}s)${skippedStr}`,
+        )
       }
     }
 
-    if (budgetBreaches.length > 0) {
+    // Subsection: Slowest Views (Top 5) (Task C.4)
+    if (tabVisitDurations.length > 0) {
       reportLines.push("")
-      reportLines.push("## 7. Budget Breaches (> 90s per screen)")
-      for (const b of budgetBreaches) {
-        reportLines.push(`- ⚠️ **${b.screen}**: took ${Math.round(b.durationMs / 1000)}s (budget 90s)`)
+      reportLines.push("### Slowest Views (Top 5)")
+      const sortedDurations = [...tabVisitDurations].sort((a, b) => b.durationMs - a.durationMs)
+      reportLines.push("| Screen | Tab | Viewport | Theme | Duration | Flag |")
+      reportLines.push("| :--- | :--- | :---: | :---: | :---: | :---: |")
+      for (const td of sortedDurations.slice(0, 5)) {
+        const flag = td.durationMs > 5000 ? "⚠️ > 5000ms" : "OK"
+        reportLines.push(
+          `| ${td.screen} | ${td.tab} | ${td.viewport}px | ${td.theme} | ${td.durationMs.toLocaleString()}ms | ${flag} |`,
+        )
       }
     }
 
@@ -357,7 +486,7 @@ async function run() {
 
   // 1. Authenticate through the real login screen
   console.log("[ui:smoke] Step 1: Logging in...")
-  currentScreenLabel = "Login"
+  currentContext.screen = "Login"
   await page.goto(TARGET_URL, { waitUntil: "domcontentloaded", timeout: STEP_TIMEOUT_MS })
 
   const isAuthVisible = await page.$('input[type="password"]')
@@ -397,8 +526,14 @@ async function run() {
   for (const screen of activeScreens) {
     if (isInterrupted) break
     const screenStart = Date.now()
-    currentScreenLabel = screen.label
-    console.log(`[ui:smoke] Visiting screen: ${screen.label}...`)
+    currentContext.screen = screen.label
+    currentContext.tab = "Main"
+
+    // Track baseline console error count before visiting screen
+    const initialConsoleErrors = consoleEntries.filter(
+      (c) => c.type === "error" && c.screen === screen.label,
+    ).length
+    const initialPageErrors = pageErrors.filter((p) => p.screen === screen.label).length
 
     // Navigate to target screen read-only
     try {
@@ -460,10 +595,22 @@ async function run() {
       console.warn(`[ui:smoke] Navigation error on ${screen.label}: ${navErr.message}`)
     }
 
+    // Probe initial tab count on screen to compute dynamic budget (Task C.2)
+    const initialTabsCount = await page.locator('[role="tab"]').count().catch(() => 0)
+    const discoveredTabCount = Math.max(1, initialTabsCount)
+    const screenBudgetMs = Math.max(
+      BASE_BUDGET_MS,
+      BASE_BUDGET_MS +
+        PER_TAB_BUDGET_MS * discoveredTabCount * activeViewports.length * activeThemes.length,
+    )
+
     let screenBudgetExceeded = false
+    let screenBreachRecorded = false
+    let totalStatesEvaluated = 0
 
     for (const theme of activeThemes) {
       if (screenBudgetExceeded || isInterrupted) break
+      currentContext.theme = theme
 
       // Set theme via data-theme and localStorage
       await page.evaluate((t) => {
@@ -474,9 +621,9 @@ async function run() {
       }, theme)
 
       for (const vp of activeViewports) {
-        if (Date.now() - screenStart > SCREEN_BUDGET_MS) {
-          console.warn(`[ui:smoke] Screen budget (90s) exceeded on "${screen.label}". Moving to next screen.`)
-          budgetBreaches.push({ screen: screen.label, durationMs: Date.now() - screenStart })
+        currentContext.viewport = vp.width
+
+        if (Date.now() - screenStart > screenBudgetMs) {
           screenBudgetExceeded = true
           break
         }
@@ -506,27 +653,53 @@ async function run() {
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, "-")
               .replace(/^-|-$/g, "") || `tab-${i + 1}`
-          const isDisabled = await tabLoc.evaluate((el) => {
-            return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true"
-          }).catch(() => false)
-          tabsToCrawl.push({ id: clean, label: raw.trim() || `Tab ${i + 1}`, locator: tabLoc, disabled: isDisabled })
+          const isDisabled = await tabLoc
+            .evaluate((el) => {
+              return el.hasAttribute("disabled") || el.getAttribute("aria-disabled") === "true"
+            })
+            .catch(() => false)
+          tabsToCrawl.push({
+            id: clean,
+            label: raw.trim() || `Tab ${i + 1}`,
+            locator: tabLoc,
+            disabled: isDisabled,
+          })
         }
 
         if (tabsToCrawl.length === 0) {
           tabsToCrawl.push({ id: "main", label: "Main", locator: null, disabled: false })
+          tabsFound = 1
         }
 
-        for (const t of tabsToCrawl) {
-          if (Date.now() - screenStart > SCREEN_BUDGET_MS) {
+        const unvisitedTabsForCombo = []
+
+        for (let tabIdx = 0; tabIdx < tabsToCrawl.length; tabIdx++) {
+          const t = tabsToCrawl[tabIdx]
+          currentContext.tab = t.label
+
+          // Check dynamic budget before visiting each tab
+          if (Date.now() - screenStart > screenBudgetMs) {
             screenBudgetExceeded = true
+            const remainingTabs = tabsToCrawl.slice(tabIdx).map((rem) => rem.label)
+            unvisitedTabsForCombo.push(...remainingTabs)
+            if (!screenBreachRecorded) {
+              budgetBreaches.push({
+                screen: screen.label,
+                durationMs: Date.now() - screenStart,
+                budgetMs: screenBudgetMs,
+                skippedTabs: remainingTabs,
+              })
+              screenBreachRecorded = true
+            }
             break
           }
           if (isInterrupted) break
 
+          const tabStart = Date.now()
+
           if (t.locator) {
             if (t.disabled) {
               tabsSkipped++
-              console.log(`[ui:smoke] Skipped disabled tab "${t.label}" on screen "${screen.label}"`)
               continue
             }
             try {
@@ -535,14 +708,14 @@ async function run() {
               tabsClicked++
             } catch (clickErr) {
               const errMsg = clickErr.message.split("\n")[0]
-              console.warn(`[ui:smoke] Could not click tab "${t.label}" on screen "${screen.label}": ${errMsg}`)
-              tabCoverageWarnings.push({
-                screen: screen.label,
-                tab: t.label,
-                reason: `Click failed: ${errMsg}`,
-              })
+              unvisitedTabsForCombo.push(t.label)
             }
+          } else {
+            // Screen without sub-tabs (main view)
+            tabsClicked++
           }
+
+          totalStatesEvaluated++
 
           // Error fallback detection: check if screen or panel rendered error boundary cards
           const fallbackIndicator = await page.evaluate(() => {
@@ -559,9 +732,6 @@ async function run() {
           })
 
           if (fallbackIndicator) {
-            console.error(
-              `[ui:smoke] ERROR FALLBACK DETECTED: "${fallbackIndicator}" on screen "${screen.label}", tab "${t.label}" (${vp.width}px, ${theme})`,
-            )
             fallbackFindings.push({
               screen: screen.label,
               tab: t.label,
@@ -640,10 +810,8 @@ async function run() {
                   }
                 }
               }
-            } catch (axeErr) {
-              console.warn(
-                `[ui:smoke] axe analysis skipped for ${screen.id} > ${t.id} @ ${vp.width}px: ${axeErr.message}`,
-              )
+            } catch {
+              // axe analysis error suppressed
             }
           }
 
@@ -654,15 +822,60 @@ async function run() {
           )
           await page.screenshot({ path: screenshotPath, fullPage: false })
           totalScreenshots++
+
+          const tabDurationMs = Date.now() - tabStart
+          tabVisitDurations.push({
+            screen: screen.label,
+            tab: t.label,
+            viewport: vp.width,
+            theme,
+            durationMs: tabDurationMs,
+          })
         }
 
-        console.log(
-          `[ui:smoke] ${screen.label}: ${tabsFound} tabs found / ${tabsClicked} tabs clicked / ${tabsSkipped} tabs skipped (disabled)`,
-        )
+        // Record Tab Coverage for this (screen, viewport, theme) combo (Task C.3)
+        const expectedClicks = tabsFound - tabsSkipped
+        const comboStatus =
+          tabsClicked >= expectedClicks && unvisitedTabsForCombo.length === 0 ? "PASS" : "FAIL"
+        coverageRecords.push({
+          screen: screen.label,
+          viewport: vp.width,
+          theme,
+          tabsFound,
+          tabsClicked,
+          tabsSkipped,
+          unvisitedTabs: unvisitedTabsForCombo,
+          status: comboStatus,
+        })
       }
     }
 
     completedScreens.push(screen.label)
+    const screenDuration = Date.now() - screenStart
+
+    // Count errors attributed to this screen
+    const screenConsoleErrors =
+      consoleEntries.filter((c) => c.type === "error" && c.screen === screen.label).length -
+      initialConsoleErrors
+    const screenPageErrors =
+      pageErrors.filter((p) => p.screen === screen.label).length - initialPageErrors
+    const totalScreenErrors = screenConsoleErrors + screenPageErrors
+    const screenBreaches = budgetBreaches.filter((b) => b.screen === screen.label).length
+
+    // Task C.4 Terminal Summary: 1 summary line per screen
+    if (totalScreenErrors === 0 && screenBreaches === 0 && !screenBudgetExceeded) {
+      console.log(
+        `[ui:smoke] ✓ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${discoveredTabCount} tab${discoveredTabCount > 1 ? "s" : ""}): ${totalStatesEvaluated} states, 0 errors, ${(screenDuration / 1000).toFixed(1)}s`,
+      )
+    } else {
+      const parts = []
+      if (totalScreenErrors > 0) parts.push(`${totalScreenErrors} error${totalScreenErrors > 1 ? "s" : ""}`)
+      if (screenBreaches > 0) parts.push(`${screenBreaches} budget breach`)
+      console.log(
+        `[ui:smoke] ✗ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${discoveredTabCount} tab${discoveredTabCount > 1 ? "s" : ""}): ${totalStatesEvaluated} states, ${parts.join(", ")}, ${(screenDuration / 1000).toFixed(1)}s`,
+      )
+    }
+
     // Write report incrementally after each screen!
     writeReport(false)
   }
@@ -672,14 +885,18 @@ async function run() {
   writeReport(false)
   console.log(`[ui:smoke] Summary report written to ${reportPath}`)
 
+  const hasCoverageFailures = coverageRecords.some((r) => r.status === "FAIL")
   const hasFailures =
     overflowFindings.length > 0 ||
     groupedAxeViolations.size > 0 ||
     fallbackFindings.length > 0 ||
-    tabCoverageWarnings.length > 0
+    hasCoverageFailures ||
+    budgetBreaches.length > 0 ||
+    pageErrors.length > 0
+
   if (hasFailures) {
     console.error(
-      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, UI error fallbacks, or tab coverage.",
+      "[ui:smoke] FAILED: Issues found in horizontal overflow, accessibility, UI fallbacks, tab coverage, budget, or page errors.",
     )
     process.exit(1)
   } else {

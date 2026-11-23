@@ -3,6 +3,7 @@ import {
   Modal,
   Field,
   Input,
+  Textarea,
   Button,
   Select,
   Switch,
@@ -336,13 +337,13 @@ export default function CustomerModal({
         {/* Operator Notes */}
         <Field id="cust-notes" label="Operator Private Notes" error={errors.notes} hint="Internal references, seat preferences, medical alerts">
           {({ id }) => (
-            <textarea
+            <Textarea
               id={id}
               rows={3}
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="e.g. Senior pilgrim, prefers lower berth. Annual Chardham group leader."
-              className="w-full px-3 py-2 text-sm rounded-[var(--yh-radius-md)] bg-surface text-ink border border-border-subtle focus:outline-none focus:ring-2 focus:ring-focus-ring resize-none"
+              className="resize-none"
             />
           )}
         </Field>

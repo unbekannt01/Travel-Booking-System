@@ -9,6 +9,7 @@ import {
   User,
   LayoutTemplate,
 } from "lucide-react"
+import { Select } from "../ui"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { formatDisplayDate } from "../../utils/date"
 import {
@@ -174,20 +175,24 @@ export default function BoardingPassModal({
             {/* Ticket Template Selector */}
             <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2.5 py-1 shadow-xs gap-1.5">
               <LayoutTemplate size={14} className="text-indigo-600" />
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              <label htmlFor="ticket-design-select" className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                 Design:
-              </span>
-              <select
+              </label>
+              <Select
+                id="ticket-design-select"
+                aria-label="Design Template"
+                size="sm"
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="bg-transparent text-xs font-black text-slate-800 outline-none cursor-pointer pr-1"
+                className="bg-transparent text-xs font-black text-slate-800 border-none shadow-none py-0 pl-1 pr-6 h-auto"
+                wrapperClassName="w-auto"
               >
                 {TICKET_TEMPLATES.map((tmpl) => (
                   <option key={tmpl.id} value={tmpl.id}>
                     {tmpl.name} ({tmpl.badge})
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             {/* Language Selector */}

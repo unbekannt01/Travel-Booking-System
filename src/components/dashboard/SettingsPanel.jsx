@@ -385,6 +385,7 @@ export default function SettingsPanel({
                   <span>Choose Image</span>
                   <input
                     type="file"
+                    aria-label="Upload Company Logo"
                     accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
                     disabled={!isEditingCompany}
                     className="hidden"
@@ -488,6 +489,7 @@ export default function SettingsPanel({
               <div className="flex items-center gap-2 pl-3 border-l border-(--yh-border-subtle)">
                 <input
                   type="color"
+                  aria-label="Custom invoice color"
                   disabled={!isEditingCompany}
                   value={companySettings.invoiceColor || "#4f46e5"}
                   onChange={(e) => setCompanySettings({ ...companySettings, invoiceColor: e.target.value })}

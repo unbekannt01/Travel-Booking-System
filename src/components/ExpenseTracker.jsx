@@ -177,17 +177,23 @@ function normalizeIncomingExpense(exp) {
   }
 }
 
+const EMPTY_FALLBACK_ARRAY = Object.freeze([])
+
 export default function ExpenseTracker({
-  bookings = [],
-  tours = [],
+  bookings = EMPTY_FALLBACK_ARRAY,
+  tours = EMPTY_FALLBACK_ARRAY,
   user = null,
   onSave = null,
-  expenses = [],
+  expenses = EMPTY_FALLBACK_ARRAY,
 }) {
   const toastContext = useToast()
   const toast = toastContext.toast || toastContext
 
   const lang = user?.documentLanguage || "en"
+  const expensesFallbackRef = useRef(expenses)
+  useEffect(() => {
+    expensesFallbackRef.current = expenses
+  }, [expenses])
 
   // Date filters
   const [dateRangeKey, setDateRangeKey] = useState("this_month")
@@ -326,8 +332,9 @@ export default function ExpenseTracker({
         })
       }
       // If expenses prop was passed, use it as fallback
-      if (Array.isArray(expenses) && expenses.length > 0) {
-        setExpenseList(expenses.map(normalizeIncomingExpense).filter(Boolean))
+      const fallbackExpenses = expensesFallbackRef.current
+      if (Array.isArray(fallbackExpenses) && fallbackExpenses.length > 0) {
+        setExpenseList(fallbackExpenses.map(normalizeIncomingExpense).filter(Boolean))
       }
     } finally {
       setLoading(false)
@@ -341,7 +348,6 @@ export default function ExpenseTracker({
     paymentModeFilter,
     statusFilter,
     searchQuery,
-    expenses,
   ])
 
   useEffect(() => {

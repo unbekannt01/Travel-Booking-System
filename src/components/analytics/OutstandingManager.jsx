@@ -4,6 +4,8 @@ import {
   Button,
   Badge,
   Card,
+  Field,
+  Input,
   SearchInput,
   Select,
   Spinner,
@@ -457,17 +459,23 @@ export function OutstandingManagerContent({
 
       {/* Controls Bar: As-of Date, Basis Toggle, Tour Select, Group By, Search, Export */}
       <Card className="p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           {/* Basis Toggle with Explanatory Helper */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <span className="text-xs font-semibold text-ink-secondary">Aging Basis:</span>
-            <div className="flex items-center rounded-[var(--yh-radius-md)] border border-border p-0.5 bg-surface-subtle" role="radiogroup" aria-label="Aging Basis">
+          <div className="flex flex-col gap-1.5">
+            <span id="aging-basis-label" className="text-xs font-semibold text-ink-secondary">
+              Aging basis:
+            </span>
+            <div
+              className="flex items-center rounded-[var(--yh-radius-md)] border border-border p-0.5 bg-surface-subtle h-8"
+              role="radiogroup"
+              aria-labelledby="aging-basis-label"
+            >
               <button
                 type="button"
                 role="radio"
                 aria-checked={basis === "journey"}
                 onClick={() => setBasis("journey")}
-                className={`px-3 py-1 text-xs font-semibold rounded transition-colors cursor-pointer ${
+                className={`px-3 py-1 text-xs font-semibold rounded transition-colors cursor-pointer h-full ${
                   basis === "journey"
                     ? "bg-surface text-ink shadow-xs"
                     : "text-ink-muted hover:text-ink"
@@ -480,7 +488,7 @@ export function OutstandingManagerContent({
                 role="radio"
                 aria-checked={basis === "booking"}
                 onClick={() => setBasis("booking")}
-                className={`px-3 py-1 text-xs font-semibold rounded transition-colors cursor-pointer ${
+                className={`px-3 py-1 text-xs font-semibold rounded transition-colors cursor-pointer h-full ${
                   basis === "booking"
                     ? "bg-surface text-ink shadow-xs"
                     : "text-ink-muted hover:text-ink"
@@ -492,46 +500,64 @@ export function OutstandingManagerContent({
           </div>
 
           {/* As-Of Date Picker */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink-secondary flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              As of:
-            </span>
-            <input
-              type="date"
-              value={asOf}
-              onChange={(e) => setAsOf(e.target.value || todayStr)}
-              className="px-2.5 py-1 text-xs rounded border border-border bg-surface text-ink font-tabular"
-            />
+          <div className="flex items-end gap-2">
+            <Field id="outstanding-as-of" label="As of date" className="w-auto">
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  type="date"
+                  size="sm"
+                  tabular
+                  value={asOf}
+                  onChange={(e) => setAsOf(e.target.value || todayStr)}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  className="h-8 text-xs font-tabular"
+                />
+              )}
+            </Field>
           </div>
 
           {/* Tour Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink-secondary">Tour:</span>
-            <Select
-              value={tourFilter}
-              onChange={(e) => setTourFilter(e.target.value)}
-              className="text-xs py-1 px-2.5 h-8 min-w-[140px]"
-            >
-              <option value="all">All Tours</option>
-              {tourOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
+          <div className="flex items-end gap-2">
+            <Field id="outstanding-tour" label="Tour" className="w-auto">
+              {({ id, describedBy, invalid }) => (
+                <Select
+                  id={id}
+                  size="sm"
+                  value={tourFilter}
+                  onChange={(e) => setTourFilter(e.target.value)}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  className="text-xs h-8 min-w-[140px]"
+                >
+                  <option value="all">All Tours</option>
+                  {tourOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </div>
 
           {/* Group By Toggle */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink-secondary">Group:</span>
-            <div className="flex items-center rounded-[var(--yh-radius-md)] border border-border p-0.5 bg-surface-subtle" role="radiogroup" aria-label="Group rows by">
+          <div className="flex flex-col gap-1.5">
+            <span id="group-by-label" className="text-xs font-semibold text-ink-secondary">
+              Group by:
+            </span>
+            <div
+              className="flex items-center rounded-[var(--yh-radius-md)] border border-border p-0.5 bg-surface-subtle h-8"
+              role="radiogroup"
+              aria-labelledby="group-by-label"
+            >
               <button
                 type="button"
                 role="radio"
                 aria-checked={groupBy === "customer"}
                 onClick={() => setGroupBy("customer")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer h-full ${
                   groupBy === "customer"
                     ? "bg-surface text-ink shadow-xs"
                     : "text-ink-muted hover:text-ink"
@@ -544,7 +570,7 @@ export function OutstandingManagerContent({
                 role="radio"
                 aria-checked={groupBy === "booking"}
                 onClick={() => setGroupBy("booking")}
-                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors cursor-pointer h-full ${
                   groupBy === "booking"
                     ? "bg-surface text-ink shadow-xs"
                     : "text-ink-muted hover:text-ink"
@@ -570,6 +596,8 @@ export function OutstandingManagerContent({
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <div className="flex-1 max-w-sm">
             <SearchInput
+              id="outstanding-search"
+              aria-label="Search receivables"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search customer, phone, invoice..."
@@ -638,7 +666,10 @@ export function OutstandingManagerContent({
                   </TableRow>
                 ) : (
                   displayedCustomers.map((c, idx) => {
-                    const rowKey = c.customerId || `unlinked_${idx}`
+                    const rowKey =
+                      c.customerId && c.customerId !== "unlinked"
+                        ? c.customerId
+                        : `unlinked_${idx}`
                     const isExpanded = expandedCustomerKeys.has(rowKey)
 
                     return (

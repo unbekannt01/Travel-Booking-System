@@ -469,6 +469,7 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
+                    aria-label="Reason for voiding payment"
                     value={voidReason}
                     onChange={(e) => setVoidReason(e.target.value)}
                     placeholder="e.g. Entered wrong payment amount"

@@ -802,6 +802,7 @@ export default function InvoiceStudio({ user }) {
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
+                      aria-label="Primary Color"
                       value={currentConfig.colors.primary}
                       onChange={(e) =>
                         updateConfig((prev) => ({
@@ -828,6 +829,7 @@ export default function InvoiceStudio({ user }) {
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
+                      aria-label="Accent Color"
                       value={currentConfig.colors.accent}
                       onChange={(e) =>
                         updateConfig((prev) => ({
@@ -885,6 +887,7 @@ export default function InvoiceStudio({ user }) {
                     )}
                     <input
                       type="file"
+                      aria-label="Upload Logo"
                       ref={logoInputRef}
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(e) => handleAssetUpload(e, "logo")}
@@ -908,6 +911,7 @@ export default function InvoiceStudio({ user }) {
                   </label>
                   <input
                     type="range"
+                    aria-label="Logo Height"
                     min="24"
                     max="100"
                     step="4"
@@ -952,6 +956,7 @@ export default function InvoiceStudio({ user }) {
                     )}
                     <input
                       type="file"
+                      aria-label="Upload Signature"
                       ref={signatureInputRef}
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(e) => handleAssetUpload(e, "signature")}
@@ -998,6 +1003,7 @@ export default function InvoiceStudio({ user }) {
                     )}
                     <input
                       type="file"
+                      aria-label="Upload Stamp"
                       ref={stampInputRef}
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(e) => handleAssetUpload(e, "stamp")}

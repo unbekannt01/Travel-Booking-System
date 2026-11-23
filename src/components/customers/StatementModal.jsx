@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Modal, Button, Spinner, Select } from "../ui"
+import { Modal, Button, Spinner, Select, Field, Input } from "../ui"
 import { RateLimitNotice } from "../common/RateLimitNotice"
 import { getCustomerStatement } from "../../data/customers"
 import { renderCustomerStatementHtml } from "../../../shared/statementRenderer"
@@ -224,31 +224,33 @@ export default function StatementModal({
 
         {/* Custom date range inputs when Custom preset is selected */}
         {preset === "custom" && (
-          <div className="flex flex-wrap items-center gap-3 p-3 rounded-[var(--yh-radius-md)] bg-surface border border-border">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-ink-muted">From:</span>
-              <input
+          <div className="flex flex-wrap items-end gap-3 p-3 rounded-[var(--yh-radius-md)] bg-surface border border-border">
+            <Field id="statement-from-date" label="From date" className="w-auto">
+              <Input
+                id="statement-from-date"
                 type="date"
+                size="sm"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="px-2.5 py-1 text-xs rounded border border-border bg-surface text-ink"
+                className="w-auto"
               />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-ink-muted">To:</span>
-              <input
+            </Field>
+            <Field id="statement-to-date" label="To date" className="w-auto">
+              <Input
+                id="statement-to-date"
                 type="date"
+                size="sm"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="px-2.5 py-1 text-xs rounded border border-border bg-surface text-ink"
+                className="w-auto"
               />
-            </div>
+            </Field>
             <Button
               size="sm"
               variant="outline"
               onClick={fetchStatement}
               disabled={loading}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs h-9"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               Apply
