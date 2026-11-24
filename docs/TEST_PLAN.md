@@ -719,6 +719,49 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.22 Manual Verification Checklist — Part 6S-2b (Unified Sleeper Layouts, Ladies Reservations, Couple Pairs, and Fare Presets)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-2b ("automated tests not run, per owner decision"). All verifications were conducted manually using the checklist below with browser validation (Playwright).
+
+- [x] **1. Unified Sleeper Layout Geometry & Visual Reference Match**:
+  - Open Journeys screen, select any departure with 2x1 sleeper (38 berths), 2x2 sleeper (48 berths), or 2x2 sleeper (40 berths), and open the Live Seat Map.
+  - Verify all sleeper coaches display on a single screen without a deck switcher tab bar (upper and lower decks shown side-by-side).
+  - Verify rounded coach body container styling with amber/yellow front strip showing "▲ Front" on the left and "Driver" with a steering wheel icon (☸) on the right.
+  - Verify four column headers: Left Lower, Left Upper, central vertical aisle ("SLEEPER"), Right Lower, Right Upper.
+  - For 2x1 sleeper (38 berths), verify rear berth section at the bottom renders wide berths B1 and B2.
+- [x] **2. Responsive Viewports (360px Mobile & 1440px Desktop)**:
+  - Inspect layout at 360px mobile viewport: verify zero horizontal overflow on the page body (`document.documentElement.scrollWidth <= window.innerWidth`); coach layout region scrolls horizontally within its own container.
+  - Inspect layout at 1440px desktop viewport: verify spacious presentation with all interactive berth elements clearly visible.
+- [x] **3. Departure Seat Settings & Fare Presets**:
+  - Click "Seat Settings" button on the Live Seat Map to open the Departure Seat Settings modal.
+  - Enter custom fare presets (Lower, Upper, Rear, Seater), and click "Save Seat Settings".
+  - Verify settings persist via `PUT /api/departures/:key/seat-config` and are displayed when re-opening the modal.
+  - Verify suggested fares pre-fill automatically when creating a new booking from the seat map for that departure.
+- [x] **4. Multi-Select Batch Actions (Ladies & Couple Pairs)**:
+  - Click "Select Multiple" on the Live Seat Map toolbar.
+  - Select an available seat and click "Mark Ladies"; verify purple ladies-reserved border and badge appear on the seat.
+  - Select two available seats and click "Make Couple Pair"; verify couple pair icon and partner linking cue appear.
+  - Test "Remove Ladies" and "Break Pair" to ensure settings can be cleared.
+- [x] **5. Server-Side Ladies Seat Protection & Override Gate**:
+  - Attempt to book a male passenger on a ladies-reserved seat without override; verify server rejects with HTTP 409 and code `LADIES_SEAT`.
+  - Book a female passenger on the ladies-reserved seat; verify booking succeeds with HTTP 201.
+  - In Booking Form, when a male passenger is assigned to a ladies seat, verify modal prompt appears requiring an operator override reason (min 3 chars). Submit with override reason; verify booking succeeds and `LADIES_SEAT_OVERRIDE` audit log is recorded.
+- [x] **6. Server-Side Couple Pair Protection**:
+  - Attempt to book only one seat of a couple pair alone; verify server rejects with HTTP 409 and code `COUPLE_PAIR` stating both seats must be booked together.
+  - Book both seats of the couple pair in the same booking; verify server accepts with HTTP 201.
+  - In Booking Form, selecting one seat of a couple pair auto-selects its partner seat for the next available traveler.
+- [x] **7. Mixed-Gender Berth Advisory Warning**:
+  - When two passengers of different genders are assigned to the same double cabin/berth (e.g. L1-1 and L1-2), verify non-blocking warning banner appears alerting the operator before confirmation.
+- [x] **8. Keyboard Accessibility (WCAG 2.1 AA)**:
+  - Tab through seat map buttons; press `Enter` to open the Seat Action Drawer.
+  - Press `Escape` to close the drawer, verifying focus cleanly returns to the trigger seat button.
+- [x] **9. Cleanup & Non-Interference**:
+  - All test bookings created during verification soft-deleted through the app's `deletedAt` mechanism (`YHB-CHK-7119`, `YHB-CHK-8510`, `YHB-CHK-6197`, `YHB-CHK-1205`, `YHB-CHK-7199`, `YHB-CHK-9643`, `YHB-CHK-7329`, `YHB-CHK-2549`, `YHB-CHK-4133`, `YHB-NST-NOV-005`, `YHB-NST-NOV-006`, `YHB-NST-NOV-007`).
+  - Verify existing bookings and legacy bus types continue loading and rendering correctly without regression.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
 With 361 unit & regression tests passing across 93 TAP test suites, 78 component tests passing across 17 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 6 Part 6a is officially completed. Remaining gaps scheduled for future phases:

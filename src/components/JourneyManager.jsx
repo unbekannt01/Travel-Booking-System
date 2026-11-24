@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Plus,
   TrendingUp,
+  Layout,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"

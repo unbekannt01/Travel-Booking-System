@@ -1017,9 +1017,49 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - Zero page-level horizontal overflow, 44px minimum touch targets, and full keyboard accessibility (`Tab`, `Enter`, `Escape`).
   - *Automated tests not written, per owner decision.*
 
+---
 
+## 27. Departure Seat Settings: Unified Layouts, Ladies Reservations, Couple Pairs, and Fare Presets (Part 6S-2b)
 
+- **Unified Sleeper Coach Geometry & Single-Screen Presentation**:
+  - Replaced the tabbed deck-switcher in `SeatMap.jsx` with a unified layout design matching operator mental models:
+    - Upper and lower deck berths are rendered side-by-side within a single rounded coach body shell (`rounded-[var(--yh-radius-2xl)]`).
+    - Yellow/amber front strip at the top features "▲ Front" on the left and "Driver" with a steering wheel icon (☸) on the right.
+    - Four column headers: Left Lower, Left Upper, central vertical aisle ("SLEEPER"), Right Lower, Right Upper, with Gujarati and English localization support.
+    - Berth boxes: Left Lower (`L{row}`), Left Upper (`U{row}`), Right Lower (`L{row}`), Right Upper (`U{row}`) with stacked interactive seat buttons.
+    - For 2x1 sleeper (38 berths), rear berth section displays wide bottom berths B1 (`rear-B1`) and B2 (`rear-B2`).
+    - Canonical seat naming conventions: `left-L{r}-{s}`, `left-U{r}-{s}`, `right-L{r}-{s}`, `right-U{r}-{s}`, `rear-B1`, `rear-B2`, and `seat-{n}`.
 
+- **Departure Seat Configuration Data Model (`backend/models/DepartureSeatConfig.js`)**:
+  - Encapsulates departure-level seat customizations in a dedicated collection:
+    - Compound unique tenant index: `{ userId: 1, tourName: 1, journeyDate: 1, busType: 1 }`.
+    - `ladiesSeats`: Array of canonical seat IDs reserved exclusively for female passengers.
+    - `couplePairs`: Array of objects `{ a: String, b: String }` linking two seats that must be held, booked, or released together.
+    - `fares`: Nested object storing optional departure-level suggested fare presets in integer paise (`lower`, `upper`, `rear`, `seat`).
+  - Validation ensures couple pairs are reciprocal, non-overlapping, and refer to valid layout seats.
 
+- **Departure Seat Settings API (`backend/routes/seatConfig.js` & `backend/routes/departures.js`)**:
+  - Mounted under `GET` and `PUT /api/departures/:key/seat-config` with rate limiting (`seatConfigReadLimiter`, `seatConfigWriteLimiter`).
+  - `GET /api/departures/:key/seat-map` dynamically enriches the layout seat map with `ladies: boolean` and `pairWith: string | null`, and provides `fares` and full `seatConfig`.
+  - Updating seat settings logs an audit event (`SEAT_CONFIG_UPDATED`) recording changes without exposing passenger PII.
 
+- **Server-Side Enforcement & Conflict Protection (`backend/routes/bookings.js` & `backend/routes/seatHolds.js`)**:
+  - **Couple Pair Integrity**:
+    - Booking or holding one seat of a couple pair without its partner returns HTTP 409 `COUPLE_PAIR` (`Seat "..." is part of a couple pair with seat "...". Both seats must be booked together, or break the pair first.`).
+    - Booking or holding both partner seats together is accepted.
+    - Moving a passenger out of or into a couple pair validates partner integrity or prompts the operator.
+  - **Ladies-Reserved Seat Protection**:
+    - Assigning a male passenger to a ladies-reserved seat is rejected with HTTP 409 `LADIES_SEAT` unless an operator override is explicitly provided with `overrideLadies: true` and `overrideReason` (min 3 characters).
+    - When an override is granted, an audit entry `LADIES_SEAT_OVERRIDE` is logged with operator ID, reason, and seat ID.
+    - Female passengers are accepted directly without requiring overrides.
+  - **Standalone MongoDB Concurrency & Residual Race Window**:
+    - On single-node standalone MongoDB (without multi-document replica-set transactions), atomic read-check-write validation runs inside `checkSeatConflicts` immediately before `.save()`.
+    - Seat conflicts, hold collisions, couple pair violations, and ladies restrictions are trapped and returned as structured HTTP 409 errors with distinct error codes (`SEAT_CONFLICT`, `SEAT_HELD`, `COUPLE_PAIR`, `LADIES_SEAT`), ensuring zero silent overwrite or duplicate seat assignment.
+
+- **Frontend User Experience & Accessibility**:
+  - `SeatSettingsModal.jsx`: Accessible modal for operators to configure lower, upper, rear, and seater fare presets in ₹.
+  - `LiveSeatMap.jsx`: Features a "Seat Settings" action button, multi-select toolbar with "Mark Ladies", "Remove Ladies", "Make Couple Pair", and "Break Pair" batch actions, and responsive layout scrolling.
+  - `BookingForm.jsx`: Pre-fills suggested fares from departure seat presets (hint: "(Suggested from seat settings)"), auto-selects couple partners for next unseated traveler, alerts with mixed-gender cabin warnings, and prompts for override reason when male passenger is placed on a ladies seat.
+  - Full WCAG 2.1 AA keyboard support (`Tab`, `Enter`, `Escape`) with min 44px touch targets.
+  - *Automated tests not written, per owner decision.*
 
