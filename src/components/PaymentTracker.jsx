@@ -58,12 +58,14 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
   const [viewReceiptPayment, setViewReceiptPayment] = useState(null)
 
   const closeLedgerModal = () => {
+    setViewReceiptPayment(null)
     setViewLedgerBooking(null)
     setLedgerPayments([])
     setVoidingPaymentId(null)
   }
 
   const handleOpenLedger = (booking) => {
+    setViewReceiptPayment(null)
     setViewLedgerBooking(booking)
     setLoadingLedger(true)
     const bId = booking._id || booking.id
@@ -414,6 +416,8 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
       <Modal
         isOpen={Boolean(viewLedgerBooking)}
         onClose={closeLedgerModal}
+        closeOnEscape={!viewReceiptPayment}
+        closeOnBackdrop={!viewReceiptPayment}
         size="xl"
         className="max-w-3xl max-h-[90vh]"
         title={

@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
+import { createPortal } from "react-dom"
 import {
   X,
   Printer,
@@ -14,6 +15,7 @@ import {
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { formatDisplayDate } from "../../utils/date"
 import { escapeHtml, sanitizeHexColor } from "../../utils/escapeHtml.js"
+import { useFocusTrap } from "../ui/focusTrap"
 
 export default function ReceiptModal({
   booking,
@@ -21,7 +23,15 @@ export default function ReceiptModal({
   user,
   onClose,
 }) {
+  const panelRef = useRef(null)
   const [selectedLang, setSelectedLang] = useState(user?.documentLanguage || "en")
+
+  useFocusTrap({
+    isOpen: Boolean(payment),
+    containerRef: panelRef,
+    onClose,
+    closeOnEscape: true,
+  })
 
   const t = getDocumentTranslation(selectedLang)
   const theme = user?.invoiceTheme || "classic"
@@ -250,9 +260,24 @@ export default function ReceiptModal({
     window.open(url, "_blank")
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden my-auto">
+  if (!payment || typeof document === "undefined") return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+      {/* Backdrop overlay */}
+      <div
+        className="fixed inset-0 bg-ink/70 backdrop-blur-xs transition-opacity"
+        aria-hidden="true"
+        onMouseDown={onClose}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${t.paymentReceipt} ${receiptNo}`}
+        tabIndex={-1}
+        className="relative z-10 bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden my-auto focus:outline-none"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
           <div className="flex items-center gap-3">
@@ -400,6 +425,7 @@ export default function ReceiptModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
