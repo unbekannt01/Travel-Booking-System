@@ -72,7 +72,7 @@ export default function CustomerManager({
   // State
   const [customers, setCustomers] = useState([])
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 })
-  const [counts, setCounts] = useState({ total: 0, repeat: 0, withOutstanding: 0, unlinkedBookingsCount: 0, unresolvedBookings: [] })
+  const [counts, setCounts] = useState({ total: 0, repeat: 0, withOutstanding: 0, unlinkedBookingsCount: 0, actionableLinkableCount: 0, unresolvedBookings: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isRateLimited, setIsRateLimited] = useState(false)
@@ -284,7 +284,7 @@ export default function CustomerManager({
         </div>
 
         {/* Unlinked Bookings Alert Banner ("Needs Attention") */}
-        {!dismissUnlinkedAlert && (counts.unlinkedBookingsCount || 0) > 0 && (
+        {!dismissUnlinkedAlert && (counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : (counts.unlinkedBookingsCount || 0)) > 0 && (
           <div
             role="status"
             aria-live="polite"
@@ -295,13 +295,13 @@ export default function CustomerManager({
                 <Info className="w-5 h-5 shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-bold block text-ink">
-                    {counts.unlinkedBookingsCount}{" "}
-                    {counts.unlinkedBookingsCount === 1 ? "booking needs attention" : "bookings need attention"}
+                    {counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount}{" "}
+                    {(counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount) === 1 ? "booking needs attention" : "bookings need attention"}
                   </strong>
                   <p className="text-ink-muted text-xs mt-0.5">
-                    {counts.unlinkedBookingsCount === 1
+                    {(counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount) === 1
                       ? "1 booking can be linked to a customer profile."
-                      : `${counts.unlinkedBookingsCount} bookings can be linked to customer profiles.`}
+                      : `${counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount} bookings can be linked to customer profiles.`}
                   </p>
                 </div>
               </div>
