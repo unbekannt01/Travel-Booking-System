@@ -829,7 +829,7 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
 
 ---
 
-## 23. CSV Export & Import Architecture with Formula Defense and Atomic Undo (Part 6c)
+## 23. CSV Export & Import Architecture with Formula Defense and Granular Undo (Part 6c & 6c-fix)
 
 - **Pure CSV Engine (`shared/csv.js`)**:
   - **Zero-Dependency Shared ESM**: Fully portable between Node.js 22 and browser environments.
@@ -837,51 +837,71 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
     - `sanitizeCell(value)`: Prepend single quote (`'`) to any string starting with `=`, `+`, `-`, `@`, `\t`, or `\r`.
     - RFC 4180 compliant: Encloses values containing quotes, commas, or line breaks in double quotes with escaped quotes (`""`).
     - `unsanitizeCell(value)`: Strips defensive leading quote upon reading imported values.
-  - **State-Machine CSV Parser (`parseCsv`)**:
+  - **State-Machine CSV Parser (`parseCsv`) with Strict Bounds**:
     - Character-by-character tokenizer handling quotes, commas, CRLF/LF line endings, and multi-line fields.
-    - Enforces safety bounds: `TOO_LARGE` (>1.5MB), `TOO_MANY_ROWS` (>2000), `TOO_MANY_COLUMNS` (>50), `CELL_TOO_LONG` (>1000 chars), `BAD_QUOTE` (unmatched quotes), `EMPTY`.
+    - Exported `CSV_PARSER_LIMITS`:
+      - `MAX_BYTES`: 1,000,000 bytes (1 MB max file size, throws `TOO_LARGE`).
+      - `MAX_ROWS`: 2,000 data rows (throws `TOO_MANY_ROWS`).
+      - `MAX_COLS`: 30 columns per row (throws `TOO_MANY_COLUMNS`).
+      - `MAX_CELL` / `MAX_CELL_CHARS`: 500 characters per cell (throws `CELL_TOO_LONG`).
+      - Throws `EMPTY` for whitespace-only files, `BAD_QUOTE` for unmatched quotes.
   - **Type Parsers**:
     - `parseMoney(raw)`: Converts rupee strings (`1,500.50`, `₹250`) to exact integer paise with bounds checking.
     - `parseDate(raw)`: Standardizes ISO `YYYY-MM-DD` and Indian `DD-MM-YYYY` formats.
     - `parseBool(raw)`: Localized boolean detection across English (`yes/no`, `true/false`), Hindi (`हाँ/नहीं`), and Gujarati (`હા/ના`).
   - **Header Mapping & Declarative Import Specs**:
     - `mapHeaders(csvHeaders, spec)`: Auto-maps user CSV headers to internal field names using aliases in English, Hindi, and Gujarati.
-    - Detects unsafe Aadhaar headers (`aadhaar`, `uid`, `aadhar`, etc.) and halts import immediately for privacy protection.
+    - Detects unsafe Aadhaar headers (`aadhaar`, `uid`, `aadhar`, etc.) and halts import immediately for citizen privacy and compliance.
     - Frozen schemas: `CUSTOMER_IMPORT_SPEC` and `EXPENSE_IMPORT_SPEC`.
 
 - **Backend Export & Import Architecture (`backend/routes/export.js`, `backend/routes/import.js`)**:
   - **CSV Export Engine (`GET /api/export/:type`)**:
-    - Supported types: `customers`, `expenses`, `bookings`, `cashbook`, `receivables`.
+    - Supported types: `customers`, `expenses`, `bookings`, `cashbook`, `receivables`, `passengers`, `payments`, `tour-pnl`.
+    - URL Aliases: `daybook` -> `cashbook`, `outstanding` -> `receivables`, `pnl` -> `tour-pnl`.
+    - Date Span Limit: Maximum 366 days between start and end date (returns 400 for ranges >366 days).
     - Delivers UTF-8 BOM (`\uFEFF`) for seamless double-click opening in Microsoft Excel on Windows.
     - Tenant-isolated and filtered by date range, tour, or category.
-    - Strict privacy rule: Passenger Aadhaar numbers are never included in booking exports.
+    - Strict privacy rule: Passenger Aadhaar numbers are never included in passenger or booking exports.
     - Audit logging: Records export activity in `AuditLog`.
+    - Rate Limiting: 30 export requests per 15-minute window (`exportLimiter`).
   - **Two-Phase Import Engine with Cryptographic Verification**:
     - `POST /api/import/:type/preview`:
       - Validates CSV structure, maps headers, and performs format checks.
-      - Rejects any file containing Aadhaar columns.
+      - Rejects any file containing Aadhaar columns with `UNSAFE_AADHAAR_COLUMN`.
       - Rejects expense dates lying within closed books periods (`lockDate`).
       - Flags duplicate customer phone numbers as "skip existing".
-      - Generates an HMAC-SHA256 preview token embedding hash of payload, row counts, and 15-minute expiration.
+      - Generates an HMAC-SHA256 preview token embedding userId, type, sorted mapping hash, content SHA-256 hash, and 15-minute expiry.
+      - Rate Limiting: 20 preview requests per 15-minute window (`importPreviewLimiter`).
+      - Privacy: Never stores or returns file names, raw CSV rows, or customer PII in error reporting (`sampleInvalid` returns `{ row, field, code }`).
     - `POST /api/import/:type/commit`:
-      - Verifies HMAC token signature and expiration.
-      - Re-validates data server-side to prevent tampering between preview and commit.
-      - Inserts records in chunks with `importBatchId` tagged on each document.
-      - Records batch metadata in `ImportBatch` collection.
-  - **Atomic Batch Undo (`POST /api/import/batches/:id/undo`)**:
-    - Allows operator to roll back an entire spreadsheet import.
-    - Pre-validates dependencies:
-      - Expense undo blocked if expense date falls in a closed books period.
-      - Customer undo blocked if customer has active bookings created after the import.
-    - Soft-deletes imported items and updates batch status to `reverted` or `partially_reverted`.
+      - Verifies HMAC token signature and expiration with `crypto.timingSafeEqual`.
+      - Re-validates data server-side against column mapping to prevent tampering.
+      - Non-atomic Chunked Reality: Executes in chunks of 50 documents without assuming multi-document replica-set transactions.
+      - Batch status lifecycle: Starts as `committing`, transitions to `committed` or `failed`.
+      - Tags each document with `importBatchId`.
+      - Rate Limiting: 10 commit/undo requests per 15-minute window (`importCommitLimiter`).
+  - **Granular Per-Row Batch Undo (`POST /api/import/batches/:id/undo`)**:
+    - Performs per-row rollback across `batch.recordIds`. Never blocks the entire batch if a subset of records is locked.
+    - Evaluates books lock on each individual expense (skips locked dates).
+    - Evaluates active booking dependencies on each individual customer (skips customers in active use).
+    - Soft-deletes unencumbered records (`deletedAt: new Date()`).
+    - Reports detailed granular breakdown in response and `undoSummary`:
+      - `{ undone, booksLocked, inUse, alreadyDeleted }`
+    - Idempotent: Can be run multiple times safely.
+    - Batch status transitions to `reverted` (if all undone/already deleted) or `partially_reverted`.
   - **Scope Limitation**: Booking import is deliberately excluded from CSV import due to seat assignment integrity, sequential invoice numbering, multi-installment payment allocation, and document issuance complexity (documented in project backlog).
+
+- **Privacy Migration Tool (`scripts/migrate-import-batch-privacy.mjs`)**:
+  - Unsets legacy `fileName` field on `ImportBatch` collections via MongoDB `$unset`.
+  - Dry-run by default; requires `--apply` to execute writes.
+  - Guarded against accidental test DB alteration: requires `--allow-test` when targeting `*_test` databases.
 
 - **UI & App Shell Integration (`src/components/data/DataManagement.jsx`)**:
   - Lazy-loaded chunk under `#data` route in `Dashboard.jsx`.
   - Accessible tabbed interface (`Tabs` component):
-    1. **Export System Data**: One-click and filtered downloads for Customers, Expenses, Bookings, Cash Book, and Receivables with privacy notices.
+    1. **Export System Data**: One-click and filtered downloads for Customers, Expenses, Bookings, Cash Book, Receivables, Passenger Manifest, Payments Ledger, and Tour-wise Profit/Loss.
     2. **Import CSV Wizard**: 4-step wizard (Type & Template -> Upload -> Map Columns -> Preview & Commit).
-    3. **Recent Import Batches**: Audit history of previous imports with atomic undo triggers and status badges.
+    3. **Recent Import Batches**: Audit history of previous imports with per-row undo triggers, status badges, and granular undo reason breakdowns.
   - Deep-link action buttons embedded in `CustomerManager.jsx` ("Import CSV") and `ExpenseTracker.jsx` ("Import CSV").
 
 

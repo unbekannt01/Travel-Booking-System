@@ -188,18 +188,36 @@ Schedule this script in **Windows Task Scheduler** to run daily at 11:59 PM.
 
 ---
 
-## 7. CSV Import / Export Configuration & Operational Limits (Part 6c)
+## 7. CSV Import / Export Configuration & Operational Limits (Part 6c & 6c-fix)
 
 ### 7.1 Payload & File Size Configuration
 - **Backend Express Request Body Limit**: The import API endpoints (`/api/import`) have a dedicated `1.5mb` JSON body limit configured in `backend/index.js` to allow uploading spreadsheets with up to 2,000 rows without encountering `PayloadTooLargeError` (HTTP 413).
 - **Default Express Body Limit**: All other endpoints retain the strict `100kb` default limit.
-- **Client File Size Bound**: Client-side parsing enforces a maximum file size of 1.5 MB (`maxBytes: 1500000`). Files exceeding this size are rejected before upload.
+- **Client File Size Bound**: Client-side parsing and server validation strictly enforce a maximum file size of 1 MB (`1,000,000` bytes). Files exceeding this size are rejected immediately with `TOO_LARGE`.
 
-### 7.2 Safety & Import Bounds
-- **Maximum Rows**: 2,000 data rows per spreadsheet import.
-- **Maximum Columns**: 50 columns.
-- **Maximum Cell Length**: 1,000 characters per cell.
+### 7.2 Safety, Rate Limits & Import Bounds
+- **Maximum File Size**: 1,000,000 bytes (1 MB).
+- **Maximum Rows**: 2,000 data rows per spreadsheet import (`TOO_MANY_ROWS`).
+- **Maximum Columns**: 30 columns per row (`TOO_MANY_COLUMNS`).
+- **Maximum Cell Length**: 500 characters per cell (`CELL_TOO_LONG`).
 - **Formula Injection Defense**: All exported cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r` are automatically prefixed with `'` to prevent command execution in Microsoft Excel and LibreOffice Calc.
+- **Rate Limiting (express-rate-limit)**:
+  - `exportLimiter`: 30 exports per 15-minute window per IP/user.
+  - `importPreviewLimiter`: 20 previews per 15-minute window per IP/user.
+  - `importCommitLimiter`: 10 commits/undos per 15-minute window per IP/user.
 - **Data Minimization & Aadhaar Exclusion**: Passenger and customer Aadhaar numbers are strictly excluded from exports and rejected upon import.
-- **Preview Token Validity**: Import preview HMAC tokens expire after 15 minutes.
+- **Preview Token Validity**: Import preview HMAC-SHA256 tokens expire after 15 minutes and cryptographically seal user ID, import type, column mapping, and SHA-256 content hash.
+- **Non-Atomic Chunked Commits**: Commits run in batches of 50 items on standalone MongoDB.
+
+### 7.3 Database Privacy Migration (6c-fix)
+To strip legacy client filenames from previously stored `ImportBatch` records:
+
+```powershell
+# 1. Dry-run to inspect affected documents (no writes)
+node scripts/migrate-import-batch-privacy.mjs
+
+# 2. Apply $unset to remove fileName across all ImportBatch documents
+node scripts/migrate-import-batch-privacy.mjs --apply
+```
+Safety: Targets `mongodb://127.0.0.1:27017/yatrahub`. Accidental execution on test databases (`*_test`) is blocked unless `--allow-test` is explicitly passed.
 

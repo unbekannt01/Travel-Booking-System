@@ -538,6 +538,30 @@ npm run ui:smoke -- --quick
 - [ ] **CSV Export**:
   - Click "Export CSV" button; verify downloaded CSV (`DayBook-YYYY-MM-DD.csv`) includes opening balance, chronological rows with running balances, closing balance, and formula injection protection.
 
+## 3.16 Manual Verification Checklist — Part 6c & 6c-fix CSV Export, Import & Undo
+
+- [ ] **Data Management Hub Navigation & Tab Layout**:
+  - Click "Data Import/Export" in sidebar or navigate to `#data`.
+  - Verify heading "Data Import & Export" and subtitle load cleanly.
+  - Verify 3 tabs: "Export System Data", "Import CSV Data", "Recent Batches".
+- [ ] **Export Cards & Filter Validation**:
+  - Verify export cards: Customers, Expenses, Bookings, Cash Book, Receivables, Passenger Manifest, Payments Ledger, and Tour-wise Profit/Loss.
+  - Verify 366-day date range limit: Requesting date range >366 days shows a clear error toast.
+  - Verify zero Aadhaar in Passenger Manifest: Download CSV and verify neither the word "Aadhaar" nor any 12-digit UID appears in the file.
+  - Verify Payments Ledger: Verify refunds have negative amounts and voided receipts are flagged.
+- [ ] **CSV Import Wizard**:
+  - Step 1: Select "Customer" or "Expense", click download template, verify format guidelines.
+  - Step 2: Upload a valid `.csv` file <= 1 MB. Files > 1 MB are blocked with friendly error toast.
+  - Step 2 Security: Upload a file containing an Aadhaar column; verify immediate red security banner and block.
+  - Step 3: Column mapping correctly maps detected columns.
+  - Step 4: Validate & Preview displays StatCards (total, valid, invalid), sample valid records, and structured error rows `{ row, field, reason }`.
+- [ ] **HMAC Token Protection**:
+  - Preview generates tamper-proof HMAC token. Any tampering with column mappings or file content invalidates the token.
+- [ ] **Granular Batch Undo**:
+  - Recent Batches table displays date, type, imported count, skipped count, and status without leaking filenames.
+  - Clicking "Undo" on a committed batch prompts confirmation.
+  - Undo reverses records not locked by books close, correctly setting status to `reverted` or `partially_reverted` and displaying breakdown toast.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap

@@ -45,6 +45,8 @@ import {
   Check,
   Info,
   ShieldAlert,
+  CreditCard,
+  TrendingUp,
 } from "lucide-react"
 
 export default function DataManagement({ user = null, tours = [], initialTab = "export" }) {
@@ -92,6 +94,17 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
   const [bookingStartDate, setBookingStartDate] = useState("")
   const [bookingEndDate, setBookingEndDate] = useState("")
   const [bookingTour, setBookingTour] = useState("all")
+
+  const [passengerStartDate, setPassengerStartDate] = useState("")
+  const [passengerEndDate, setPassengerEndDate] = useState("")
+  const [passengerTour, setPassengerTour] = useState("all")
+
+  const [paymentStartDate, setPaymentStartDate] = useState("")
+  const [paymentEndDate, setPaymentEndDate] = useState("")
+
+  const [pnlStartDate, setPnlStartDate] = useState("")
+  const [pnlEndDate, setPnlEndDate] = useState("")
+  const [pnlTour, setPnlTour] = useState("all")
 
   const [cashbookStartDate, setCashbookStartDate] = useState("")
   const [cashbookEndDate, setCashbookEndDate] = useState("")
@@ -249,8 +262,8 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
       return
     }
 
-    if (file.size > 1500000) {
-      toast.error("File exceeds maximum allowed size of 1.5 MB.")
+    if (file.size > 1000000) {
+      toast.error("File exceeds maximum allowed size of 1 MB.")
       return
     }
 
@@ -262,7 +275,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
       const text = event.target?.result || ""
       setCsvText(text)
       try {
-        const parsed = parseCsv(text, { maxBytes: 1500000, maxRows: 2000 })
+        const parsed = parseCsv(text)
         setParsedHeaders(parsed.headers)
         setParsedRowCount(parsed.rowCount)
 
@@ -293,7 +306,6 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
     try {
       const res = await previewImportCsv(importType, {
         csvText,
-        fileName: csvFile?.name || `${importType}.csv`,
         mapping: columnMapping,
       })
       setPreviewData(res)
@@ -314,11 +326,10 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
     try {
       const res = await commitImportCsv(importType, {
         csvText,
-        fileName: csvFile?.name || `${importType}.csv`,
         mapping: columnMapping,
         token: previewData.token,
       })
-      toast.success(`Successfully imported ${res.counts?.imported || 0} ${importType}!`)
+      toast.success(res.message || `Successfully imported ${res.counts?.imported || 0} ${importType}!`)
       // Reset wizard
       setWizardStep(1)
       setCsvFile(null)
@@ -340,7 +351,18 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
     setIsUndoing(true)
     try {
       const res = await undoImportBatch(undoBatchTarget._id)
-      toast.success(res.message || "Import batch reverted.")
+      const summary = res.summary || {}
+      if (res.revertedCount > 0 && res.skippedCount === 0) {
+        toast.success(`Successfully reverted all ${res.revertedCount} records.`)
+      } else if (res.revertedCount > 0 && res.skippedCount > 0) {
+        toast.warning(
+          `Reverted ${res.revertedCount} records. Skipped ${res.skippedCount} (Locked: ${summary.booksLocked || 0}, In-use: ${summary.inUse || 0}, Deleted: ${summary.alreadyDeleted || 0}).`
+        )
+      } else {
+        toast.warning(
+          `No records reverted. Skipped ${res.skippedCount || 0} (Locked: ${summary.booksLocked || 0}, In-use: ${summary.inUse || 0}, Deleted: ${summary.alreadyDeleted || 0}).`
+        )
+      }
       setUndoBatchTarget(null)
       loadBatches()
     } catch (err) {
@@ -663,6 +685,210 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                   </Button>
                 </div>
               </Card>
+
+              {/* Card 6: Passenger List */}
+              <Card className="p-5 flex flex-col justify-between border-border-subtle hover:border-brand/40 transition-colors">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400">
+                      <Users className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <Badge variant="success">Traveler Manifest</Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-ink text-base">Passenger List</h3>
+                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                      Export individual passenger rosters with seat numbers, journey dates, age, and gender. Zero Aadhaar data.
+                    </p>
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={passengerStartDate}
+                          onChange={(e) => setPassengerStartDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="Passenger From Date"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={passengerEndDate}
+                          onChange={(e) => setPassengerEndDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="Passenger To Date"
+                        />
+                      </Field>
+                    </div>
+                    {tours && tours.length > 0 && (
+                      <Select
+                        aria-label="Passenger Tour Filter"
+                        value={passengerTour}
+                        onChange={(e) => setPassengerTour(e.target.value)}
+                        className="text-xs"
+                      >
+                        <option value="all">All Tours</option>
+                        {tours.map((t) => {
+                          const name = typeof t === "string" ? t : t.tourName || t.name
+                          return (
+                            <option key={t._id || name} value={name}>
+                              {name}
+                            </option>
+                          )
+                        })}
+                      </Select>
+                    )}
+                  </div>
+                </div>
+                <div className="pt-5 mt-4 border-t border-border-subtle">
+                  <Button
+                    variant="secondary"
+                    className="w-full gap-2 min-h-11"
+                    onClick={() =>
+                      handleExport("passengers", {
+                        startDate: passengerStartDate,
+                        endDate: passengerEndDate,
+                        tourName: passengerTour,
+                      })
+                    }
+                    disabled={isExporting}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    <span>Export Passengers CSV</span>
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Card 7: Payments Ledger */}
+              <Card className="p-5 flex flex-col justify-between border-border-subtle hover:border-brand/40 transition-colors">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400">
+                      <CreditCard className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <Badge variant="primary">Receipts & Refunds</Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-ink text-base">Payments Ledger</h3>
+                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                      Download complete payment receipts and refund records with invoice numbers, payment modes, and void flags.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <Field label="From">
+                      <Input
+                        type="date"
+                        value={paymentStartDate}
+                        onChange={(e) => setPaymentStartDate(e.target.value)}
+                        className="text-xs"
+                        aria-label="Payment From Date"
+                      />
+                    </Field>
+                    <Field label="To">
+                      <Input
+                        type="date"
+                        value={paymentEndDate}
+                        onChange={(e) => setPaymentEndDate(e.target.value)}
+                        className="text-xs"
+                        aria-label="Payment To Date"
+                      />
+                    </Field>
+                  </div>
+                </div>
+                <div className="pt-5 mt-4 border-t border-border-subtle">
+                  <Button
+                    variant="secondary"
+                    className="w-full gap-2 min-h-11"
+                    onClick={() =>
+                      handleExport("payments", {
+                        startDate: paymentStartDate,
+                        endDate: paymentEndDate,
+                      })
+                    }
+                    disabled={isExporting}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    <span>Export Payments CSV</span>
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Card 8: Tour-wise Profit & Loss */}
+              <Card className="p-5 flex flex-col justify-between border-border-subtle hover:border-brand/40 transition-colors">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+                      <TrendingUp className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <Badge variant="neutral">P&L Intelligence</Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-ink text-base">Tour-wise Profit / Loss</h3>
+                    <p className="text-xs text-ink-muted mt-1 leading-relaxed">
+                      Export tour-wise booked revenue, collections, outstanding, allocated expenses, and operating margins.
+                    </p>
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={pnlStartDate}
+                          onChange={(e) => setPnlStartDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="P&L From Date"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={pnlEndDate}
+                          onChange={(e) => setPnlEndDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="P&L To Date"
+                        />
+                      </Field>
+                    </div>
+                    {tours && tours.length > 0 && (
+                      <Select
+                        aria-label="P&L Tour Filter"
+                        value={pnlTour}
+                        onChange={(e) => setPnlTour(e.target.value)}
+                        className="text-xs"
+                      >
+                        <option value="all">All Tours</option>
+                        {tours.map((t) => {
+                          const name = typeof t === "string" ? t : t.tourName || t.name
+                          return (
+                            <option key={t._id || name} value={name}>
+                              {name}
+                            </option>
+                          )
+                        })}
+                      </Select>
+                    )}
+                  </div>
+                </div>
+                <div className="pt-5 mt-4 border-t border-border-subtle">
+                  <Button
+                    variant="secondary"
+                    className="w-full gap-2 min-h-11"
+                    onClick={() =>
+                      handleExport("tour-pnl", {
+                        startDate: pnlStartDate,
+                        endDate: pnlEndDate,
+                        tourName: pnlTour,
+                      })
+                    }
+                    disabled={isExporting}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    <span>Export Tour P&L CSV</span>
+                  </Button>
+                </div>
+              </Card>
             </div>
           </div>
         )}
@@ -803,7 +1029,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                 <div>
                   <h2 className="text-base font-semibold text-ink">Step 2: Upload CSV File</h2>
                   <p className="text-xs text-ink-muted mt-1">
-                    Upload your UTF-8 encoded .csv spreadsheet. Maximum file size is 1.5 MB (up to 2,000 rows).
+                    Upload your UTF-8 encoded .csv spreadsheet. Maximum file size is 1 MB (up to 2,000 rows, 30 columns, 500 characters per cell).
                   </p>
                 </div>
 
@@ -1106,19 +1332,17 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                         <thead className="bg-danger/5 text-danger font-semibold uppercase tracking-wider border-b border-danger/20">
                           <tr>
                             <th className="p-3 w-16">Row</th>
-                            <th className="p-3">Reason / Errors</th>
+                            <th className="p-3">Field</th>
+                            <th className="p-3">Reason / Error</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-danger/10">
-                          {previewData.sampleInvalid.map((item) => (
-                            <tr key={item.rowNumber} className="hover:bg-danger/5">
-                              <td className="p-3 font-mono font-bold text-danger">{item.rowNumber}</td>
+                          {previewData.sampleInvalid.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-danger/5">
+                              <td className="p-3 font-mono font-bold text-danger">{item.row ?? item.rowNumber ?? "—"}</td>
+                              <td className="p-3 font-mono text-danger">{item.field || "—"}</td>
                               <td className="p-3 text-danger">
-                                <ul className="list-disc list-inside space-y-0.5">
-                                  {item.errors.map((err, i) => (
-                                    <li key={i}>{err}</li>
-                                  ))}
-                                </ul>
+                                {item.code || (Array.isArray(item.errors) ? item.errors.join(", ") : JSON.stringify(item))}
                               </td>
                             </tr>
                           ))}
@@ -1157,7 +1381,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
               <div>
                 <h2 className="text-base font-semibold text-ink">Recent Import Batches</h2>
                 <p className="text-xs text-ink-muted">
-                  Audit log of previous spreadsheet imports with atomic undo capability.
+                  Audit log of previous spreadsheet imports with undo capability.
                 </p>
               </div>
               <Button
@@ -1183,7 +1407,6 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                 <thead className="bg-surface-muted text-ink-muted font-semibold uppercase tracking-wider border-b border-border-subtle">
                   <tr>
                     <th className="p-3">Import Date</th>
-                    <th className="p-3">File Name</th>
                     <th className="p-3">Type</th>
                     <th className="p-3 text-right">Imported</th>
                     <th className="p-3 text-right">Skipped</th>
@@ -1194,7 +1417,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                 <tbody className="divide-y divide-border-subtle">
                   {batches.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-ink-muted">
+                      <td colSpan={6} className="p-8 text-center text-ink-muted">
                         No import batches found for this account.
                       </td>
                     </tr>
@@ -1208,7 +1431,6 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                           <td className="p-3 text-ink font-mono">
                             {new Date(batch.createdAt).toLocaleString()}
                           </td>
-                          <td className="p-3 font-medium text-ink">{batch.fileName || "—"}</td>
                           <td className="p-3">
                             <Badge variant={batch.type === "customers" ? "primary" : "warning"}>
                               {batch.type}
@@ -1258,7 +1480,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
           onClose={() => setUndoBatchTarget(null)}
           onConfirm={handleConfirmUndo}
           title="Undo Import Batch?"
-          message={`Are you sure you want to revert the import batch "${undoBatchTarget?.fileName || ""}" (${undoBatchTarget?.successCount || 0} records)? Records not locked by closed books will be removed.`}
+          message={`Are you sure you want to revert this ${undoBatchTarget?.type || ""} import batch (${undoBatchTarget?.successCount || 0} records)? Records not locked by closed books will be removed.`}
           confirmText={isUndoing ? "Reverting..." : "Undo Batch"}
           cancelText="Cancel"
           isDestructive={true}

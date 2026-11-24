@@ -98,6 +98,14 @@ export function toCsv({ columns, rows, bom = true, eol = "\r\n" }) {
   return bom ? `\uFEFF${csvBody}` : csvBody
 }
 
+export const CSV_PARSER_LIMITS = Object.freeze({
+  MAX_BYTES: 1_000_000,
+  MAX_ROWS: 2_000,
+  MAX_COLS: 30,
+  MAX_CELL: 500,
+  MAX_CELL_CHARS: 500,
+})
+
 /**
  * Pure RFC 4180 compliant CSV Parser with bounds enforcement and detailed error codes.
  *
@@ -111,10 +119,10 @@ export function toCsv({ columns, rows, bom = true, eol = "\r\n" }) {
  */
 export function parseCsv(text, limits = {}) {
   const {
-    maxBytes = 1000000,
-    maxRows = 2000,
-    maxCols = 30,
-    maxCell = 500,
+    maxBytes = CSV_PARSER_LIMITS.MAX_BYTES,
+    maxRows = CSV_PARSER_LIMITS.MAX_ROWS,
+    maxCols = CSV_PARSER_LIMITS.MAX_COLS,
+    maxCell = CSV_PARSER_LIMITS.MAX_CELL,
   } = limits
 
   if (typeof text !== "string") {

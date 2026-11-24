@@ -108,8 +108,8 @@ describe("DataManagement Component (Task C)", () => {
     fireEvent.click(batchesTab)
 
     await waitFor(() => {
-      expect(screen.getByText("customers-nov2026.csv")).toBeDefined()
-      expect(screen.getByText("expenses-nov2026.csv")).toBeDefined()
+      expect(screen.getByText("customers")).toBeDefined()
+      expect(screen.getByText("expenses")).toBeDefined()
     })
 
     // Undo button on active batch
@@ -117,7 +117,7 @@ describe("DataManagement Component (Task C)", () => {
     fireEvent.click(undoBtns[0])
 
     expect(screen.getByText(/Undo Import Batch\?/i)).toBeDefined()
-    expect(screen.getByText(/Are you sure you want to revert the import batch/i)).toBeDefined()
+    expect(screen.getByText(/Are you sure you want to revert this/i)).toBeDefined()
   })
 
   it("4. RateLimitNotice renders calmly when export fails with HTTP 429", async () => {

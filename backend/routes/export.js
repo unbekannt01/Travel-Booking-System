@@ -11,10 +11,11 @@ import { toCsv } from "../../shared/csv.js"
 import { EXPENSE_CATEGORY_MAP } from "../../shared/expenses.js"
 import { buildDayBook } from "../../shared/cashbook.js"
 import CashBookSetup from "../models/CashBookSetup.js"
+import { calculateProfitLoss } from "../../shared/profitLoss.js"
 
 const router = express.Router()
 
-const exportLimiter = rateLimit({
+export const exportLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { message: "Too many export requests. Please try again later." },
@@ -41,13 +42,37 @@ function toCurrency(num) {
 /**
  * GET /api/export/:type
  * Generates an RFC 4180 CSV with UTF-8 BOM, formula injection defense, and tenant isolation.
- * Supported types: customers, expenses, bookings, cashbook, receivables, pnl
+ * Supported types: customers, expenses, bookings, passengers, payments, cashbook/daybook, receivables/outstanding, tour-pnl/pnl
  */
 router.get("/:type", verifyToken, exportLimiter, async (req, res) => {
   try {
-    const { type } = req.params
+    let { type } = req.params
     const userId = req.user.id
-    const { startDate, endDate, category, tourName } = req.query
+    const startDate = req.query.startDate || req.query.from
+    const endDate = req.query.endDate || req.query.to
+    const { category, tourName } = req.query
+
+    // Aliases
+    if (type === "daybook") type = "cashbook"
+    if (type === "outstanding") type = "receivables"
+    if (type === "pnl") type = "tour-pnl"
+
+    // 366-day date range limit check
+    if (startDate && endDate) {
+      const dStart = new Date(startDate)
+      const dEnd = new Date(endDate)
+      if (isNaN(dStart.getTime()) || isNaN(dEnd.getTime())) {
+        return res.status(400).json({ message: "Invalid date format. Expected YYYY-MM-DD." })
+      }
+      const diffMs = dEnd.getTime() - dStart.getTime()
+      if (diffMs < 0) {
+        return res.status(400).json({ message: "Start date must be before or equal to end date." })
+      }
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      if (diffDays > 366) {
+        return res.status(400).json({ message: "Date range cannot exceed 366 days." })
+      }
+    }
 
     const todayStr = new Date().toISOString().slice(0, 10)
     let columns = []
@@ -164,7 +189,7 @@ router.get("/:type", verifyToken, exportLimiter, async (req, res) => {
         const advance = Number(b.advanceReceived) || 0
         const balance = Math.max(0, total - advance)
         const seats = Array.isArray(b.passengers)
-          ? b.passengers.map((p) => p.seatNumber).filter(Boolean).join(", ")
+          ? b.passengers.map((p) => p.seatNumber || p.seatId).filter(Boolean).join(", ")
           : ""
 
         return {
@@ -183,6 +208,140 @@ router.get("/:type", verifyToken, exportLimiter, async (req, res) => {
           paymentMode: b.paymentMode || "Cash",
         }
       })
+    } else if (type === "passengers") {
+      // Passenger List Export - strictly NO Aadhaar
+      const query = { userId, deletedAt: null }
+      if (startDate || endDate) {
+        query.journeyDate = {}
+        if (startDate) query.journeyDate.$gte = new Date(startDate)
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          query.journeyDate.$lte = end
+        }
+      }
+      if (tourName && tourName !== "all") {
+        query.tourName = tourName
+      }
+
+      const bookings = await Booking.find(query).sort({ journeyDate: -1 }).lean()
+
+      columns = [
+        { key: "invoiceNo", label: "Invoice No" },
+        { key: "tourName", label: "Tour Name" },
+        { key: "journeyDate", label: "Journey Date" },
+        { key: "passengerName", label: "Passenger Name" },
+        { key: "age", label: "Age" },
+        { key: "gender", label: "Gender" },
+        { key: "city", label: "City" },
+        { key: "seatNumber", label: "Seat No" },
+        { key: "bookingStatus", label: "Booking Status" },
+      ]
+
+      bookings.forEach((b) => {
+        const pList = Array.isArray(b.passengers) ? b.passengers : []
+        pList.forEach((p) => {
+          rows.push({
+            invoiceNo: b.invoiceNo || "",
+            tourName: b.tourName || "",
+            journeyDate: toDateStr(b.journeyDate),
+            passengerName: p.name || "",
+            age: p.age || "",
+            gender: p.gender || "",
+            city: p.city || "",
+            seatNumber: p.seatNumber || p.seatId || "",
+            bookingStatus: b.status || "Confirmed",
+          })
+        })
+      })
+    } else if (type === "payments") {
+      // Payments Ledger Export
+      const query = { userId, deletedAt: null }
+      if (startDate || endDate) {
+        query.paymentDate = {}
+        if (startDate) query.paymentDate.$gte = new Date(startDate)
+        if (endDate) {
+          const end = new Date(endDate)
+          end.setHours(23, 59, 59, 999)
+          query.paymentDate.$lte = end
+        }
+      }
+
+      const payments = await Payment.find(query).sort({ paymentDate: -1 }).lean()
+
+      // Fetch corresponding bookings to populate invoiceNo and customerName
+      const bookingIds = [...new Set(payments.map((p) => String(p.bookingId)).filter(Boolean))]
+      const bookings = await Booking.find({ _id: { $in: bookingIds } })
+        .select("invoiceNo contactName customerName")
+        .lean()
+      const bookingMap = new Map(bookings.map((b) => [String(b._id), b]))
+
+      columns = [
+        { key: "receiptNo", label: "Receipt No" },
+        { key: "paymentDate", label: "Receipt Date" },
+        { key: "invoiceNo", label: "Invoice No" },
+        { key: "customerName", label: "Customer Name" },
+        { key: "paymentMode", label: "Payment Mode" },
+        { key: "type", label: "Payment Type" },
+        { key: "amount", label: "Amount (₹)" },
+        { key: "status", label: "Status" },
+        { key: "recordedBy", label: "Recorded By" },
+      ]
+
+      rows = payments.map((p) => {
+        const b = bookingMap.get(String(p.bookingId)) || {}
+        const isRefund = p.type === "refund"
+        const amt = Number(p.amount) || 0
+        const signedAmount = isRefund ? -Math.abs(amt) : Math.abs(amt)
+
+        return {
+          receiptNo: p.receiptNo || "",
+          paymentDate: toDateStr(p.paymentDate || p.createdAt),
+          invoiceNo: b.invoiceNo || "",
+          customerName: b.contactName || b.customerName || "",
+          paymentMode: p.paymentMode || "Cash",
+          type: p.type || "payment",
+          amount: toCurrency(signedAmount),
+          status: p.isVoid ? "Voided" : "Active",
+          recordedBy: p.recordedBy || "",
+        }
+      })
+    } else if (type === "tour-pnl") {
+      // Tour-wise Profit/Loss Export (reuses existing P&L engine)
+      const [bookings, expenses] = await Promise.all([
+        Booking.find({ userId, deletedAt: null }).lean(),
+        Expense.find({ userId, deletedAt: null }).lean(),
+      ])
+
+      const pnl = calculateProfitLoss({
+        bookings,
+        expenses,
+        filters: { from: startDate, to: endDate, tourName },
+      })
+
+      columns = [
+        { key: "tourName", label: "Tour Name" },
+        { key: "departuresCount", label: "Departures" },
+        { key: "passengers", label: "Passengers" },
+        { key: "bookedRevenue", label: "Booked Revenue (₹)" },
+        { key: "collected", label: "Collected (₹)" },
+        { key: "outstanding", label: "Outstanding (₹)" },
+        { key: "expensesTotal", label: "Total Expenses (₹)" },
+        { key: "profitBooked", label: "Booked Profit/Loss (₹)" },
+        { key: "marginPercent", label: "Operating Margin (%)" },
+      ]
+
+      rows = (pnl.tours || []).map((t) => ({
+        tourName: t.tourName || "",
+        departuresCount: t.departuresCount || 0,
+        passengers: t.passengers || 0,
+        bookedRevenue: toCurrency(t.bookedRevenue),
+        collected: toCurrency(t.collected),
+        outstanding: toCurrency(t.outstanding),
+        expensesTotal: toCurrency(t.expensesTotal),
+        profitBooked: toCurrency(t.profitBooked),
+        marginPercent: t.marginPercent != null ? `${t.marginPercent}%` : "—",
+      }))
     } else if (type === "cashbook") {
       const start = startDate || todayStr
       const end = endDate || todayStr
@@ -234,7 +393,6 @@ router.get("/:type", verifyToken, exportLimiter, async (req, res) => {
         totalBalance: toCurrency(e.totalBalance),
       }))
     } else if (type === "receivables") {
-      // Outstanding report
       const bookings = await Booking.find({ userId, deletedAt: null }).lean()
       const customerMap = new Map()
 
@@ -302,7 +460,6 @@ router.get("/:type", verifyToken, exportLimiter, async (req, res) => {
       meta: {
         type,
         rowCount: rows.length,
-        fileName,
       },
     })
 

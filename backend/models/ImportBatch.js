@@ -16,8 +16,8 @@ const importBatchSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["committed", "reverted", "partially_reverted"],
-      default: "committed",
+      enum: ["committing", "committed", "failed", "reverted", "partially_reverted"],
+      default: "committing",
     },
     totalRows: {
       type: Number,
@@ -44,11 +44,22 @@ const importBatchSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-    fileName: {
-      type: String,
-      default: "",
-      trim: true,
-      maxLength: 255,
+    undoSummary: {
+      undone: { type: Number, default: 0 },
+      booksLocked: { type: Number, default: 0 },
+      inUse: { type: Number, default: 0 },
+      alreadyDeleted: { type: Number, default: 0 },
+    },
+    errors: {
+      type: [
+        {
+          row: { type: Number, required: true },
+          field: { type: String, required: true },
+          code: { type: String, required: true },
+          _id: false,
+        },
+      ],
+      default: [],
     },
     mapping: {
       type: Map,
@@ -60,7 +71,7 @@ const importBatchSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true, suppressReservedKeysWarning: true }
 )
 
 importBatchSchema.index({ userId: 1, createdAt: -1 })

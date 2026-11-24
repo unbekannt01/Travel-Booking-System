@@ -17,39 +17,47 @@ import {
   EXPENSE_IMPORT_SPEC,
   matchExpenseCategory,
   matchExpensePaymentMode,
+  CSV_PARSER_LIMITS,
 } from "../../shared/csv.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
-import { getEffectiveLockDate, formatLockDateDisplay } from "../utils/booksLock.js"
+import { getEffectiveLockDate } from "../utils/booksLock.js"
 
 const router = express.Router()
 
-const importPreviewLimiter = rateLimit({
+// Rate Limiting: 20 previews per 15 min, 10 commits/undos per 15 min
+export const importPreviewLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 20,
   message: { message: "Too many import preview requests. Please try again later." },
 })
 
-const importCommitLimiter = rateLimit({
+export const importCommitLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
-  message: { message: "Too many import commit requests. Please try again later." },
-})
-
-const importUndoLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { message: "Too many import undo requests. Please try again later." },
+  max: 10,
+  message: { message: "Too many import commit/undo requests. Please try again later." },
 })
 
 const HMAC_SECRET = process.env.JWT_SECRET || "yatrahub-import-token-secret-key-2026"
 
-function generatePreviewToken(userId, type, contentHash, expiry) {
-  const payload = `${userId}:${type}:${contentHash}:${expiry}`
+function computeMappingHash(mapping) {
+  if (!mapping || typeof mapping !== "object") return ""
+  const sorted = Object.keys(mapping)
+    .sort()
+    .reduce((acc, k) => {
+      acc[k] = mapping[k]
+      return acc
+    }, {})
+  return crypto.createHash("sha256").update(JSON.stringify(sorted)).digest("hex")
+}
+
+export function generatePreviewToken(userId, type, mapping, contentHash, expiry) {
+  const mappingHash = computeMappingHash(mapping)
+  const payload = `${userId}:${type}:${mappingHash}:${contentHash}:${expiry}`
   const signature = crypto.createHmac("sha256", HMAC_SECRET).update(payload).digest("hex")
   return `${signature}.${expiry}`
 }
 
-function verifyPreviewToken(tokenWithExpiry, userId, type, contentHash) {
+export function verifyPreviewToken(tokenWithExpiry, userId, type, mapping, contentHash) {
   if (!tokenWithExpiry || typeof tokenWithExpiry !== "string") return false
   const parts = tokenWithExpiry.split(".")
   if (parts.length !== 2) return false
@@ -57,7 +65,8 @@ function verifyPreviewToken(tokenWithExpiry, userId, type, contentHash) {
   const expiry = parseInt(expiryStr, 10)
   if (isNaN(expiry) || Date.now() > expiry) return false
 
-  const expectedPayload = `${userId}:${type}:${contentHash}:${expiry}`
+  const mappingHash = computeMappingHash(mapping)
+  const expectedPayload = `${userId}:${type}:${mappingHash}:${contentHash}:${expiry}`
   const expectedSignature = crypto.createHmac("sha256", HMAC_SECRET).update(expectedPayload).digest("hex")
   if (signature.length !== expectedSignature.length) return false
   return crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expectedSignature, "hex"))
@@ -66,10 +75,12 @@ function verifyPreviewToken(tokenWithExpiry, userId, type, contentHash) {
 /**
  * GET /api/import/batches
  * Returns the latest 20 import batches for the authenticated operator.
+ * Privacy guarantee: does not store or return file names.
  */
 router.get("/batches", verifyToken, async (req, res) => {
   try {
     const batches = await ImportBatch.find({ userId: req.user.id })
+      .select("-errors -recordIds")
       .sort({ createdAt: -1 })
       .limit(20)
       .lean()
@@ -83,12 +94,12 @@ router.get("/batches", verifyToken, async (req, res) => {
 
 /**
  * POST /api/import/:type/preview
- * Parses CSV, maps headers, validates data, evaluates books lock, and returns validation summary with token.
+ * Parses CSV, maps headers, validates data, evaluates books lock, and returns validation summary with HMAC token.
  */
 router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res) => {
   try {
     const { type } = req.params
-    const { csvText, fileName = "", mapping: customMapping = null } = req.body
+    const { csvText, mapping: customMapping = null } = req.body
     const userId = req.user.id
 
     if (type !== "customers" && type !== "expenses") {
@@ -101,7 +112,12 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
 
     let parsed
     try {
-      parsed = parseCsv(csvText, { maxBytes: 1500000, maxRows: 2000, maxCols: 30, maxCell: 500 })
+      parsed = parseCsv(csvText, {
+        maxBytes: CSV_PARSER_LIMITS.MAX_BYTES,
+        maxRows: CSV_PARSER_LIMITS.MAX_ROWS,
+        maxCols: CSV_PARSER_LIMITS.MAX_COLS,
+        maxCell: CSV_PARSER_LIMITS.MAX_CELL,
+      })
     } catch (parseErr) {
       return res.status(400).json({
         message: parseErr.message,
@@ -149,7 +165,9 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
 
     const lockDate = await getEffectiveLockDate(userId)
     const validRows = []
+    const invalidErrors = []
     const invalidRows = []
+    const invalidRowNumbers = new Set()
     const seenPhonesInFile = new Set()
 
     // For customers, check existing phone numbers in DB for deduplication
@@ -161,23 +179,23 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
 
     parsed.rows.forEach((row, idx) => {
       const rowNum = idx + 2 // 1-based index including header row
-      const errors = []
+      const rowErrors = []
 
       if (type === "customers") {
         const rawName = row[fieldToHeader.name] || ""
         const cleanName = String(rawName).trim()
         if (cleanName.length < 2) {
-          errors.push("Customer Name must be at least 2 characters")
+          rowErrors.push({ row: rowNum, field: "name", code: "NAME_TOO_SHORT", message: "Customer name must be at least 2 characters." })
         } else if (cleanName.length > 120) {
-          errors.push("Customer Name cannot exceed 120 characters")
+          rowErrors.push({ row: rowNum, field: "name", code: "NAME_TOO_LONG", message: "Customer name cannot exceed 120 characters." })
         }
 
         const rawPhone = row[fieldToHeader.phone] || ""
         const phoneNorm = normalizeIndianMobile(rawPhone)
         if (!phoneNorm.valid) {
-          errors.push(`Invalid 10-digit Indian mobile number: '${rawPhone}'`)
+          rowErrors.push({ row: rowNum, field: "phone", code: "INVALID_PHONE", message: "Invalid 10-digit Indian phone number." })
         } else if (seenPhonesInFile.has(phoneNorm.normalized)) {
-          errors.push(`Duplicate mobile number '${phoneNorm.normalized}' in file`)
+          rowErrors.push({ row: rowNum, field: "phone", code: "DUPLICATE_PHONE", message: "Duplicate phone number in CSV file." })
         }
 
         const rawCity = row[fieldToHeader.city] || ""
@@ -187,7 +205,7 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
         const rawNotes = row[fieldToHeader.notes] || ""
         const rawOptOut = row[fieldToHeader.whatsappOptOut] || ""
 
-        if (errors.length === 0) {
+        if (rowErrors.length === 0) {
           seenPhonesInFile.add(phoneNorm.normalized)
           const isExisting = existingPhonesInDb.has(phoneNorm.normalized)
           validRows.push({
@@ -205,25 +223,30 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
             },
           })
         } else {
+          invalidRowNumbers.add(rowNum)
+          invalidErrors.push(...rowErrors)
           invalidRows.push({
             rowNumber: rowNum,
-            errors,
-            raw: row,
+            row: rowNum,
+            field: rowErrors[0]?.field || "general",
+            code: rowErrors[0]?.code || "INVALID_ROW",
+            errors: rowErrors.map((e) => e.message || e.code),
+            errorDetails: rowErrors,
           })
         }
       } else if (type === "expenses") {
         const rawDate = row[fieldToHeader.date] || ""
         const parsedDateStr = parseDate(rawDate)
         if (!parsedDateStr) {
-          errors.push(`Invalid date format '${rawDate}'. Expected YYYY-MM-DD or DD-MM-YYYY`)
+          rowErrors.push({ row: rowNum, field: "date", code: "INVALID_DATE", message: "Invalid date format." })
         } else if (lockDate && parsedDateStr <= lockDate) {
-          errors.push(`Date ${parsedDateStr} is in closed books period (locked up to ${formatLockDateDisplay(lockDate)})`)
+          rowErrors.push({ row: rowNum, field: "date", code: "BOOKS_LOCKED", message: "Cannot backdate expense into closed books period." })
         }
 
         const rawAmount = row[fieldToHeader.amount] || ""
         const moneyParsed = parseMoney(rawAmount)
         if (!moneyParsed.valid || moneyParsed.paise <= 0) {
-          errors.push(`Invalid amount '${rawAmount}'. Must be a positive currency value`)
+          rowErrors.push({ row: rowNum, field: "amount", code: "INVALID_AMOUNT", message: "Invalid positive amount." })
         }
 
         const rawCategory = row[fieldToHeader.category] || ""
@@ -238,12 +261,12 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
         const rawVendor = row[fieldToHeader.vendor] || ""
         const rawNotes = row[fieldToHeader.notes] || ""
 
-        if (errors.length === 0) {
+        if (rowErrors.length === 0) {
           validRows.push({
             rowNumber: rowNum,
             data: {
               date: parsedDateStr,
-              amount: moneyParsed.paise / 100, // Rupees in DB
+              amount: moneyParsed.paise / 100,
               category: categoryId,
               account: normAccount,
               paymentMode,
@@ -253,10 +276,15 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
             },
           })
         } else {
+          invalidRowNumbers.add(rowNum)
+          invalidErrors.push(...rowErrors)
           invalidRows.push({
             rowNumber: rowNum,
-            errors,
-            raw: row,
+            row: rowNum,
+            field: rowErrors[0]?.field || "general",
+            code: rowErrors[0]?.code || "INVALID_ROW",
+            errors: rowErrors.map((e) => e.message || e.code),
+            errorDetails: rowErrors,
           })
         }
       }
@@ -264,16 +292,15 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
 
     const contentHash = crypto.createHash("sha256").update(csvText).digest("hex")
     const expiry = Date.now() + 15 * 60 * 1000 // 15 mins
-    const token = generatePreviewToken(userId, type, contentHash, expiry)
+    const token = generatePreviewToken(userId, type, effectiveMapping, contentHash, expiry)
 
     res.json({
       token,
       type,
-      fileName,
       counts: {
         total: parsed.rowCount,
         valid: validRows.length,
-        invalid: invalidRows.length,
+        invalid: invalidRowNumbers.size,
         existing: validRows.filter((r) => r.isExisting).length,
       },
       mapping: effectiveMapping,
@@ -291,12 +318,12 @@ router.post("/:type/preview", verifyToken, importPreviewLimiter, async (req, res
 
 /**
  * POST /api/import/:type/commit
- * Re-validates data against books lock and server rules, executes chunk insert, records history & audit.
+ * Re-validates data, executes chunked non-atomic insert, updates status from 'committing' to 'committed'/'failed'.
  */
 router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) => {
   try {
     const { type } = req.params
-    const { csvText, fileName = "", mapping: customMapping = null, token } = req.body
+    const { csvText, mapping: customMapping = null, token } = req.body
     const userId = req.user.id
 
     if (type !== "customers" && type !== "expenses") {
@@ -307,12 +334,12 @@ router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) 
       return res.status(400).json({ message: "Preview token is required to commit import." })
     }
 
-    const contentHash = crypto.createHash("sha256").update(csvText).digest("hex")
-    if (!verifyPreviewToken(token, userId, type, contentHash)) {
-      return res.status(403).json({ message: "Invalid or expired import preview token. Please preview the file again." })
-    }
-
-    const parsed = parseCsv(csvText, { maxBytes: 1500000, maxRows: 2000, maxCols: 30, maxCell: 500 })
+    const parsed = parseCsv(csvText, {
+      maxBytes: CSV_PARSER_LIMITS.MAX_BYTES,
+      maxRows: CSV_PARSER_LIMITS.MAX_ROWS,
+      maxCols: CSV_PARSER_LIMITS.MAX_COLS,
+      maxCell: CSV_PARSER_LIMITS.MAX_CELL,
+    })
     const spec = type === "customers" ? CUSTOMER_IMPORT_SPEC : EXPENSE_IMPORT_SPEC
     const headerMapping = mapHeaders(parsed.headers, spec)
 
@@ -323,6 +350,11 @@ router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) 
     const effectiveMapping = customMapping && typeof customMapping === "object"
       ? { ...headerMapping.mapping, ...customMapping }
       : headerMapping.mapping
+
+    const contentHash = crypto.createHash("sha256").update(csvText).digest("hex")
+    if (!verifyPreviewToken(token, userId, type, effectiveMapping, contentHash)) {
+      return res.status(403).json({ message: "Invalid or expired import preview token. Please preview the file again." })
+    }
 
     const fieldToHeader = {}
     for (const [csvHeader, fieldKey] of Object.entries(effectiveMapping)) {
@@ -371,7 +403,6 @@ router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) 
         const moneyParsed = parseMoney(row[fieldToHeader.amount])
 
         if (parsedDateStr && moneyParsed.valid && moneyParsed.paise > 0) {
-          // Strict books lock check
           if (lockDate && parsedDateStr <= lockDate) {
             skippedCount++
           } else {
@@ -400,35 +431,53 @@ router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) 
       })
     }
 
-    // Step 1: Create batch record
+    // Step 1: Initialize batch in 'committing' state
     const batch = new ImportBatch({
       userId,
       type,
-      status: "committed",
+      status: "committing",
       totalRows: parsed.rowCount,
       successCount: 0,
-      skippedCount,
+      skippedCount: 0,
       recordIds: [],
-      fileName: fileName || `${type}-import.csv`,
       mapping: effectiveMapping,
     })
     await batch.save()
 
-    // Step 2: Assign importBatchId and insert documents
-    validDocs.forEach((doc) => {
-      doc.importBatchId = batch._id
-    })
+    // Step 2: Assign importBatchId and insert documents in chunks of 50
+    const CHUNK_SIZE = 50
+    const insertedIds = []
+    let insertFailed = false
 
-    let insertedRecords = []
-    if (type === "customers") {
-      insertedRecords = await Customer.insertMany(validDocs, { ordered: false })
-    } else if (type === "expenses") {
-      insertedRecords = await Expense.insertMany(validDocs, { ordered: false })
+    for (let i = 0; i < validDocs.length; i += CHUNK_SIZE) {
+      const chunk = validDocs.slice(i, i + CHUNK_SIZE)
+      chunk.forEach((doc) => {
+        doc.importBatchId = batch._id
+      })
+
+      try {
+        let insertedChunk = []
+        if (type === "customers") {
+          insertedChunk = await Customer.insertMany(chunk, { ordered: false })
+        } else if (type === "expenses") {
+          insertedChunk = await Expense.insertMany(chunk, { ordered: false })
+        }
+        insertedChunk.forEach((r) => insertedIds.push(r._id))
+      } catch (chunkErr) {
+        insertFailed = true
+        console.error("Chunk insert error:", chunkErr.name)
+        if (chunkErr.insertedDocs) {
+          chunkErr.insertedDocs.forEach((r) => insertedIds.push(r._id))
+        }
+        break
+      }
     }
 
-    // Step 3: Update batch with inserted record IDs
-    batch.recordIds = insertedRecords.map((r) => r._id)
-    batch.successCount = insertedRecords.length
+    // Step 3: Finalize batch with inserted record IDs and final status
+    batch.recordIds = insertedIds
+    batch.successCount = insertedIds.length
+    batch.skippedCount = skippedCount + (validDocs.length - insertedIds.length)
+    batch.status = insertFailed ? "failed" : "committed"
     await batch.save()
 
     await logAudit({
@@ -439,31 +488,34 @@ router.post("/:type/commit", verifyToken, importCommitLimiter, async (req, res) 
         batchId: batch._id,
         type,
         successCount: batch.successCount,
-        skippedCount,
-        fileName,
+        skippedCount: batch.skippedCount,
       },
     })
 
     res.status(201).json({
-      success: true,
+      success: !insertFailed,
       batchId: batch._id,
+      status: batch.status,
       counts: {
         total: parsed.rowCount,
         imported: batch.successCount,
-        skipped: skippedCount,
+        skipped: batch.skippedCount,
       },
+      message: insertFailed
+        ? `Import partially completed with errors: ${batch.successCount} imported, ${batch.skippedCount} skipped.`
+        : `Successfully imported ${batch.successCount} ${type}.`,
     })
   } catch (error) {
     console.error("Import commit error:", error.name)
-    res.status(500).json({ message: "Failed to commit import batch." })
+    res.status(500).json({ message: "Failed to commit CSV import." })
   }
 })
 
 /**
  * POST /api/import/batches/:id/undo
- * Undoes an import batch with books lock checks and dependency validation.
+ * Performs per-row undo with idempotency and granular reason reporting. Never blocks whole batch.
  */
-router.post("/batches/:id/undo", verifyToken, importUndoLimiter, async (req, res) => {
+router.post("/batches/:id/undo", verifyToken, importCommitLimiter, async (req, res) => {
   try {
     const { id } = req.params
     const userId = req.user.id
@@ -478,54 +530,60 @@ router.post("/batches/:id/undo", verifyToken, importUndoLimiter, async (req, res
     }
 
     const lockDate = await getEffectiveLockDate(userId)
-    const reasons = []
-    let revertedCount = 0
-    let skippedCount = 0
+    const undoSummary = {
+      undone: 0,
+      booksLocked: 0,
+      inUse: 0,
+      alreadyDeleted: 0,
+    }
 
     if (batch.type === "expenses") {
-      const expenses = await Expense.find({
-        _id: { $in: batch.recordIds },
-        userId,
-        deletedAt: null,
-      })
-
-      for (const exp of expenses) {
-        const expDateStr = exp.date.toISOString().slice(0, 10)
-        if (lockDate && expDateStr <= lockDate) {
-          skippedCount++
-          if (!reasons.includes("BOOKS_LOCKED")) reasons.push("BOOKS_LOCKED")
+      for (const recId of batch.recordIds) {
+        const exp = await Expense.findOne({ _id: recId, userId })
+        if (!exp || exp.deletedAt) {
+          undoSummary.alreadyDeleted++
         } else {
-          exp.deletedAt = new Date()
-          exp.deletedBy = userId
-          await exp.save()
-          revertedCount++
+          const expDateStr = exp.date ? exp.date.toISOString().slice(0, 10) : ""
+          if (lockDate && expDateStr <= lockDate) {
+            undoSummary.booksLocked++
+          } else {
+            exp.deletedAt = new Date()
+            exp.deletedBy = userId
+            await exp.save()
+            undoSummary.undone++
+          }
         }
       }
     } else if (batch.type === "customers") {
-      const customers = await Customer.find({
-        _id: { $in: batch.recordIds },
-        userId,
-        deletedAt: null,
-      })
-
-      for (const cust of customers) {
-        // Check if customer has active bookings
-        const hasBookings = await Booking.exists({ customerId: cust._id, deletedAt: null })
-        if (hasBookings) {
-          skippedCount++
-          if (!reasons.includes("IN_USE")) reasons.push("IN_USE")
+      for (const recId of batch.recordIds) {
+        const cust = await Customer.findOne({ _id: recId, userId })
+        if (!cust || cust.deletedAt) {
+          undoSummary.alreadyDeleted++
         } else {
-          cust.deletedAt = new Date()
-          cust.deletedBy = userId
-          await cust.save()
-          revertedCount++
+          const hasBookings = await Booking.exists({ customerId: cust._id, deletedAt: null })
+          if (hasBookings) {
+            undoSummary.inUse++
+          } else {
+            cust.deletedAt = new Date()
+            cust.deletedBy = userId
+            await cust.save()
+            undoSummary.undone++
+          }
         }
       }
     }
 
-    batch.revertedCount = (batch.revertedCount || 0) + revertedCount
+    batch.revertedCount = (batch.revertedCount || 0) + undoSummary.undone
     batch.revertedAt = new Date()
-    batch.status = skippedCount > 0 ? "partially_reverted" : "reverted"
+    batch.undoSummary = undoSummary
+
+    const totalRecords = batch.recordIds.length
+    if (undoSummary.undone === totalRecords || (undoSummary.undone + undoSummary.alreadyDeleted === totalRecords)) {
+      batch.status = "reverted"
+    } else {
+      batch.status = "partially_reverted"
+    }
+
     await batch.save()
 
     await logAudit({
@@ -535,21 +593,20 @@ router.post("/batches/:id/undo", verifyToken, importUndoLimiter, async (req, res
       meta: {
         batchId: batch._id,
         type: batch.type,
-        revertedCount,
-        skippedCount,
-        reasons,
+        revertedCount: undoSummary.undone,
+        undoSummary,
       },
     })
 
     res.json({
       success: true,
       status: batch.status,
-      revertedCount,
-      skippedCount,
-      reasons,
+      revertedCount: undoSummary.undone,
+      skippedCount: undoSummary.booksLocked + undoSummary.inUse + undoSummary.alreadyDeleted,
+      summary: undoSummary,
       message:
-        revertedCount > 0
-          ? `Successfully reverted ${revertedCount} records.`
+        undoSummary.undone > 0
+          ? `Successfully reverted ${undoSummary.undone} record(s).`
           : "No records could be reverted.",
     })
   } catch (error) {
