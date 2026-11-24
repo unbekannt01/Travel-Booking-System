@@ -205,11 +205,13 @@ router.get("/", verifyToken, async (req, res) => {
       .select("_id invoiceNo date contactPhone")
       .lean()
 
-    const unlinkedBookingsCount = unlinkedBookings.length
+    let actionableLinkableCount = 0
     const unlinkedUnresolved = []
     for (const b of unlinkedBookings) {
       const evalResult = evaluateBookingLinkability(b)
-      if (!evalResult.canLink) {
+      if (evalResult.canLink) {
+        actionableLinkableCount += 1
+      } else {
         unlinkedUnresolved.push({
           bookingId: b._id.toString(),
           invoiceNo: b.invoiceNo || "—",
@@ -238,7 +240,7 @@ router.get("/", verifyToken, async (req, res) => {
         total: allActiveCustomers.length,
         repeat: repeatCount,
         withOutstanding: withOutstandingCount,
-        unlinkedBookingsCount,
+        unlinkedBookingsCount: actionableLinkableCount,
         unresolvedBookings: unlinkedUnresolved,
       },
     })

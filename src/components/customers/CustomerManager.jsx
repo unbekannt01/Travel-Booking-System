@@ -296,10 +296,12 @@ export default function CustomerManager({
                 <div>
                   <strong className="font-bold block text-ink">
                     {counts.unlinkedBookingsCount}{" "}
-                    {counts.unlinkedBookingsCount === 1 ? "booking needs" : "bookings need"} attention
+                    {counts.unlinkedBookingsCount === 1 ? "booking needs attention" : "bookings need attention"}
                   </strong>
                   <p className="text-ink-muted text-xs mt-0.5">
-                    Some older bookings are not linked to customer profiles.
+                    {counts.unlinkedBookingsCount === 1
+                      ? "1 booking can be linked to a customer profile."
+                      : `${counts.unlinkedBookingsCount} bookings can be linked to customer profiles.`}
                   </p>
                 </div>
               </div>
