@@ -189,6 +189,7 @@ export default function ExpenseTracker({
   user = null,
   onSave = null,
   expenses = EMPTY_FALLBACK_ARRAY,
+  onNavigate = null,
 }) {
   const toastContext = useToast()
   const toast = toastContext.toast || toastContext
@@ -728,10 +729,14 @@ export default function ExpenseTracker({
                 variant="outline"
                 size="md"
                 onClick={() => {
-                  window.location.hash = "#data"
+                  if (onNavigate) {
+                    onNavigate("data", "import")
+                  } else {
+                    window.location.hash = "#data?tab=import"
+                  }
                 }}
                 className="gap-2"
-                aria-label="Import or Export CSV Data"
+                aria-label="Import CSV"
               >
                 <Upload className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Import CSV</span>

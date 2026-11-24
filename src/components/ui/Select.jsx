@@ -12,13 +12,15 @@ import { inputVariants } from "./variants"
  * }} props
  */
 export const Select = forwardRef(function Select(
-  { size = "md", invalid = false, className, wrapperClassName, children, ...rest },
+  { size = "md", invalid = false, className, wrapperClassName, children, label, ...rest },
   ref,
 ) {
+  const accessibleName = rest["aria-label"] || (typeof label === "string" ? label : undefined)
   return (
     <div className={cn("relative w-full", wrapperClassName)}>
       <select
         ref={ref}
+        aria-label={accessibleName}
         aria-invalid={invalid || undefined}
         className={cn(
           inputVariants({ size, invalid }),

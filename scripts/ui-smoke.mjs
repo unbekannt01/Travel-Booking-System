@@ -914,6 +914,28 @@ async function run() {
       }
     }
 
+    // Navigation check for Customers and Expenses: verify Import CSV button navigates to #data?tab=import
+    if (["customers", "expenses"].includes(screen.id)) {
+      try {
+        const importCsvBtn = page.getByRole("button", { name: "Import CSV" }).first()
+        if (await importCsvBtn.isVisible().catch(() => false)) {
+          await importCsvBtn.click()
+          await page.waitForTimeout(300)
+          const currentUrl = page.url()
+          const isDataHash = currentUrl.includes("#data")
+          const isStep1Visible = await page.getByText(/Step 1: Choose Data Type/i).isVisible().catch(() => false)
+          if (isDataHash && isStep1Visible) {
+            console.log(`[ui:smoke] Verified 'Import CSV' navigation from ${screen.label} to #data?tab=import (wizard step 1 visible).`)
+          }
+          // Navigate back to restore screen
+          await page.goto(`${BASE_URL}#${screen.tabId || screen.id}`)
+          await page.waitForTimeout(300)
+        }
+      } catch (err) {
+        console.warn(`[ui:smoke] Import CSV nav check error on ${screen.label}: ${err.message}`)
+      }
+    }
+
     completedScreens.push(screen.label)
     const screenDuration = Date.now() - screenStart
 
@@ -926,7 +948,10 @@ async function run() {
     const totalScreenErrors = screenConsoleErrors + screenPageErrors
     const screenBreaches = budgetBreaches.filter((b) => b.screen === screen.label).length
 
-    const tabLabel = discoveredTabCount === 1 ? "1 tab" : `${discoveredTabCount} tabs`
+    const maxTabsFound = coverageRecords
+      .filter((r) => r.screen === screen.label)
+      .reduce((max, r) => Math.max(max, r.tabsFound || 0), 0)
+    const tabLabel = maxTabsFound === 1 ? "1 tab" : `${maxTabsFound} tabs`
 
     // Task C.4 Terminal Summary: 1 summary line per screen, single write
     const summaryLine = formatScreenSummary({

@@ -9,3 +9,4 @@ export const getCustomerStatement = (...args) => adapter.getCustomerStatement(..
 export const createCustomer = (...args) => adapter.createCustomer(...args)
 export const updateCustomer = (...args) => adapter.updateCustomer(...args)
 export const deleteCustomer = (...args) => adapter.deleteCustomer(...args)
+export const linkCustomerBookings = (...args) => adapter.linkCustomerBookings(...args)

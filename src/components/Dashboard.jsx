@@ -72,17 +72,52 @@ function prefetchTabChunk(tabId) {
   }
 }
 
+const ALLOWED_TABS = [
+  "dashboard",
+  "form",
+  "passengers",
+  "customers",
+  "journey",
+  "tours",
+  "expenses",
+  "analytics",
+  "outstanding",
+  "cashbook",
+  "trash",
+  "data",
+  "settings",
+]
+
+function parseTabFromHash(rawHash) {
+  if (!rawHash) return { tab: null, subTab: null }
+  const clean = rawHash.replace(/^#\/?/, "")
+  const [tabPart, queryPart] = clean.split("?")
+  const tab = ALLOWED_TABS.includes(tabPart) ? tabPart : null
+  let subTab = null
+  if (queryPart) {
+    const params = new URLSearchParams(queryPart)
+    subTab = params.get("tab")
+  }
+  return { tab, subTab }
+}
+
 export default function Dashboard({ user, onLogout, onUserUpdate }) {
   const { toast } = useToast()
   const confirm = useConfirm()
 
   const [bookings, setBookings] = useState([])
+  const [dataInitialTab, setDataInitialTab] = useState(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const { subTab } = parseTabFromHash(window.location.hash)
+      if (subTab) return subTab
+    }
+    return "export"
+  })
+
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined" && window.location.hash) {
-      const h = window.location.hash.replace(/^#\/?/, "")
-      if (["expenses", "dashboard", "passengers", "customers", "journey", "tours", "analytics", "outstanding", "cashbook", "trash", "settings"].includes(h)) {
-        return h
-      }
+      const { tab } = parseTabFromHash(window.location.hash)
+      if (tab) return tab
     }
     return "dashboard"
   })
@@ -90,9 +125,12 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
   useEffect(() => {
     const handleHashChange = () => {
       if (typeof window !== "undefined" && window.location.hash) {
-        const h = window.location.hash.replace(/^#\/?/, "")
-        if (["expenses", "dashboard", "passengers", "customers", "journey", "tours", "analytics", "outstanding", "cashbook", "trash", "settings"].includes(h)) {
-          setActiveTab(h)
+        const { tab, subTab } = parseTabFromHash(window.location.hash)
+        if (tab) {
+          setActiveTab(tab)
+          if (tab === "data" && subTab) {
+            setDataInitialTab(subTab)
+          }
         }
       }
     }
@@ -476,6 +514,32 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
     prefetchTabChunk(tabId)
   }, [])
 
+  const handleNavigate = useCallback((tab, subTab = null) => {
+    if (ALLOWED_TABS.includes(tab)) {
+      setActiveTab(tab)
+      if (tab === "data" && subTab) {
+        setDataInitialTab(subTab)
+        window.location.hash = `#data?tab=${subTab}`
+      } else {
+        window.location.hash = `#${tab}`
+      }
+    }
+  }, [])
+
+  const handleEditBookingByIdOrObj = useCallback((bookingOrId) => {
+    if (typeof bookingOrId === "string") {
+      const found = bookings.find((b) => (b.id || b._id) === bookingOrId)
+      if (found) {
+        setEditingBooking(found)
+      } else {
+        setEditingBooking({ id: bookingOrId })
+      }
+    } else {
+      setEditingBooking(bookingOrId)
+    }
+    setActiveTab("form")
+  }, [bookings])
+
   if (selectedBooking) {
     return (
       <ChunkErrorBoundary resetKey={selectedBooking._id || selectedBooking.id || "invoice"}>
@@ -592,6 +656,8 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                   })
                   setActiveTab("form")
                 }}
+                onNavigate={handleNavigate}
+                onEditBooking={handleEditBookingByIdOrObj}
               />
             )}
 
@@ -608,6 +674,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
                 tours={tours}
                 bookings={bookings}
                 user={user}
+                onNavigate={handleNavigate}
               />
             )}
 
@@ -630,7 +697,12 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             )}
 
             {activeTab === "data" && (
-              <DataManagement user={user} tours={tours} />
+              <DataManagement
+                user={user}
+                tours={tours}
+                initialTab={dataInitialTab}
+                key={dataInitialTab}
+              />
             )}
 
             {activeTab === "settings" && (

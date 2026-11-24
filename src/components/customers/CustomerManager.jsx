@@ -7,6 +7,7 @@ import {
   Select,
   Switch,
   Badge,
+  Spinner,
   Table,
   TableHeader,
   TableBody,
@@ -18,7 +19,7 @@ import {
 } from "../ui"
 import { RateLimitNotice } from "../common/RateLimitNotice"
 import { PanelErrorBoundary } from "../common/PanelErrorBoundary"
-import { listCustomers, CUSTOMER_TAGS } from "../../data/customers"
+import { listCustomers, linkCustomerBookings, CUSTOMER_TAGS } from "../../data/customers"
 import { formatINR } from "../../utils/formatters"
 import { downloadCsv } from "../../utils/csv"
 import { useToast } from "../common/ToastContext"
@@ -60,16 +61,23 @@ const TAG_LABELS = {
   regular: "Regular",
 }
 
-export default function CustomerManager({ onNewBooking = null }) {
-  const toast = useToast()
+export default function CustomerManager({
+  onNewBooking = null,
+  onNavigate = null,
+  onEditBooking = null,
+}) {
+  const toastCtx = useToast()
+  const toast = toastCtx.toast || toastCtx
 
   // State
   const [customers, setCustomers] = useState([])
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 })
-  const [counts, setCounts] = useState({ total: 0, repeat: 0, withOutstanding: 0, unlinkedBookingsCount: 0 })
+  const [counts, setCounts] = useState({ total: 0, repeat: 0, withOutstanding: 0, unlinkedBookingsCount: 0, unresolvedBookings: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isRateLimited, setIsRateLimited] = useState(false)
+  const [isLinking, setIsLinking] = useState(false)
+  const [showUnresolvedList, setShowUnresolvedList] = useState(false)
 
   // Filters
   const [search, setSearch] = useState("")
@@ -126,6 +134,19 @@ export default function CustomerManager({ onNewBooking = null }) {
   useEffect(() => {
     fetchCustomers()
   }, [fetchCustomers])
+
+  const handleLinkBookings = async () => {
+    try {
+      setIsLinking(true)
+      const res = await linkCustomerBookings()
+      toast.success(res.message || "Bookings linked successfully!")
+      await fetchCustomers()
+    } catch (err) {
+      toast.error(err.message || "Failed to link bookings")
+    } finally {
+      setIsLinking(false)
+    }
+  }
 
   // Open drawer for a customer
   const handleOpenCustomer = (customer) => {
@@ -240,10 +261,13 @@ export default function CustomerManager({ onNewBooking = null }) {
               size="md"
               leftIcon={<Upload className="w-4 h-4" />}
               onClick={() => {
-                window.location.hash = "#data"
+                if (onNavigate) {
+                  onNavigate("data", "import")
+                } else {
+                  window.location.hash = "#data?tab=import"
+                }
               }}
               className="flex-1 sm:flex-initial"
-              aria-label="Import or Export CSV Data"
             >
               Import CSV
             </Button>
@@ -260,33 +284,83 @@ export default function CustomerManager({ onNewBooking = null }) {
         </div>
 
         {/* Unlinked Bookings Alert Banner ("Needs Attention") */}
-        {!dismissUnlinkedAlert && counts.unlinkedBookingsCount > 0 && (
+        {!dismissUnlinkedAlert && (counts.unlinkedBookingsCount || 0) > 0 && (
           <div
             role="status"
-            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-[var(--yh-radius-lg)] bg-warning-soft text-warning border border-warning/30 text-xs sm:text-sm"
+            aria-live="polite"
+            className="p-4 rounded-[var(--yh-radius-lg)] bg-warning-soft text-warning border border-warning/30 text-xs sm:text-sm space-y-3"
           >
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <strong className="font-bold block text-ink">
-                  {counts.unlinkedBookingsCount} bookings need attention
-                </strong>
-                <p className="text-ink-muted text-xs mt-0.5">
-                  Some older bookings are not linked to customer profiles. Run{" "}
-                  <code className="px-1 py-0.5 rounded bg-surface border border-border-subtle font-mono text-[11px] text-ink">
-                    node scripts/backfill-customers.mjs --apply
-                  </code>{" "}
-                  in PowerShell to link them automatically.
-                </p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold block text-ink">
+                    {counts.unlinkedBookingsCount}{" "}
+                    {counts.unlinkedBookingsCount === 1 ? "booking needs" : "bookings need"} attention
+                  </strong>
+                  <p className="text-ink-muted text-xs mt-0.5">
+                    Some older bookings are not linked to customer profiles.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isLinking}
+                  onClick={handleLinkBookings}
+                  leftIcon={isLinking ? <Spinner size="sm" /> : null}
+                >
+                  {isLinking ? "Linking..." : "Link now"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setDismissUnlinkedAlert(true)}
+                  className="text-xs font-semibold text-ink-muted hover:text-ink cursor-pointer px-2 py-1 rounded"
+                >
+                  Dismiss
+                </button>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDismissUnlinkedAlert(true)}
-              className="text-xs font-semibold text-ink-muted hover:text-ink cursor-pointer px-2 py-1 rounded"
-            >
-              Dismiss
-            </button>
+
+            {counts.unresolvedBookings && counts.unresolvedBookings.length > 0 && (
+              <div className="pt-2 border-t border-warning/20">
+                <button
+                  type="button"
+                  onClick={() => setShowUnresolvedList(!showUnresolvedList)}
+                  className="text-xs font-medium text-ink underline hover:no-underline cursor-pointer"
+                >
+                  {showUnresolvedList
+                    ? "Hide unlinked bookings"
+                    : `View ${counts.unresolvedBookings.length} unlinked booking${counts.unresolvedBookings.length === 1 ? "" : "s"}`}
+                </button>
+                {showUnresolvedList && (
+                  <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+                    {counts.unresolvedBookings.map((ub) => (
+                      <div
+                        key={ub.bookingId}
+                        className="flex items-center justify-between gap-2 p-2 rounded bg-surface/80 border border-border-subtle text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-ink font-mono">{ub.invoiceNo || "No Invoice"}</span>
+                          <span className="text-ink-muted">·</span>
+                          <span className="text-ink-muted">{ub.reasonDescription || ub.reasonCode}</span>
+                        </div>
+                        {onEditBooking && (
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => onEditBooking(ub.bookingId)}
+                          >
+                            Open booking
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

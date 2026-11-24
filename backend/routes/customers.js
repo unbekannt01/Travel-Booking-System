@@ -14,6 +14,7 @@ import {
 import { normalizeIndianMobile, summarizeCustomer, CUSTOMER_TAGS } from "../../shared/customers.js"
 import { buildCustomerStatement } from "../../shared/statements.js"
 import recordHistory from "../utils/recordHistory.js"
+import { linkUnlinkedBookings, evaluateBookingLinkability } from "../utils/customerLinker.js"
 
 const router = express.Router()
 
@@ -196,11 +197,28 @@ router.get("/", verifyToken, async (req, res) => {
     }
 
     // Count unlinked active bookings for the "Needs Attention" alert banner
-    const unlinkedBookingsCount = await Booking.countDocuments({
+    const unlinkedBookings = await Booking.find({
       userId: req.user.id,
-      customerId: null,
+      $or: [{ customerId: null }, { customerId: { $exists: false } }],
       deletedAt: null,
     })
+      .select("_id invoiceNo date contactPhone")
+      .lean()
+
+    const unlinkedBookingsCount = unlinkedBookings.length
+    const unlinkedUnresolved = []
+    for (const b of unlinkedBookings) {
+      const evalResult = evaluateBookingLinkability(b)
+      if (!evalResult.canLink) {
+        unlinkedUnresolved.push({
+          bookingId: b._id.toString(),
+          invoiceNo: b.invoiceNo || "—",
+          date: b.date ? new Date(b.date).toISOString().slice(0, 10) : "—",
+          reasonCode: evalResult.reasonCode,
+          reasonDescription: evalResult.reasonDescription,
+        })
+      }
+    }
 
     // 7. Paginate
     const total = customerList.length
@@ -221,6 +239,7 @@ router.get("/", verifyToken, async (req, res) => {
         repeat: repeatCount,
         withOutstanding: withOutstandingCount,
         unlinkedBookingsCount,
+        unresolvedBookings: unlinkedUnresolved,
       },
     })
   } catch (error) {
@@ -375,6 +394,42 @@ router.get("/:id/statement", verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Customer statement generation error:", error.name, error.code || "")
     res.status(500).json({ message: "Failed to generate customer statement" })
+  }
+})
+
+/**
+ * POST /api/customers/link-bookings
+ * In-app auto-linker for unlinked bookings belonging to this operator.
+ */
+router.post("/link-bookings", verifyToken, customerWriteLimiter, async (req, res) => {
+  try {
+    const result = await linkUnlinkedBookings({ userId: req.user.id, apply: true })
+
+    await logAudit({
+      userId: req.user.id,
+      action: "customers.link_bookings",
+      req,
+      meta: {
+        linkedCount: result.linkedCount,
+        skippedCount: result.skippedCount,
+      },
+    })
+
+    res.json({
+      success: true,
+      message: `Successfully linked ${result.linkedCount} booking(s).`,
+      summary: {
+        scanned: result.scannedCount,
+        linked: result.linkedCount,
+        skipped: result.skippedCount,
+      },
+      linkedCount: result.linkedCount,
+      skippedCount: result.skippedCount,
+      unresolved: result.unresolved,
+    })
+  } catch (error) {
+    console.error("Link bookings error:", error.name, error.code || "")
+    res.status(500).json({ message: "Failed to link bookings to customer profiles" })
   }
 })
 

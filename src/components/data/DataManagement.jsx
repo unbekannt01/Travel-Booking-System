@@ -9,6 +9,7 @@ import {
   Select,
   ConfirmDialog,
   Tabs,
+  Field,
 } from "../ui"
 import { PanelErrorBoundary } from "../common/PanelErrorBoundary"
 import { RateLimitNotice } from "../common/RateLimitNotice"
@@ -46,11 +47,36 @@ import {
   ShieldAlert,
 } from "lucide-react"
 
-export default function DataManagement({ user = null, tours = [] }) {
+export default function DataManagement({ user = null, tours = [], initialTab = "export" }) {
   const { toast } = useToast()
 
   // Main navigation tabs: "export" | "import" | "batches"
-  const [activeTab, setActiveTab] = useState("export")
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const match = window.location.hash.match(/[?&]tab=([^&]+)/)
+      if (match && ["export", "import", "batches"].includes(match[1])) {
+        return match[1]
+      }
+    }
+    return initialTab
+  })
+  const [wizardStep, setWizardStep] = useState(1) // 1: Type/Template, 2: Upload, 3: Map, 4: Preview/Commit
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const match = window.location.hash.match(/[?&]tab=([^&]+)/)
+        if (match && ["export", "import", "batches"].includes(match[1])) {
+          setActiveTab(match[1])
+          if (match[1] === "import") {
+            setWizardStep(1)
+          }
+        }
+      }
+    }
+    window.addEventListener("hashchange", handleHashChange)
+    return () => window.removeEventListener("hashchange", handleHashChange)
+  }, [])
 
   // ---------------------------------------------------------------------------
   // EXPORT SECTION STATE
@@ -89,7 +115,6 @@ export default function DataManagement({ user = null, tours = [] }) {
   // IMPORT WIZARD STATE
   // ---------------------------------------------------------------------------
   const [importType, setImportType] = useState("customers") // "customers" | "expenses"
-  const [wizardStep, setWizardStep] = useState(1) // 1: Type/Template, 2: Upload, 3: Map, 4: Preview/Commit
 
   const [csvFile, setCsvFile] = useState(null)
   const [csvText, setCsvText] = useState("")
@@ -423,20 +448,24 @@ export default function DataManagement({ user = null, tours = [] }) {
                   {/* Filters */}
                   <div className="space-y-2 pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="date"
-                        label="From"
-                        value={expenseStartDate}
-                        onChange={(e) => setExpenseStartDate(e.target.value)}
-                        className="text-xs"
-                      />
-                      <Input
-                        type="date"
-                        label="To"
-                        value={expenseEndDate}
-                        onChange={(e) => setExpenseEndDate(e.target.value)}
-                        className="text-xs"
-                      />
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={expenseStartDate}
+                          onChange={(e) => setExpenseStartDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="From Date"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={expenseEndDate}
+                          onChange={(e) => setExpenseEndDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="To Date"
+                        />
+                      </Field>
                     </div>
                     <Select
                       value={expenseCategory}
@@ -490,20 +519,24 @@ export default function DataManagement({ user = null, tours = [] }) {
                   {/* Filters */}
                   <div className="space-y-2 pt-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="date"
-                        label="From"
-                        value={bookingStartDate}
-                        onChange={(e) => setBookingStartDate(e.target.value)}
-                        className="text-xs"
-                      />
-                      <Input
-                        type="date"
-                        label="To"
-                        value={bookingEndDate}
-                        onChange={(e) => setBookingEndDate(e.target.value)}
-                        className="text-xs"
-                      />
+                      <Field label="From">
+                        <Input
+                          type="date"
+                          value={bookingStartDate}
+                          onChange={(e) => setBookingStartDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="From Date"
+                        />
+                      </Field>
+                      <Field label="To">
+                        <Input
+                          type="date"
+                          value={bookingEndDate}
+                          onChange={(e) => setBookingEndDate(e.target.value)}
+                          className="text-xs"
+                          aria-label="To Date"
+                        />
+                      </Field>
                     </div>
                     {tours && tours.length > 0 && (
                       <Select
@@ -564,20 +597,24 @@ export default function DataManagement({ user = null, tours = [] }) {
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 pt-2">
-                    <Input
-                      type="date"
-                      label="From"
-                      value={cashbookStartDate}
-                      onChange={(e) => setCashbookStartDate(e.target.value)}
-                      className="text-xs"
-                    />
-                    <Input
-                      type="date"
-                      label="To"
-                      value={cashbookEndDate}
-                      onChange={(e) => setCashbookEndDate(e.target.value)}
-                      className="text-xs"
-                    />
+                    <Field label="From">
+                      <Input
+                        type="date"
+                        value={cashbookStartDate}
+                        onChange={(e) => setCashbookStartDate(e.target.value)}
+                        className="text-xs"
+                        aria-label="From Date"
+                      />
+                    </Field>
+                    <Field label="To">
+                      <Input
+                        type="date"
+                        value={cashbookEndDate}
+                        onChange={(e) => setCashbookEndDate(e.target.value)}
+                        className="text-xs"
+                        aria-label="To Date"
+                      />
+                    </Field>
                   </div>
                 </div>
                 <div className="pt-5 mt-4 border-t border-border-subtle">

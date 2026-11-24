@@ -22,14 +22,18 @@ export const Input = forwardRef(function Input(
     trailing,
     className,
     wrapperClassName,
+    label,
     ...rest
   },
   ref,
 ) {
+  const accessibleName = rest["aria-label"] || (typeof label === "string" ? label : undefined)
+
   if (!leading && !trailing) {
     return (
       <input
         ref={ref}
+        aria-label={accessibleName}
         aria-invalid={invalid || undefined}
         className={cn(inputVariants({ size, invalid }), tabular && "tabular-nums", className)}
         {...rest}
@@ -49,6 +53,7 @@ export const Input = forwardRef(function Input(
       ) : null}
       <input
         ref={ref}
+        aria-label={accessibleName}
         aria-invalid={invalid || undefined}
         className={cn(
           inputVariants({ size, invalid }),

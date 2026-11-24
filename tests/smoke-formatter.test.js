@@ -39,6 +39,21 @@ describe("UI Smoke Formatter Unit Tests (Step 0)", () => {
       assert.equal(line, "[ui:smoke] ✓ Trash (4 viewports, 2 themes, 5 tabs): 40 states, 0 errors, 12.3s")
     })
 
+    it("formats 0 tabs screen summary correctly", () => {
+      const line = formatScreenSummary({
+        screenLabel: "New Booking",
+        viewportCount: 4,
+        themeCount: 2,
+        tabLabel: "0 tabs",
+        statesCount: 8,
+        errorCount: 0,
+        breachCount: 0,
+        durationMs: 4200,
+        budgetExceeded: false,
+      })
+      assert.equal(line, "[ui:smoke] ✓ New Booking (4 viewports, 2 themes, 0 tabs): 8 states, 0 errors, 4.2s")
+    })
+
     it("formats failure screen summary with cross and error counts", () => {
       const line = formatScreenSummary({
         screenLabel: "Overview",

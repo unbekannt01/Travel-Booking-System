@@ -9,12 +9,14 @@ import { inputVariants } from "./variants"
  * }} props
  */
 export const Textarea = forwardRef(function Textarea(
-  { invalid = false, rows = 3, className, ...rest },
+  { invalid = false, rows = 3, className, label, ...rest },
   ref,
 ) {
+  const accessibleName = rest["aria-label"] || (typeof label === "string" ? label : undefined)
   return (
     <textarea
       ref={ref}
+      aria-label={accessibleName}
       rows={rows}
       aria-invalid={invalid || undefined}
       className={cn(

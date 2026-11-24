@@ -646,6 +646,12 @@ export async function deleteCustomer(id) {
   })
 }
 
+export async function linkCustomerBookings() {
+  return request("/api/customers/link-bookings", {
+    method: "POST",
+  })
+}
+
 // --- REMINDERS & TEMPLATES ---
 export async function listReminderTemplates() {
   const res = await request("/api/reminder-templates")
