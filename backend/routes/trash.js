@@ -10,6 +10,7 @@ import { logAudit } from "../models/AuditLog.js"
 import recordHistory from "../utils/recordHistory.js"
 import { getEffectiveLockDate, formatLockDateDisplay } from "../utils/booksLock.js"
 import { classifyRestore, HISTORY_ENTITIES } from "../../shared/history.js"
+import { checkSeatConflicts } from "./bookings.js"
 
 const router = express.Router()
 
@@ -249,6 +250,19 @@ router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, re
         isVoid: false,
       }).select("paymentDate").lean()
       record.payments = bookingPayments
+
+      // Check seat conflicts for this booking using authoritative normalizing check
+      const seatConflict = await checkSeatConflicts({
+        userId,
+        tourName: record.tourName,
+        journeyDate: record.journeyDate,
+        busType: record.busType,
+        passengers: record.passengers,
+        excludeBookingId: record._id,
+      })
+      if (seatConflict) {
+        conflicts.seatConflict = true
+      }
     }
 
     const restoreEval = classifyRestore({

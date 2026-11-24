@@ -22,6 +22,7 @@ import {
   calculatePricing,
 } from "../../shared/businessLogic.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
 import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
 import recordHistory from "../utils/recordHistory.js"
 
@@ -110,8 +111,23 @@ export const validateSeatLayout = (passengers, busType) => {
     }
   }
 
-  // Validate each seat ID format and bounds if busType is provided
-  if (busType) {
+  // Validate each seat against layout definitions if layout exists
+  const layoutKey = layoutKeyForBusType(busType)
+  const layout = getSeatLayout(layoutKey)
+
+  if (layout) {
+    for (const rawId of seatIds) {
+      const canonical = resolveSeatId(layoutKey, rawId)
+      const exists = layout.seats.some((s) => s.id === canonical)
+      if (!exists) {
+        return {
+          status: 400,
+          message: `Seat "${rawId}" does not exist in layout ${layout.label}.`,
+        }
+      }
+    }
+  } else if (busType) {
+    // Fallback for custom bus types without layout definition
     const is2x2 = busType.startsWith("2x2")
     const maxRow = is2x2 ? 5 : 6
 
@@ -177,51 +193,108 @@ export const computeServerPricing = async ({
   return { pricing, tour }
 }
 
-// Seat conflict validation
-export const checkSeatConflicts = async ({ userId, tourName, journeyDate, passengers, excludeBookingId = null }) => {
+// Seat conflict validation (authoritative, normalized, scoped per departure)
+export const checkSeatConflicts = async ({
+  userId,
+  tourName,
+  journeyDate,
+  busType,
+  passengers,
+  excludeBookingId = null,
+}) => {
   const seatIds = (passengers || []).map((p) => p.seatId).filter(Boolean)
   if (seatIds.length === 0) return null
 
-  // 1. Check internal duplicates in current booking
-  const seen = new Set()
-  for (const s of seatIds) {
-    if (seen.has(s)) {
-      return {
-        status: 400,
-        message: `Seat ${s} is assigned to multiple passengers in this booking.`,
+  const layoutKey = layoutKeyForBusType(busType)
+  const layout = getSeatLayout(layoutKey)
+
+  // 1. Validate seat existence in layout (reject unknown seat IDs with 400)
+  if (layout) {
+    for (const rawId of seatIds) {
+      const canonical = resolveSeatId(layoutKey, rawId)
+      const exists = layout.seats.some((s) => s.id === canonical)
+      if (!exists) {
+        return {
+          status: 400,
+          message: `Seat "${rawId}" is not a valid seat for this departure.`,
+        }
       }
     }
-    seen.add(s)
   }
 
-  // 2. Check against other active bookings for the same tour and journey date
+  // 2. Check internal duplicates in current booking after normalization (409)
+  const normalizedSeatIds = seatIds.map((s) => resolveSeatId(layoutKey, s))
+  const seen = new Set()
+  for (let i = 0; i < normalizedSeatIds.length; i++) {
+    const norm = normalizedSeatIds[i]
+    if (seen.has(norm)) {
+      return {
+        status: 409,
+        message: `Seat "${seatIds[i]}" is assigned to multiple passengers in this booking.`,
+        conflictingSeats: [seatIds[i]],
+      }
+    }
+    seen.add(norm)
+  }
+
+  // 3. Check against other active bookings for the same departure (scoped by tourName, journeyDate AND busType)
   const { start, end } = getDayBounds(journeyDate)
+
+  const normalizedBus = (busType || "").trim()
+  const busCondition =
+    !normalizedBus || normalizedBus === "2x1 Sleeper Luxury" || normalizedBus === "2x1"
+      ? {
+          $or: [
+            { busType: "2x1 Sleeper Luxury" },
+            { busType: "2x1" },
+            { busType: { $exists: false } },
+            { busType: null },
+            { busType: "" },
+          ],
+        }
+      : { busType: normalizedBus }
+
   const query = {
     userId,
     tourName,
     journeyDate: { $gte: start, $lte: end },
     status: { $nin: ["Cancelled", "cancelled"] },
-    $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+    deletedAt: null,
+    ...busCondition,
   }
   if (excludeBookingId) {
     query._id = { $ne: excludeBookingId }
   }
 
-  const conflictingBookings = await Booking.find(query)
-  const bookedSeats = new Map()
+  const conflictingBookings = await Booking.find(query).lean()
+  const bookedSeatsMap = new Map() // canonicalId -> { passengerName, invoiceNo, originalSeatId }
+
   for (const b of conflictingBookings) {
-    for (const p of b.passengers) {
+    const bLayoutKey = layoutKeyForBusType(b.busType || busType)
+    for (const p of b.passengers || []) {
       if (p.seatId) {
-        bookedSeats.set(p.seatId, { passengerName: p.name, invoiceNo: b.invoiceNo })
+        const canonical = resolveSeatId(bLayoutKey, p.seatId)
+        bookedSeatsMap.set(canonical, {
+          passengerName: p.name,
+          invoiceNo: b.invoiceNo,
+          originalSeatId: p.seatId,
+        })
       }
     }
   }
 
-  const conflicts = seatIds.filter((s) => bookedSeats.has(s))
+  const conflicts = []
+  for (let i = 0; i < seatIds.length; i++) {
+    const canonical = normalizedSeatIds[i]
+    if (bookedSeatsMap.has(canonical)) {
+      conflicts.push(seatIds[i])
+    }
+  }
+
   if (conflicts.length > 0) {
     return {
       status: 409,
-      message: `Seat(s) ${conflicts.join(", ")} already booked for ${tourName} on this date.`,
+      message: `Seat(s) ${conflicts.join(", ")} already booked for ${tourName} on this departure.`,
       conflictingSeats: conflicts,
     }
   }
@@ -394,6 +467,7 @@ router.post("/", verifyToken, async (req, res) => {
       userId: req.user.id,
       tourName,
       journeyDate,
+      busType,
       passengers,
     })
     if (seatConflict) {
@@ -482,6 +556,7 @@ router.post("/", verifyToken, async (req, res) => {
       journeyDate: normalizedJourneyDate,
       duration: duration || "",
       busType: busType || "",
+      seatLayoutKey: layoutKeyForBusType(busType || ""),
       contactName,
       contactPhone,
       contactEmail: contactEmail || "",
@@ -671,11 +746,13 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 
     // Seat conflicts check (409)
-    if (req.body.passengers || req.body.journeyDate || req.body.tourName) {
+    if (req.body.passengers || req.body.journeyDate || req.body.tourName || req.body.busType) {
+      const effectiveBusType = req.body.busType !== undefined ? req.body.busType : booking.busType
       const seatConflict = await checkSeatConflicts({
         userId: req.user.id,
         tourName: effectiveTourName,
         journeyDate: effectiveJourneyDate,
+        busType: effectiveBusType,
         passengers: effectivePassengers,
         excludeBookingId: booking._id,
       })
@@ -691,6 +768,10 @@ router.put("/:id", verifyToken, async (req, res) => {
     const seatLayoutError = validateSeatLayout(effectivePassengers, req.body.busType || booking.busType)
     if (seatLayoutError) {
       return res.status(seatLayoutError.status).json({ message: seatLayoutError.message })
+    }
+
+    if (req.body.busType !== undefined) {
+      booking.seatLayoutKey = layoutKeyForBusType(req.body.busType)
     }
 
     // Recompute server pricing
@@ -947,21 +1028,53 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
     if (checkedIn !== undefined) passenger.checkedIn = Boolean(checkedIn)
 
     if (seatId !== undefined && seatId !== passenger.seatId) {
-      // Validate the new seatId is not booked
-      passenger.seatId = seatId
-      const seatConflict = await checkSeatConflicts({
-        userId: req.user.id,
-        tourName: booking.tourName,
-        journeyDate: booking.journeyDate,
-        passengers: booking.passengers,
-        excludeBookingId: booking._id,
-      })
-      if (seatConflict) {
-        return res.status(seatConflict.status).json({
-          message: seatConflict.message,
-          conflictingSeats: seatConflict.conflictingSeats,
+      if (seatId && typeof seatId === "string" && seatId.trim()) {
+        // 1. Validate that the new seatId exists in the departure layout
+        const seatLayoutError = validateSeatLayout([{ seatId }], booking.busType)
+        if (seatLayoutError) {
+          return res.status(seatLayoutError.status).json({ message: seatLayoutError.message })
+        }
+
+        // 2. Validate that the seat is not already taken by another passenger inside this same booking
+        const layoutKey = layoutKeyForBusType(booking.busType)
+        const targetCanonical = resolveSeatId(layoutKey, seatId)
+        const sameBookingOccupant = booking.passengers.find((p) => {
+          if (p._id && passenger._id && p._id.toString() === passenger._id.toString()) return false
+          if (!p.seatId) return false
+          return resolveSeatId(layoutKey, p.seatId) === targetCanonical
         })
+        if (sameBookingOccupant) {
+          return res.status(409).json({
+            message: `Seat ${seatId} is already occupied by passenger ${sameBookingOccupant.name} in this booking.`,
+            conflictingSeats: [seatId],
+          })
+        }
+
+        // 3. Validate that the seat is not booked by any other active booking on this departure
+        const proposedPassengers = booking.passengers.map((p) => {
+          if (p._id && passenger._id && p._id.toString() === passenger._id.toString()) {
+            return { ...(p.toObject ? p.toObject() : p), seatId }
+          }
+          return p
+        })
+        const seatConflict = await checkSeatConflicts({
+          userId: req.user.id,
+          tourName: booking.tourName,
+          journeyDate: booking.journeyDate,
+          busType: booking.busType,
+          passengers: proposedPassengers,
+          excludeBookingId: booking._id,
+        })
+        if (seatConflict) {
+          return res.status(seatConflict.status).json({
+            message: seatConflict.message,
+            conflictingSeats: seatConflict.conflictingSeats,
+          })
+        }
       }
+
+      // Validated successfully: assign new seatId
+      passenger.seatId = seatId
     }
 
     await booking.save()

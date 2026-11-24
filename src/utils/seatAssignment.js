@@ -1,3 +1,5 @@
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId, DEFAULT_LAYOUT_KEY } from "../../shared/seatLayouts.js"
+
 /**
  * Auto-assigns free seats to passengers based on deck preference and coach layout.
  *
@@ -5,7 +7,7 @@
  * @param {Array} params.passengers - List of passengers in the booking
  * @param {Array} params.bookedSeats - List of already occupied/blocked seats [{ seatId }]
  * @param {string} [params.deckPreference='any'] - 'any' | 'lower' | 'upper'
- * @param {string} [params.layout='2x1'] - '2x1' | '2x2'
+ * @param {string} [params.layout='2x1'] - Layout key or bus type string
  * @returns {Object} { assignments: [{ passengerIndex, passengerName, proposedSeatId }], unassignedCount: number, allAvailable: string[] }
  */
 export function autoAssignSeats({
@@ -14,42 +16,41 @@ export function autoAssignSeats({
   deckPreference = "any",
   layout = "2x1",
 }) {
-  const is2x2 = layout.startsWith("2x2")
-  const occupied = new Set(bookedSeats.map((b) => b.seatId).filter(Boolean))
+  const layoutKey = layoutKeyForBusType(layout)
+  const layoutDef = getSeatLayout(layoutKey) || getSeatLayout(DEFAULT_LAYOUT_KEY)
+
+  const occupied = new Set(
+    bookedSeats
+      .map((b) => (b.seatId ? resolveSeatId(layoutKey, b.seatId) : null))
+      .filter(Boolean),
+  )
 
   // Also include seats already assigned to passengers in this booking
   passengers.forEach((p) => {
-    if (p.seatId) occupied.add(p.seatId)
+    if (p.seatId) {
+      occupied.add(resolveSeatId(layoutKey, p.seatId))
+    }
   })
 
-  // Generate candidate seats in logical proximity order
-  const generateDeckSeats = (deck) => {
-    const list = []
-    if (is2x2) {
-      // 5 rows, L1-1, L1-2, R1-1, R1-2
-      for (let r = 1; r <= 5; r++) {
-        list.push(`${deck}-L${r}-1`, `${deck}-L${r}-2`, `${deck}-R${r}-1`, `${deck}-R${r}-2`)
-      }
-    } else {
-      // 2x1 layout: 6 rows, R-1, R-2 (couples/pairs), then L (single)
-      for (let r = 1; r <= 6; r++) {
-        list.push(`${deck}-R${r}-1`, `${deck}-R${r}-2`, `${deck}-L${r}`)
-      }
+  // Order candidate seats based on layout and deckPreference
+  let seatList = [...layoutDef.seats]
+  if (layoutDef.decks && layoutDef.decks.length > 1) {
+    if (deckPreference === "lower") {
+      seatList = [
+        ...layoutDef.seats.filter((s) => s.deck === "lower"),
+        ...layoutDef.seats.filter((s) => s.deck === "upper"),
+      ]
+    } else if (deckPreference === "upper") {
+      seatList = [
+        ...layoutDef.seats.filter((s) => s.deck === "upper"),
+        ...layoutDef.seats.filter((s) => s.deck === "lower"),
+      ]
     }
-    return list
   }
 
-  let seatOrder = []
-  if (deckPreference === "lower") {
-    seatOrder = [...generateDeckSeats("lower"), ...generateDeckSeats("upper")]
-  } else if (deckPreference === "upper") {
-    seatOrder = [...generateDeckSeats("upper"), ...generateDeckSeats("lower")]
-  } else {
-    // any: prioritize lower deck first, then upper
-    seatOrder = [...generateDeckSeats("lower"), ...generateDeckSeats("upper")]
-  }
-
-  const availableSeats = seatOrder.filter((seatId) => !occupied.has(seatId))
+  const availableSeats = seatList
+    .map((s) => s.id)
+    .filter((seatId) => !occupied.has(seatId))
 
   const assignments = []
   let availIdx = 0

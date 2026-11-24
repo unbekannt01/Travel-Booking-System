@@ -1,5 +1,6 @@
 import { toDateInputValue } from "./date.js"
 import { calculateBookingFinancials } from "../../shared/profitLoss.js"
+import { layoutKeyForBusType, getSeatLayout } from "../../shared/seatLayouts.js"
 
 /**
  * Pure helper utilities for the Dashboard Overview & Payment Tracker summary cards.
@@ -7,17 +8,15 @@ import { calculateBookingFinancials } from "../../shared/profitLoss.js"
  */
 
 /**
- * Returns total coach berth capacity for a given busType string.
- * 2x2 sleeper = 5 rows * 4 seats * 2 decks = 40 berths.
- * 2x1 sleeper (default) = 6 rows * 3 seats * 2 decks = 36 berths.
+ * Returns total coach berth/seat capacity for a given busType string.
+ * Uses layout definition from shared/seatLayouts.js.
  * @param {string | undefined | null} busType
  * @returns {number}
  */
 export function getBusCapacity(busType) {
-  if (typeof busType === "string" && busType.trim().startsWith("2x2")) {
-    return 40
-  }
-  return 36
+  const key = layoutKeyForBusType(busType)
+  const def = getSeatLayout(key)
+  return def ? def.totalSeats : 38
 }
 
 /**

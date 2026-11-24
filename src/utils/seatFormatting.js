@@ -15,6 +15,9 @@ export function formatSeatLabel(seatId, { fallback = "Unassigned" } = {}) {
     return fallback
   }
   const clean = seatId.trim()
+  if (clean.toLowerCase().startsWith("seat-")) {
+    return `Seat ${clean.slice(5)}`
+  }
   const match = clean.match(/^(lower|upper)-([A-Za-z0-9-]+)$/i)
   if (match) {
     const deck = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()

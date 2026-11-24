@@ -52,27 +52,13 @@ import {
   FOCUS_RING_CLASS,
 } from "./ui"
 import { cn } from "../utils/cn"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
-  const is2x2 = busType?.startsWith("2x2")
-  const rowCount = is2x2 ? 5 : 6
-  const decks = ["lower", "upper"]
-  const seats = []
-  for (const deck of decks) {
-    for (let row = 1; row <= rowCount; row++) {
-      seats.push(`${deck}-L${row}`)
-      if (is2x2) {
-        seats.push(`${deck}-L${row}-2`)
-        seats.push(`${deck}-R${row}-1`)
-        seats.push(`${deck}-R${row}-2`)
-      } else {
-        seats.push(`${deck}-R${row}-1`)
-        seats.push(`${deck}-R${row}-2`)
-      }
-    }
-  }
-  return seats
+  const layoutKey = layoutKeyForBusType(busType)
+  const layout = getSeatLayout(layoutKey)
+  return layout ? layout.seats.map((s) => s.id) : []
 }
 
 export default function JourneyManager({ bookings = [], onUpdateBooking, user, expenses: initialExpenses = [] }) {
@@ -158,7 +144,9 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
       const key = `${b.tourName}___${dateKey}___${bus}`
 
       if (!map.has(key)) {
-        const capacity = bus.startsWith("2x2") ? 40 : 30
+        const layoutKey = layoutKeyForBusType(bus)
+        const layout = getSeatLayout(layoutKey)
+        const capacity = layout ? layout.totalSeats : 38
         map.set(key, {
           key,
           tourName: b.tourName,
@@ -404,15 +392,18 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
   const availableSeatsForSwap = useMemo(() => {
     if (!swappingSeat || !activeDepartureObj) return []
     const busType = activeDepartureObj.busType || "2x1 Sleeper Luxury"
+    const layoutKey = layoutKeyForBusType(busType)
     const allSeats = generateAllSeats(busType)
     const occupied = new Set()
     for (const b of activeDepartureObj.bookings) {
       for (const p of b.passengers || []) {
-        if (p.seatId) occupied.add(p.seatId)
+        if (p.seatId) occupied.add(resolveSeatId(layoutKey, p.seatId))
       }
     }
     // Remove the current seat from occupied so current seat can be re-selected
-    if (swappingSeat.currentSeatId) occupied.delete(swappingSeat.currentSeatId)
+    if (swappingSeat.currentSeatId) {
+      occupied.delete(resolveSeatId(layoutKey, swappingSeat.currentSeatId))
+    }
     return allSeats.filter((s) => !occupied.has(s))
   }, [swappingSeat, activeDepartureObj])
 

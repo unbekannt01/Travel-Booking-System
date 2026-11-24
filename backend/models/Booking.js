@@ -28,6 +28,7 @@ const bookingSchema = new mongoose.Schema(
     journeyDate: { type: Date, required: true },
     duration: { type: String },
     busType: { type: String },
+    seatLayoutKey: { type: String, default: null },
     contactName: { type: String, required: true },
     contactPhone: { type: String, required: true },
     contactEmail: { type: String },

@@ -1,115 +1,49 @@
 import { escapeHtml, sanitizeHexColor } from "./escapeHtml.js"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
 /**
  * Bus Seat Layout and Manifest Generation Utilities
- * Supports standard Indian sleeper coaches (2x1 and 2x2 layouts)
+ * Supports standard Indian sleeper coaches and seater layouts
  * with separate Upper and Lower Deck mapping.
  */
 
 export const BUS_LAYOUT_TYPES = {
   "2x1": {
     id: "2x1",
-    label: "2x1 Sleeper (36 Berths)",
-    rows: 6,
-    deckSeats: 18,
-    totalCapacity: 36,
+    label: "2x1 Sleeper (38 Berths)",
+    rows: 7,
+    deckSeats: 19,
+    totalCapacity: 38,
   },
   "2x2": {
     id: "2x2",
-    label: "2x2 Sleeper (40 Berths)",
-    rows: 5,
-    deckSeats: 20,
-    totalCapacity: 40,
+    label: "2x2 Sleeper (48 Berths)",
+    rows: 6,
+    deckSeats: 24,
+    totalCapacity: 48,
   },
 }
 
 /**
  * Generates seat definitions for a given deck and layout type.
  * @param {'lower' | 'upper'} deck
- * @param {'2x1' | '2x2'} layoutType
+ * @param {string} layoutType
  * @returns {Array<{ id: string, label: string, row: number, side: 'left' | 'right', col: number }>}
  */
 export const getDeckPhysicalSeats = (deck = "lower", layoutType = "2x1") => {
-  const is2x2 = layoutType === "2x2"
-  const seats = []
-  const prefix = deck.toLowerCase()
-
-  if (is2x2) {
-    const rows = [1, 2, 3, 4, 5]
-    rows.forEach((row) => {
-      // Left side (2 seats: L1, L2)
-      seats.push({
-        id: `${prefix}-L${row}-1`,
-        label: `${prefix[0].toUpperCase()}${row}-L1`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}L1`,
-        row,
-        side: "left",
-        col: 1,
-        deck,
-      })
-      seats.push({
-        id: `${prefix}-L${row}-2`,
-        label: `${prefix[0].toUpperCase()}${row}-L2`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}L2`,
-        row,
-        side: "left",
-        col: 2,
-        deck,
-      })
-      // Right side (2 seats: R1, R2)
-      seats.push({
-        id: `${prefix}-R${row}-1`,
-        label: `${prefix[0].toUpperCase()}${row}-R1`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}R1`,
-        row,
-        side: "right",
-        col: 1,
-        deck,
-      })
-      seats.push({
-        id: `${prefix}-R${row}-2`,
-        label: `${prefix[0].toUpperCase()}${row}-R2`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}R2`,
-        row,
-        side: "right",
-        col: 2,
-        deck,
-      })
-    })
-  } else {
-    // 2x1 Layout (6 rows: Left has 1 seat, Right has 2 seats)
-    const rows = [1, 2, 3, 4, 5, 6]
-    rows.forEach((row) => {
-      seats.push({
-        id: `${prefix}-L${row}`,
-        label: `${prefix[0].toUpperCase()}${row}-L`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}L`,
-        row,
-        side: "left",
-        col: 1,
-        deck,
-      })
-      seats.push({
-        id: `${prefix}-R${row}-1`,
-        label: `${prefix[0].toUpperCase()}${row}-R1`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}R1`,
-        row,
-        side: "right",
-        col: 1,
-        deck,
-      })
-      seats.push({
-        id: `${prefix}-R${row}-2`,
-        label: `${prefix[0].toUpperCase()}${row}-R2`,
-        shortLabel: `${prefix[0].toUpperCase()}${row}R2`,
-        row,
-        side: "right",
-        col: 2,
-        deck,
-      })
-    })
-  }
-
-  return seats
+  const layoutKey = layoutKeyForBusType(layoutType)
+  const layout = getSeatLayout(layoutKey)
+  if (!layout) return []
+  const filtered = layout.seats.filter((s) => !s.deck || s.deck === deck)
+  return filtered.map((s) => ({
+    id: s.id,
+    label: s.name,
+    shortLabel: s.name.replace(/\s+/g, ""),
+    row: s.row,
+    side: s.side,
+    col: s.col,
+    deck: s.deck || deck,
+    number: s.number,
+  }))
 }
 
 /**
@@ -130,12 +64,8 @@ export const mapCoachSeatManifest = ({
   bookings = [],
   layoutType = "2x1",
 }) => {
-  const is2x2 =
-    layoutType === "2x2" ||
-    departure?.busType?.startsWith("2x2") ||
-    departure?.seatLayout === "2x2"
-
-  const effectiveLayout = is2x2 ? "2x2" : "2x1"
+  const effectiveLayout = departure?.busType || layoutType || "2x1"
+  const layoutKey = layoutKeyForBusType(effectiveLayout)
 
   // 1. Gather active non-cancelled bookings matching this departure
   const activeBookings = bookings.filter((b) => {
@@ -176,6 +106,8 @@ export const mapCoachSeatManifest = ({
       }
 
       if (p.seatId) {
+        const canonicalId = resolveSeatId(layoutKey, p.seatId)
+        seatPassengerMap.set(canonicalId, passengerEntry)
         seatPassengerMap.set(normalizeSeatId(p.seatId), passengerEntry)
         // Also map simplified versions like "l1" or "u1"
         const cleanId = p.seatId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()

@@ -25,7 +25,12 @@ import {
 import { formatINR } from "../utils/formatters"
 import { cn } from "../utils/cn"
 
-const BUS_TYPE_OPTIONS = ["2x1 Sleeper Luxury", "2x2 Sleeper Luxury"]
+const BUS_TYPE_OPTIONS = [
+  "2x1 Sleeper Luxury (38 berths)",
+  "2x2 Sleeper Luxury (48 berths)",
+  "2x2 Sleeper Standard (40 berths)",
+  "2x3 Seater Express (60 seats)",
+]
 
 /**
  * Derives the invoice sequence prefix format preview from destination name and date.

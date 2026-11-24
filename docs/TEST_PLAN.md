@@ -632,6 +632,38 @@ npm run ui:smoke -- --quick
   - Verify navigation clicks use fast intercept detection and recovery (5000ms timeout cap, Escape fallback) to prevent hanging for 37 retries.
   - Verify terminal output prints clean status lines and exits cleanly without requiring manual Ctrl+C.
 
+## 3.19 Manual Verification Checklist — Part 6S-1 Seat Foundation & Conflict Protection
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-1 ("automated tests not run, per owner decision"). All verifications are conducted manually using the checklist below and verified via Playwright quick inspection.
+
+- [ ] **Configurable Layouts Visual Inspection & Berth Counts**:
+  - Open New Booking modal, select **"2x1 Sleeper Luxury (38 berths)"**, click "Select Seat". Verify 6 rows of 3 (Left 1, Right 2 cabins, each with Lower and Upper berths = 36 berths) plus Row 7 back single berth (Left L7 Lower & Upper = 2 berths), totaling 38 berths (19 lower, 19 upper). [FLAGGED for owner confirmation].
+  - Select **"2x2 Sleeper Luxury (48 berths)"**, click "Select Seat". Verify 6 rows x 4 berths per deck (Left cabins L1..L12, Right cabins R1..R12, each with Lower and Upper berths), totaling 48 berths (24 lower, 24 upper).
+  - Select **"2x2 Sleeper Standard (40 berths)"**, click "Select Seat". Verify 5 rows x 4 berths per deck (Left cabins L1..L10, Right cabins R1..R10, each with Lower and Upper berths), totaling 40 berths (20 lower, 20 upper).
+  - Select **"2x3 Seater Express (60 seats)"**, click "Select Seat". Verify 12 rows x 5 seats per row (2 seats on left, aisle, 3 seats on right, numbered 1..60), totaling 60 seats on a single deck.
+- [ ] **Shared SeatMap Component Accessibility & UX**:
+  - Verify every seat target has a minimum 44px touch target for mobile/tablet usability.
+  - Verify non-color-reliant status cues: checkmark icon for selected, lock icon for booked, clean outline for available.
+  - Verify `role="region"` and `aria-label="Coach Seat Layout"` on the scroll container.
+  - Verify internal horizontal scrolling within the modal region on small screens (360px viewport) with zero page-level horizontal overflow.
+- [ ] **Server-Side Double Booking Prevention**:
+  - Create a booking on a tour, departure date, and bus type with a specific seat (e.g. `lower-L1`).
+  - Attempt to create a second booking with the exact same seat on the same tour, journey date, and bus type. Verify server rejects with HTTP 409 `SEAT_CONFLICT` and descriptive error message.
+  - Attempt to book the same seat on a different tour, date, or different bus type on the same date. Verify booking succeeds (scoped multi-bus support).
+- [ ] **Intra-Booking Duplicate Seat Rejection**:
+  - In a single booking with multiple passengers, attempt to assign the same seat ID to two passengers. Verify server rejects with HTTP 409 `SEAT_CONFLICT`.
+- [ ] **Passenger Seat Reassignment (Swap Seat)**:
+  - In Journeys screen, click a passenger's seat pill to open the Reassign Seat modal.
+  - Verify available seats list only shows genuinely free berths for that departure's bus layout.
+  - Reassign to an occupied seat via forged API request; verify server returns HTTP 409 and does not mutate the passenger's seat.
+- [ ] **Trash Restore Seat Conflict Protection**:
+  - Soft-delete a booking holding a seat.
+  - Create a new booking occupying that same seat on the departure.
+  - Attempt to restore the deleted booking from Trash. Verify restore fails with HTTP 409 `SEAT_CONFLICT` (`conflicts.seatConflict = true`).
+- [ ] **Legacy Seat ID Mapping**:
+  - Verify existing bookings with legacy IDs (e.g. `lower-L1-1` or `lower-L1-2`) resolve to canonical layout seats without throwing errors or requiring destructive DB migrations.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap
