@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { AlertCircle, ArrowRight } from "lucide-react"
-import { Modal, Button, Select, Field } from "../ui"
+import { Modal, Button, Select, Field, Input } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { getAuthToken } from "../../data/adapters/rest"
 import { formatSeatLabel } from "../../utils/formatters"
@@ -15,6 +15,8 @@ export default function MoveSeatModal({
 }) {
   const { toast } = useToast()
   const [targetSeat, setTargetSeat] = useState("")
+  const [overrideRequired, setOverrideRequired] = useState(false)
+  const [overrideReason, setOverrideReason] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -22,6 +24,11 @@ export default function MoveSeatModal({
     e.preventDefault()
     if (!targetSeat) {
       setError("Please select a target seat.")
+      return
+    }
+
+    if (overrideRequired && overrideReason.trim().length < 3) {
+      setError("Please provide an override reason of at least 3 characters.")
       return
     }
 
@@ -38,11 +45,18 @@ export default function MoveSeatModal({
         },
         body: JSON.stringify({
           seatId: targetSeat,
+          overrideLadies: overrideRequired,
+          overrideReason: overrideReason.trim(),
         }),
       })
 
       const data = await res.json()
       if (!res.ok) {
+        if (res.status === 409 && data.code === "LADIES_SEAT") {
+          setOverrideRequired(true)
+          setError(data.message + " You can provide an override reason below to proceed.")
+          return
+        }
         throw new Error(data.message || "Failed to move seat")
       }
 
@@ -93,6 +107,8 @@ export default function MoveSeatModal({
             value={targetSeat}
             onChange={(e) => {
               setTargetSeat(e.target.value)
+              setOverrideRequired(false)
+              setOverrideReason("")
               if (error) setError(null)
             }}
             required
@@ -106,12 +122,32 @@ export default function MoveSeatModal({
           </Select>
         </Field>
 
+        {overrideRequired && (
+          <div className="p-3 bg-amber-500/10 rounded-[var(--yh-radius-md)] border border-amber-500/25 space-y-2 animate-in fade-in">
+            <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+              Ladies Reservation Override
+            </span>
+            <Field label="Override Reason (min 3 characters)" required>
+              <Input
+                type="text"
+                placeholder="e.g. Traveling with family / operator approval"
+                value={overrideReason}
+                onChange={(e) => {
+                  setOverrideReason(e.target.value)
+                  if (error) setError(null)
+                }}
+                required
+              />
+            </Field>
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-2 pt-3 border-t border-border-subtle">
           <Button variant="secondary" onClick={onClose} disabled={loading} type="button">
             Cancel
           </Button>
           <Button variant="primary" type="submit" loading={loading} disabled={!targetSeat}>
-            Confirm Move
+            {overrideRequired ? "Confirm Move (with Override)" : "Confirm Move"}
           </Button>
         </div>
       </form>

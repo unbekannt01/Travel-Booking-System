@@ -26,7 +26,7 @@ import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
 import { calculatePricing } from "../utils/pricing"
 import { autoAssignSeats } from "../utils/seatAssignment"
-import { formatINR, maskAadhaar } from "../utils/formatters"
+import { formatINR, maskAadhaar, formatSeatLabel } from "../utils/formatters"
 import { isMaskedAadhaar } from "../utils/validators"
 import { lookupCustomerByPhone } from "../data/customers"
 import { cn } from "../utils/cn"
@@ -52,7 +52,7 @@ import {
   FOCUS_RING_CLASS,
 } from "./ui"
 import SeatMap from "./seats/SeatMap"
-import { layoutKeyForBusType, resolveSeatId, STANDARD_BUS_TYPES } from "../../shared/seatLayouts"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId, STANDARD_BUS_TYPES } from "../../shared/seatLayouts"
 
 /* ── Accessible Token-Based Gender Selector ── */
 function GenderSelector({ value, onChange, ariaLabel }) {
@@ -325,14 +325,18 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
   }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
 
   const [activeHolds, setActiveHolds] = useState([])
+  const [seatConfig, setSeatConfig] = useState(null)
+
   useEffect(() => {
     if (!formData.tourName || !formData.journeyDate) {
       setActiveHolds([])
+      setSeatConfig(null)
       return
     }
     let cancelled = false
     const bus = formData.busType || "2x1 Sleeper Luxury"
     const key = `${formData.tourName}___${formData.journeyDate}___${bus}`
+
     fetch(`/api/departures/${encodeURIComponent(key)}/seat-holds`, {
       headers: {
         Authorization: `Bearer ${getAuthToken()}`,
@@ -345,6 +349,20 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
         }
       })
       .catch(() => {})
+
+    fetch(`/api/departures/${encodeURIComponent(key)}/seat-config`, {
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.config) {
+          setSeatConfig(data.config)
+        }
+      })
+      .catch(() => {})
+
     return () => {
       cancelled = true
     }
@@ -377,8 +395,26 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       })
     })
 
+    if (seatConfig) {
+      (seatConfig.ladiesSeats || []).forEach((raw) => {
+        const canonicalId = resolveSeatId(layoutKey, raw)
+        if (!map[canonicalId]) {
+          map[canonicalId] = { status: "available" }
+        }
+        map[canonicalId].ladies = true
+      });
+      (seatConfig.couplePairs || []).forEach((cp) => {
+        const canA = resolveSeatId(layoutKey, cp.a)
+        const canB = resolveSeatId(layoutKey, cp.b)
+        if (!map[canA]) map[canA] = { status: "available" }
+        if (!map[canB]) map[canB] = { status: "available" }
+        map[canA].pairWith = canB
+        map[canB].pairWith = canA
+      })
+    }
+
     return map
-  }, [bookedSeats, activeHolds, formData.holdId, formData.busType, formData.seatLayout])
+  }, [bookedSeats, activeHolds, seatConfig, formData.holdId, formData.busType, formData.seatLayout])
 
   const clearFieldError = (fieldId) => {
     if (!stepErrors[fieldId]) return
@@ -461,6 +497,114 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     }
   }
 
+  const [ladiesOverrideDialog, setLadiesOverrideDialog] = useState(null)
+  const [overrideReasonInput, setOverrideReasonInput] = useState("")
+  const [overrideReasonError, setOverrideReasonError] = useState("")
+  const [fareSuggestionHint, setFareSuggestionHint] = useState("")
+
+  const mixedGenderBerths = useMemo(() => {
+    const layoutKey = layoutKeyForBusType(formData.busType || formData.seatLayout)
+    const layout = getSeatLayout(layoutKey)
+    if (!layout || layout.category !== "sleeper") return []
+
+    const cabins = new Map()
+    formData.passengers.forEach((p) => {
+      if (!p.seatId) return
+      const canonical = resolveSeatId(layoutKey, p.seatId)
+      const seatDef = layout.seats.find((s) => s.id === canonical)
+      if (seatDef?.cabin) {
+        if (!cabins.has(seatDef.cabin)) cabins.set(seatDef.cabin, [])
+        cabins.get(seatDef.cabin).push({
+          name: p.name || "Traveler",
+          gender: p.gender || "Unknown",
+          seatId: p.seatId,
+        })
+      }
+    })
+
+    const mixed = []
+    for (const [cabin, paxList] of cabins.entries()) {
+      if (paxList.length >= 2) {
+        const genders = new Set(paxList.map((p) => (p.gender || "").toLowerCase()).filter(Boolean))
+        if (genders.has("male") && genders.has("female")) {
+          mixed.push({ cabin, paxList })
+        }
+      }
+    }
+    return mixed
+  }, [formData.passengers, formData.busType, formData.seatLayout])
+
+  const applySeatAssignment = (paxIndex, newSeatId, updatedPax, overrideData = null) => {
+    const layoutKey = layoutKeyForBusType(formData.busType || formData.seatLayout)
+    const updated = updatedPax ? [...updatedPax] : formData.passengers.map((p) => ({ ...p }))
+    updated[paxIndex].seatId = newSeatId
+
+    // Auto-select couple pair partner for next unseated passenger
+    if (newSeatId && seatConfig?.couplePairs?.length > 0) {
+      const pair = seatConfig.couplePairs.find((cp) => {
+        const canA = resolveSeatId(layoutKey, cp.a)
+        const canB = resolveSeatId(layoutKey, cp.b)
+        return canA === newSeatId || canB === newSeatId
+      })
+      if (pair) {
+        const canA = resolveSeatId(layoutKey, pair.a)
+        const canB = resolveSeatId(layoutKey, pair.b)
+        const partnerSeat = canA === newSeatId ? canB : canA
+        const nextUnseatedIdx = updated.findIndex((p, idx) => idx !== paxIndex && !p.seatId)
+        if (nextUnseatedIdx !== -1) {
+          updated[nextUnseatedIdx].seatId = partnerSeat
+          toast.info(
+            `Auto-selected couple pair seat ${formatSeatLabel(partnerSeat)} for ${
+              updated[nextUnseatedIdx].name || `Passenger ${nextUnseatedIdx + 1}`
+            }`,
+          )
+        }
+      }
+    }
+
+    // Fare presets suggestion pre-fill (lower, upper, rear, seat)
+    let suggestedBaseAmount = null
+    if (!isEditMode && seatConfig?.fares) {
+      let totalPreset = 0
+      let hasPresets = false
+      updated.forEach((p) => {
+        if (!p.seatId) return
+        const sid = p.seatId.toLowerCase()
+        let paise = 0
+        if (sid.includes("-u") || sid === "rear-b2") {
+          paise = seatConfig.fares.upper || 0
+        } else if (sid.startsWith("rear")) {
+          paise = seatConfig.fares.rear || seatConfig.fares.lower || 0
+        } else if (sid.startsWith("seat-")) {
+          paise = seatConfig.fares.seat || 0
+        } else {
+          paise = seatConfig.fares.lower || 0
+        }
+        if (paise > 0) {
+          totalPreset += paise / 100
+          hasPresets = true
+        }
+      })
+      if (hasPresets && totalPreset > 0) {
+        suggestedBaseAmount = totalPreset
+        setFareSuggestionHint("Suggested from seat settings")
+      }
+    }
+
+    const calculatedTourTotal = calculateTotal(updated, formData.tourName)
+    const effectiveTotal = suggestedBaseAmount || calculatedTourTotal || formData.totalAmount
+
+    clearFieldError(`passenger-${paxIndex}-seat`)
+    setFormData((prev) => ({
+      ...prev,
+      passengers: updated,
+      totalAmount: effectiveTotal,
+      baseAmount: effectiveTotal,
+      overrideLadies: overrideData ? overrideData.overrideLadies : prev.overrideLadies,
+      overrideReason: overrideData ? overrideData.overrideReason : prev.overrideReason,
+    }))
+  }
+
   const handleSeatSelection = (seatId) => {
     const layoutKey = layoutKeyForBusType(formData.busType || formData.seatLayout)
     const canonicalId = resolveSeatId(layoutKey, seatId)
@@ -473,17 +617,25 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     const currentPassengerSeat = updated[activePassengerIndex]?.seatId
       ? resolveSeatId(layoutKey, updated[activePassengerIndex].seatId)
       : ""
-    updated[activePassengerIndex].seatId =
-      currentPassengerSeat === canonicalId ? "" : canonicalId
+    const isDeselecting = currentPassengerSeat === canonicalId
+    const targetSeatId = isDeselecting ? "" : canonicalId
 
-    const newTotal = calculateTotal(updated, formData.tourName)
-    clearFieldError(`passenger-${activePassengerIndex}-seat`)
-    setFormData((prev) => ({
-      ...prev,
-      passengers: updated,
-      totalAmount: newTotal || prev.totalAmount,
-      baseAmount: newTotal || prev.baseAmount,
-    }))
+    // Check Ladies reservation
+    if (!isDeselecting && seatConfig?.ladiesSeats?.includes(canonicalId)) {
+      const paxGender = (updated[activePassengerIndex]?.gender || "").trim().toLowerCase()
+      if (paxGender && paxGender !== "female") {
+        setLadiesOverrideDialog({
+          seatId: canonicalId,
+          passengerIndex: activePassengerIndex,
+          passengerName: updated[activePassengerIndex]?.name || `Passenger ${activePassengerIndex + 1}`,
+        })
+        setOverrideReasonInput("")
+        setOverrideReasonError("")
+        return
+      }
+    }
+
+    applySeatAssignment(activePassengerIndex, targetSeatId, updated)
   }
 
   const handleOpenAutoAssign = () => {
@@ -1147,6 +1299,29 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                 </div>
               </div>
 
+              {mixedGenderBerths.length > 0 && (
+                <div className="space-y-2">
+                  {mixedGenderBerths.map((m) => (
+                    <div
+                      key={m.cabin}
+                      className="flex items-start gap-2 p-3 text-xs rounded-[var(--yh-radius-md)] bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-500/25"
+                    >
+                      <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-600" />
+                      <div>
+                        <span className="font-bold block">Mixed-Gender Berth Box: {m.cabin}</span>
+                        <span>
+                          Berth box {m.cabin} has travelers of mixed genders (
+                          {m.paxList
+                            .map((p) => `${p.name || "Traveler"}: ${p.gender || "Unknown"}`)
+                            .join(", ")}
+                          ).
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-4">
                 {formData.passengers.map((p, i) => (
                   <div
@@ -1381,7 +1556,16 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
                   id="baseAmount"
-                  label="Base package cost (₹)"
+                  label={
+                    <span className="flex items-center justify-between w-full">
+                      <span>Base package cost (₹)</span>
+                      {fareSuggestionHint && (
+                        <span className="text-[11px] font-normal text-brand">
+                          ({fareSuggestionHint})
+                        </span>
+                      )}
+                    </span>
+                  }
                   required
                   error={stepErrors.baseAmount}
                 >
@@ -1400,6 +1584,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         const val = Number(e.target.value) || 0
                         clearFieldError("baseAmount")
                         clearFieldError("advanceReceived")
+                        setFareSuggestionHint("")
                         setFormData((prev) => ({
                           ...prev,
                           baseAmount: val,
@@ -2005,6 +2190,74 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
           </div>
         </div>
       </Modal>
+
+      {/* ── Ladies Seat Override Modal ── */}
+      {ladiesOverrideDialog && (
+        <Modal
+          isOpen={Boolean(ladiesOverrideDialog)}
+          onClose={() => setLadiesOverrideDialog(null)}
+          title="Ladies Reserved Seat Override"
+          description={`Seat ${formatSeatLabel(ladiesOverrideDialog.seatId)} is reserved for ladies. Passenger "${ladiesOverrideDialog.passengerName}" is registered as non-female.`}
+          size="sm"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-500/10 rounded-[var(--yh-radius-md)] border border-amber-500/25 text-xs text-amber-900 dark:text-amber-200">
+              <span className="font-bold block mb-1">Authorization Required</span>
+              <span>
+                To assign a ladies-reserved seat to this passenger, please provide an operational override reason (minimum 3 characters). This action will be logged in the audit trail.
+              </span>
+            </div>
+
+            <Field
+              label="Override Reason"
+              required
+              error={overrideReasonError}
+            >
+              <Input
+                type="text"
+                placeholder="e.g. Traveling with family / operator approval"
+                value={overrideReasonInput}
+                onChange={(e) => {
+                  setOverrideReasonInput(e.target.value)
+                  if (overrideReasonError) setOverrideReasonError("")
+                }}
+              />
+            </Field>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border-subtle">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setLadiesOverrideDialog(null)}
+              >
+                Cancel Assignment
+              </Button>
+              <Button
+                variant="primary"
+                type="button"
+                onClick={() => {
+                  if (overrideReasonInput.trim().length < 3) {
+                    setOverrideReasonError("Please enter a reason of at least 3 characters.")
+                    return
+                  }
+                  applySeatAssignment(
+                    ladiesOverrideDialog.passengerIndex,
+                    ladiesOverrideDialog.seatId,
+                    null,
+                    {
+                      overrideLadies: true,
+                      overrideReason: overrideReasonInput.trim(),
+                    },
+                  )
+                  setLadiesOverrideDialog(null)
+                }}
+              >
+                Confirm Override
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </form>
   )
 }

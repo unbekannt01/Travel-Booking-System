@@ -11,6 +11,8 @@ import {
   Users,
   Check,
   Info,
+  Sliders,
+  Heart,
 } from "lucide-react"
 import { Card, Button, Badge, Spinner, EmptyState } from "../ui"
 import PanelErrorBoundary from "../common/PanelErrorBoundary"
@@ -19,6 +21,8 @@ import SeatMap from "../seats/SeatMap"
 import SeatActionDrawer from "./SeatActionDrawer"
 import HoldModal from "./HoldModal"
 import MoveSeatModal from "./MoveSeatModal"
+import SeatSettingsModal from "./SeatSettingsModal"
+import { useToast } from "../common/ToastContext"
 import { formatDisplayDate } from "../../utils/date"
 import { formatSeatLabel } from "../../utils/formatters"
 import { getAuthToken } from "../../data/adapters/rest"
@@ -33,16 +37,46 @@ export default function LiveSeatMap({
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState(null)
   const [isRateLimited, setIsRateLimited] = useState(false)
+  const { toast } = useToast()
   const [rateLimitReset, setRateLimitReset] = useState(null)
 
   // Drawer & Modals state
   const [selectedSeatForDrawer, setSelectedSeatForDrawer] = useState(null)
   const [holdModalConfig, setHoldModalConfig] = useState(null) // { selectedSeats: [], kind: 'hold' }
   const [moveModalConfig, setMoveModalConfig] = useState(null) // { bookingId, passenger }
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
 
   // Multi-select batch mode
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
   const [selectedSeatIds, setSelectedSeatIds] = useState([])
+
+  const handleUpdateSeatConfig = async (updater) => {
+    try {
+      const currentConfig = mapData?.seatConfig || {
+        ladiesSeats: [],
+        couplePairs: [],
+        fares: { lower: 0, upper: 0, rear: 0, seat: 0 },
+      }
+      const nextConfig = updater(currentConfig)
+      const token = getAuthToken()
+      const res = await fetch(`/api/departures/${encodeURIComponent(departureKey)}/seat-config`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(nextConfig),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "Failed to update seat configuration")
+      }
+      toast.success("Seat configuration updated.")
+      fetchSeatMap(true)
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
 
   // Local ticker for dynamic timed hold countdowns (every 30s)
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -232,6 +266,15 @@ export default function LiveSeatMap({
 
           <div className="flex items-center gap-2 shrink-0">
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setSettingsModalOpen(true)}
+              icon={<Sliders size={14} />}
+            >
+              Seat Settings
+            </Button>
+
+            <Button
               variant={isMultiSelectMode ? "primary" : "secondary"}
               size="sm"
               onClick={() => {
@@ -408,6 +451,79 @@ export default function LiveSeatMap({
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="border-purple-400 text-purple-800 dark:text-purple-200"
+                    onClick={() => {
+                      handleUpdateSeatConfig((prev) => {
+                        const set = new Set(prev.ladiesSeats || [])
+                        selectedSeatIds.forEach((id) => set.add(id))
+                        return { ...prev, ladiesSeats: Array.from(set) }
+                      })
+                      setSelectedSeatIds([])
+                    }}
+                  >
+                    Mark Ladies
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="border-purple-300 text-purple-700"
+                    onClick={() => {
+                      handleUpdateSeatConfig((prev) => ({
+                        ...prev,
+                        ladiesSeats: (prev.ladiesSeats || []).filter((id) => !selectedSeatIds.includes(id)),
+                      }))
+                      setSelectedSeatIds([])
+                    }}
+                  >
+                    Remove Ladies
+                  </Button>
+
+                  {selectedSeatIds.length === 2 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="border-sky-400 text-sky-800 dark:text-sky-200"
+                      onClick={() => {
+                        handleUpdateSeatConfig((prev) => {
+                          const [a, b] = selectedSeatIds
+                          const cleaned = (prev.couplePairs || []).filter(
+                            (cp) => cp.a !== a && cp.b !== a && cp.a !== b && cp.b !== b,
+                          )
+                          return { ...prev, couplePairs: [...cleaned, { a, b }] }
+                        })
+                        setSelectedSeatIds([])
+                      }}
+                      icon={<Heart size={13} />}
+                    >
+                      Make Couple Pair
+                    </Button>
+                  )}
+
+                  {selectedSeatIds.some((id) =>
+                    mapData?.seatConfig?.couplePairs?.some((cp) => cp.a === id || cp.b === id),
+                  ) && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="border-sky-300 text-sky-700"
+                      onClick={() => {
+                        handleUpdateSeatConfig((prev) => ({
+                          ...prev,
+                          couplePairs: (prev.couplePairs || []).filter(
+                            (cp) => !selectedSeatIds.includes(cp.a) && !selectedSeatIds.includes(cp.b),
+                          ),
+                        }))
+                        setSelectedSeatIds([])
+                      }}
+                    >
+                      Break Pair
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     className="border-amber-400 text-amber-800 dark:text-amber-200"
                     onClick={() =>
                       setHoldModalConfig({
@@ -452,6 +568,8 @@ export default function LiveSeatMap({
           onClose={() => setSelectedSeatForDrawer(null)}
           seat={selectedSeatForDrawer}
           departureKey={departureKey}
+          mapData={mapData}
+          onUpdateSeatConfig={handleUpdateSeatConfig}
           onOpenHoldModal={({ seatId, kind }) =>
             setHoldModalConfig({ selectedSeats: [seatId], kind })
           }
@@ -460,6 +578,15 @@ export default function LiveSeatMap({
           }
           onBookSeat={handleBookFromDrawer}
           onRefresh={() => fetchSeatMap(true)}
+        />
+
+        {/* ── Departure Seat Settings Modal ── */}
+        <SeatSettingsModal
+          isOpen={settingsModalOpen}
+          onClose={() => setSettingsModalOpen(false)}
+          departureKey={departureKey}
+          initialConfig={mapData?.seatConfig}
+          onSuccess={() => fetchSeatMap(true)}
         />
 
         {/* ── Hold / Block Modal ── */}

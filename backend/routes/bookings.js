@@ -6,6 +6,7 @@ import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
 import Customer from "../models/Customer.js"
 import SeatHold from "../models/SeatHold.js"
+import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
 import { logAudit } from "../models/AuditLog.js"
 import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff, isMaskedOrUnchangedAadhaar } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
@@ -203,6 +204,8 @@ export const checkSeatConflicts = async ({
   passengers,
   excludeBookingId = null,
   holdId = null,
+  overrideLadies = false,
+  overrideReason = "",
 }) => {
   const seatIds = (passengers || []).map((p) => p.seatId).filter(Boolean)
   if (seatIds.length === 0) return null
@@ -261,6 +264,75 @@ export const checkSeatConflicts = async ({
         ],
       }
     : { busType: normalizedBus }
+
+  // 4. Validate departure seat configuration (couple pairs & ladies-reserved seats)
+  const seatConfig = await DepartureSeatConfig.findOne({
+    userId,
+    tourName,
+    journeyDate: { $gte: start, $lte: end },
+    ...busCondition,
+  }).lean()
+
+  const ladiesOverrides = []
+  if (seatConfig) {
+    // 4a. Couple pair enforcement
+    if (seatConfig.couplePairs?.length > 0) {
+      for (const p of passengers || []) {
+        if (!p.seatId) continue
+        const canon = resolveSeatId(layoutKey, p.seatId)
+        const pair = seatConfig.couplePairs.find((cp) => cp.a === canon || cp.b === canon)
+        if (pair) {
+          const partner = pair.a === canon ? pair.b : pair.a
+          if (!normalizedSeatIds.includes(partner)) {
+            return {
+              status: 409,
+              code: "COUPLE_PAIR",
+              message: `Seat "${p.seatId}" is part of a couple pair with seat "${partner}". Both seats must be booked together, or break the pair first.`,
+              conflictingSeats: [p.seatId],
+            }
+          }
+        }
+      }
+    }
+
+    // 4b. Ladies-reserved seats enforcement
+    if (seatConfig.ladiesSeats?.length > 0) {
+      for (const p of passengers || []) {
+        if (!p.seatId) continue
+        const canon = resolveSeatId(layoutKey, p.seatId)
+        if (seatConfig.ladiesSeats.includes(canon)) {
+          const gender = (p.gender || "").trim().toLowerCase()
+          if (!gender) {
+            return {
+              status: 400,
+              code: "LADIES_SEAT_GENDER_REQUIRED",
+              message: `Gender is required for passenger "${p.name || p.seatId}" on ladies-reserved seat "${p.seatId}".`,
+            }
+          }
+          if (gender !== "female") {
+            const hasOverride =
+              Boolean(overrideLadies) &&
+              typeof overrideReason === "string" &&
+              overrideReason.trim().length >= 3
+            if (!hasOverride) {
+              return {
+                status: 409,
+                code: "LADIES_SEAT",
+                message: `Seat "${p.seatId}" is reserved for ladies.`,
+                conflictingSeats: [p.seatId],
+              }
+            }
+            ladiesOverrides.push({
+              seatId: p.seatId,
+              canonical: canon,
+              passengerName: p.name || "",
+              overrideReason: overrideReason.trim(),
+            })
+          }
+        }
+      }
+    }
+  }
 
   const query = {
     userId,
@@ -374,7 +446,7 @@ export const checkSeatConflicts = async ({
     }
   }
 
-  return { authorizedHold }
+  return { authorizedHold, ladiesOverrides }
 }
 
 // POST /api/bookings/generate-invoice
@@ -552,8 +624,10 @@ router.post("/", verifyToken, async (req, res) => {
       busType,
       passengers,
       holdId: req.body.holdId || null,
+      overrideLadies: req.body.overrideLadies,
+      overrideReason: req.body.overrideReason,
     })
-    if (seatConflict && seatConflict.conflictingSeats) {
+    if (seatConflict && (seatConflict.conflictingSeats || seatConflict.status)) {
       return res.status(seatConflict.status || 409).json({
         code: seatConflict.code || "SEAT_CONFLICT",
         message: seatConflict.message,
@@ -730,6 +804,23 @@ router.post("/", verifyToken, async (req, res) => {
       user: req.user,
     })
 
+    if (seatConflict?.ladiesOverrides?.length > 0) {
+      for (const ov of seatConflict.ladiesOverrides) {
+        await logAudit({
+          userId: req.user.id,
+          action: "LADIES_SEAT_OVERRIDE",
+          req,
+          meta: {
+            bookingId: savedBooking._id,
+            invoiceNo: savedBooking.invoiceNo,
+            passengerName: ov.passengerName,
+            seatId: ov.seatId,
+            overrideReason: ov.overrideReason,
+          },
+        })
+      }
+    }
+
     // If booking was authorized via a seat hold, convert the hold
     if (seatConflict?.authorizedHold) {
       try {
@@ -856,9 +947,10 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 
     // Seat conflicts check (409)
+    let seatConflict = null
     if (req.body.passengers || req.body.journeyDate || req.body.tourName || req.body.busType) {
       const effectiveBusType = req.body.busType !== undefined ? req.body.busType : booking.busType
-      const seatConflict = await checkSeatConflicts({
+      seatConflict = await checkSeatConflicts({
         userId: req.user.id,
         tourName: effectiveTourName,
         journeyDate: effectiveJourneyDate,
@@ -866,8 +958,10 @@ router.put("/:id", verifyToken, async (req, res) => {
         passengers: effectivePassengers,
         excludeBookingId: booking._id,
         holdId: req.body.holdId || null,
+        overrideLadies: req.body.overrideLadies,
+        overrideReason: req.body.overrideReason,
       })
-      if (seatConflict && seatConflict.conflictingSeats) {
+      if (seatConflict && (seatConflict.conflictingSeats || seatConflict.status)) {
         return res.status(seatConflict.status || 409).json({
           code: seatConflict.code || "SEAT_CONFLICT",
           message: seatConflict.message,
@@ -1032,6 +1126,23 @@ router.put("/:id", verifyToken, async (req, res) => {
       user: req.user,
     })
 
+    if (seatConflict?.ladiesOverrides?.length > 0) {
+      for (const ov of seatConflict.ladiesOverrides) {
+        await logAudit({
+          userId: req.user.id,
+          action: "LADIES_SEAT_OVERRIDE",
+          req,
+          meta: {
+            bookingId: booking._id,
+            invoiceNo: booking.invoiceNo,
+            passengerName: ov.passengerName,
+            seatId: ov.seatId,
+            overrideReason: ov.overrideReason,
+          },
+        })
+      }
+    }
+
     res.json(maskBookingPaxAadhaar(syncedBooking || booking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
@@ -1184,14 +1295,32 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
           busType: booking.busType,
           passengers: proposedPassengers,
           excludeBookingId: booking._id,
+          overrideLadies: req.body.overrideLadies,
+          overrideReason: req.body.overrideReason,
         })
-        if (seatConflict && seatConflict.conflictingSeats) {
+        if (seatConflict && (seatConflict.conflictingSeats || seatConflict.status)) {
           return res.status(seatConflict.status || 409).json({
             code: seatConflict.code || "SEAT_CONFLICT",
             message: seatConflict.message,
             conflictingSeats: seatConflict.conflictingSeats,
             holdInfo: seatConflict.holdInfo,
           })
+        }
+
+        if (seatConflict?.ladiesOverrides?.length > 0) {
+          for (const ov of seatConflict.ladiesOverrides) {
+            await logAudit({
+              userId: req.user.id,
+              action: "LADIES_SEAT_OVERRIDE",
+              req,
+              meta: {
+                bookingId: booking._id,
+                passengerName: passenger.name,
+                seatId,
+                overrideReason: ov.overrideReason,
+              },
+            })
+          }
         }
       }
 

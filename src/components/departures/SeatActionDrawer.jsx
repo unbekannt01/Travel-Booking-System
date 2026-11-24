@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   User,
   Clock,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   RefreshCw,
   Trash2,
+  Heart,
 } from "lucide-react"
 import { Drawer, Button, ConfirmDialog, Field, Select, Input } from "../ui"
 import { formatINR, formatSeatLabel } from "../../utils/formatters"
@@ -24,6 +25,8 @@ export default function SeatActionDrawer({
   isOpen,
   onClose,
   seat,
+  mapData,
+  onUpdateSeatConfig,
   onOpenHoldModal,
   onOpenMoveModal,
   onBookSeat,
@@ -35,12 +38,29 @@ export default function SeatActionDrawer({
   const [extendMinutes, setExtendMinutes] = useState(60)
   const [showExtendControls, setShowExtendControls] = useState(false)
 
-  if (!seat) return null
+  const isBooked = seat?.status === "booked"
+  const isHeld = seat?.status === "held"
+  const isBlocked = seat?.status === "blocked"
+  const isAvailable = seat?.status === "available"
 
-  const isBooked = seat.status === "booked"
-  const isHeld = seat.status === "held"
-  const isBlocked = seat.status === "blocked"
-  const isAvailable = seat.status === "available"
+  const berthCompanion = useMemo(() => {
+    if (!isBooked || !seat?.cabin || !mapData?.seats) return null
+    for (const [sId, sInfo] of Object.entries(mapData.seats)) {
+      if (sId !== seat.seatId && sInfo.cabin === seat.cabin && sInfo.status === "booked") {
+        return sInfo
+      }
+    }
+    return null
+  }, [isBooked, seat, mapData])
+
+  const hasMixedGenderBerth = Boolean(
+    berthCompanion &&
+      seat?.gender &&
+      berthCompanion.gender &&
+      seat.gender.toLowerCase() !== berthCompanion.gender.toLowerCase(),
+  )
+
+  if (!seat) return null
 
   const handleRelease = async () => {
     if (!seat.holdId) return
@@ -213,6 +233,54 @@ export default function SeatActionDrawer({
                     Operational Block
                   </Button>
                 </div>
+
+                {onUpdateSeatConfig && (
+                  <div className="pt-2 border-t border-border-subtle space-y-2">
+                    <span className="text-[11px] font-bold text-ink-muted uppercase tracking-wider block">
+                      Departure Seat Rules
+                    </span>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full text-xs justify-center"
+                        onClick={() => {
+                          onUpdateSeatConfig((prev) => {
+                            const ladies = prev.ladiesSeats || []
+                            const isLadies = ladies.includes(seat.seatId)
+                            return {
+                              ...prev,
+                              ladiesSeats: isLadies
+                                ? ladies.filter((s) => s !== seat.seatId)
+                                : [...ladies, seat.seatId],
+                            }
+                          })
+                          onClose()
+                        }}
+                      >
+                        {seat.ladies ? "Remove Ladies Reservation" : "Mark as Ladies-Reserved"}
+                      </Button>
+                      {seat.pairWith && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="w-full text-xs justify-center text-rose-700 dark:text-rose-300"
+                          onClick={() => {
+                            onUpdateSeatConfig((prev) => ({
+                              ...prev,
+                              couplePairs: (prev.couplePairs || []).filter(
+                                (cp) => cp.a !== seat.seatId && cp.b !== seat.seatId,
+                              ),
+                            }))
+                            onClose()
+                          }}
+                        >
+                          Break Couple Pair (with {formatSeatLabel(seat.pairWith)})
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -221,6 +289,17 @@ export default function SeatActionDrawer({
           {isBooked && (
             <div className="space-y-4">
               <div className="p-3.5 bg-surface rounded-[var(--yh-radius-xl)] border border-border-subtle shadow-xs space-y-3">
+                {hasMixedGenderBerth && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-[var(--yh-radius-md)] bg-amber-500/10 text-amber-900 dark:text-amber-200 border border-amber-500/25 text-xs">
+                    <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-600" />
+                    <div>
+                      <span className="font-bold block">Mixed-Gender Berth</span>
+                      <span>
+                        This berth is occupied by {seat.gender} ({seat.passengerName}), but companion berth #{berthCompanion.seatNumber} is {berthCompanion.gender} ({berthCompanion.passengerName}).
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
                   <div className="flex items-center gap-2">
                     <User size={16} className="text-brand" />

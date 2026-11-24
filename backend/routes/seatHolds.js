@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit"
 import { z } from "zod"
 import SeatHold from "../models/SeatHold.js"
 import Booking from "../models/Booking.js"
+import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
 import { logAudit } from "../models/AuditLog.js"
 import verifyToken from "../middleware/auth.js"
 import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
@@ -124,6 +125,14 @@ export async function getDepartureSeatMap(req, res) {
       $or: [{ mode: "manual" }, { expiresAt: { $gt: now } }],
     }).lean()
 
+    // 3. Fetch departure seat configuration (ladies seats, couple pairs, fare presets)
+    const seatConfig = await DepartureSeatConfig.findOne({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+      ...busCondition,
+    }).lean()
+
     // Build lookup maps
     const bookedSeats = new Map() // canonicalId -> seat detail
     for (const b of bookings) {
@@ -232,6 +241,15 @@ export async function getDepartureSeatMap(req, res) {
         availableCount++
       }
 
+      const isLadies = Boolean(seatConfig?.ladiesSeats?.includes(canonical))
+      const pair = seatConfig?.couplePairs?.find(
+        (cp) => cp.a === canonical || cp.b === canonical,
+      )
+      const pairWith = pair ? (pair.a === canonical ? pair.b : pair.a) : null
+
+      seatInfo.ladies = isLadies
+      seatInfo.pairWith = pairWith
+
       seatsData[canonical] = seatInfo
     }
 
@@ -251,6 +269,20 @@ export async function getDepartureSeatMap(req, res) {
         held: heldCount,
         blocked: blockedCount,
       },
+      fares: seatConfig?.fares || { lower: 0, upper: 0, rear: 0, seat: 0 },
+      seatConfig: seatConfig
+        ? {
+            ladiesSeats: seatConfig.ladiesSeats || [],
+            couplePairs: seatConfig.couplePairs || [],
+            fares: seatConfig.fares || { lower: 0, upper: 0, rear: 0, seat: 0 },
+            updatedAt: seatConfig.updatedAt,
+          }
+        : {
+            ladiesSeats: [],
+            couplePairs: [],
+            fares: { lower: 0, upper: 0, rear: 0, seat: 0 },
+            updatedAt: null,
+          },
       seats: seatsData,
     })
   } catch (error) {
@@ -363,6 +395,29 @@ router.post("/", seatHoldWriteLimiter, verifyToken, async (req, res) => {
     }
 
     const busCondition = getBusCondition(busType)
+
+    // Check couple pair integrity: if a seat is in a couple pair, both must be held or blocked together
+    const seatConfig = await DepartureSeatConfig.findOne({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+      ...busCondition,
+    }).lean()
+
+    if (seatConfig?.couplePairs?.length > 0) {
+      for (const s of canonicalSeatIds) {
+        const pair = seatConfig.couplePairs.find((cp) => cp.a === s || cp.b === s)
+        if (pair) {
+          const partner = pair.a === s ? pair.b : pair.a
+          if (!canonicalSeatIds.includes(partner)) {
+            return res.status(409).json({
+              code: "COUPLE_PAIR",
+              message: `Seat ${s} is part of a couple pair with seat ${partner}. Both seats must be held or blocked together, or break the pair first.`,
+            })
+          }
+        }
+      }
+    }
 
     // 1. Check if any seat is already booked
     const activeBookings = await Booking.find({

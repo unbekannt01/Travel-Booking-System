@@ -9,6 +9,7 @@ import { decryptAadhaar } from "../utils/aadhaar.js"
 import { getDayBounds } from "../../shared/businessLogic.js"
 import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
 import { getDepartureSeatMap, getDepartureSeatHolds, seatMapReadLimiter } from "./seatHolds.js"
+import seatConfigRoutes from "./seatConfig.js"
 
 export { parseDepartureKey, getBusCondition }
 
@@ -235,5 +236,8 @@ router.get("/:key/seat-map", seatMapReadLimiter, verifyToken, getDepartureSeatMa
 
 // GET /api/departures/:key/seat-holds
 router.get("/:key/seat-holds", seatMapReadLimiter, verifyToken, getDepartureSeatHolds)
+
+// GET & PUT /api/departures/:key/seat-config
+router.use("/:key/seat-config", seatConfigRoutes)
 
 export default router

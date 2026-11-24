@@ -600,6 +600,12 @@ export default function SeatMap({
             </span>
             <span className="text-purple-800 dark:text-purple-300">Ladies</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded bg-sky-500/20 border border-sky-400 flex items-center justify-center text-sky-700 dark:text-sky-300 font-bold text-[9px]">
+              <Link2 size={9} />
+            </span>
+            <span className="text-sky-800 dark:text-sky-300">Couple Pair</span>
+          </div>
         </div>
       </div>
 
