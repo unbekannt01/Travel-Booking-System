@@ -1063,3 +1063,69 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - Full WCAG 2.1 AA keyboard support (`Tab`, `Enter`, `Escape`) with min 44px touch targets.
   - *Automated tests not written, per owner decision.*
 
+---
+
+## 28. Canvas Seat Confirmation Generator & Pickup-Wise Manifest Engine (Part 6S-3a)
+
+- **Pure Client-Side Canvas 2D Confirmation Card Generator (`src/utils/seatImage.js`)**:
+  - **1080px High-Resolution Canvas Architecture**:
+    - Generates self-contained 1080px wide PNG images directly in the browser DOM, eliminating backend Node/Puppeteer server overhead.
+    - Dynamically computes canvas height based on coach row count, layout structure, and footer options:
+      - 2x1 sleeper (38 berths): 6 rows + rear berth section (~1200px height).
+      - 2x2 sleeper (48 berths): 6 rows (~1120px height).
+      - 2x2 sleeper (40 berths): 5 rows (~1020px height).
+      - 2+3 seater (60 seats): 12 rows (~1680px height).
+  - **Layout Parity & Coach Visual Framing**:
+    - Outer coach shell rendered with rounded rectangular borders (`roundRect`), light grey road background (`#f8fafc`), and coach body (`#ffffff`).
+    - Yellow/amber header strip at the top features "▲ Front" on the left and "Driver" with a steering wheel icon (☸) on the right.
+    - Four column headers (Left Lower, Left Upper, central "SLEEPER" aisle, Right Lower, Right Upper) matching `shared/seatLayouts.js`.
+    - Berth boxes rendered with distinct `L{r}` and `U{r}` titles and stacked berth rectangles.
+    - Rear section renders wide bottom berths B1 and B2 for 2x1 sleeper coaches.
+  - **Zero PII Leakage & Privacy Boundary**:
+    - Recipient passenger's seats are prominently highlighted in vibrant primary blue (`#2563eb`), bold `#1d4ed8` borders, white text, and a checkmark badge (✔).
+    - All other booked or held seats are rendered strictly in neutral `#f1f5f9` with `#e2e8f0` 45° diagonal hatch lines and a lock glyph (🔒).
+    - Under no circumstances does the image disclose other travelers' names, phone numbers, genders, ages, or financial statuses.
+  - **Multilingual Offline Typography**:
+    - Localized trilingual labels across English (`en`), Gujarati (`gu`), and Hindi (`hi`).
+    - Explicitly awaits `document.fonts.ready` before rendering canvas contexts, guaranteeing that `@fontsource/noto-sans-gujarati` and `@fontsource/noto-sans-devanagari` are fully loaded in memory, eliminating tofu glyphs (□) or broken conjuncts.
+  - **Opt-in Financial Transparency**:
+    - Balance due badge is strictly opt-in (`showBalance: false` by default). When enabled by the operator, renders a dedicated card in the footer showing total balance due in INR (`₹`).
+
+- **Manual WhatsApp Share Dialog (`src/components/seats/ShareSeatModal.jsx`)**:
+  - Accessible modal dialog triggered from booked seats on Live Seat Map, Seat Action Drawer, or Travelers screen.
+  - Interactive controls:
+    - Passenger checklist to select one or multiple travelers within the booking.
+    - Language switcher (`English`, `ગુજરાતી`, `हिन्दी`).
+    - Financial privacy toggle ("Include balance due in message and card", default unchecked).
+    - Live scaled canvas image preview with loading indicator.
+    - Editable message template with placeholder substitution (`{name}`, `{tour}`, `{date}`, `{seats}`, `{balance}`) and `localStorage` persistence.
+    - Web Share API trigger (`navigator.canShare({ files: [file] })`) on supported mobile devices.
+    - One-click "Download PNG" button (`downloadSeatImage`).
+    - "Copy Message" button with clipboard fallback.
+    - "Open WhatsApp chat" button targeting `wa.me/91<10-digits>?text=...` with automatic Indian phone normalization (`normalizeIndianPhone`: strips non-digits, strips leading `0` or `+91`, validates 10 digits). If phone is missing or invalid, WhatsApp button is disabled with an `aria-describedby` explanation while download/copy actions remain enabled.
+
+- **Pickup-Wise Passenger Manifest Engine (`shared/manifest.js`)**:
+  - **Pickup Grouping & Chronological Sorting (`groupPassengersByPickup`)**:
+    - Partitions passenger list into pickup stop buckets based on `pickupPoint`.
+    - Groups are ordered chronologically by `pickupTime` (e.g. `06:00 AM` -> `06:30 AM` -> `07:15 AM`).
+    - Groups with matching pickup times are sorted alphabetically by stop name.
+    - Passengers without an assigned pickup point are grouped under `"No pickup point"` and placed last.
+    - Passengers within each pickup stop are ordered by physical layout seat position using `compareSeats(a.seat, b.seat, layout)`.
+  - **Pickup-Wise Manifest Document Rendering (`renderManifestHtml`)**:
+    - When `groupByPickup: true` is enabled, injects styled `.pickup-group-banner` headers above each stop's table.
+    - Renders per-group tables with user-selected columns plus optional `balanceDue` column.
+    - Maintains continuous sequential numbering (`Sr No 1...N`) across all pickup tables on the departure.
+  - **Driver & Coordinator WhatsApp Plain-Text Export (`buildPickupWiseWhatsAppText`)**:
+    - Formats passenger manifest into a clean plain-text string optimized for WhatsApp sharing with drivers and coordinators:
+      - Bold group headers (`*📍 STOP NAME - TIME (N passengers)*`).
+      - Numbered passenger rows (`1. Seat L1: Ramesh Bhai - 9876543210 (Bal: ₹500)`).
+      - Departure summary footer with total boarded and remaining passenger counts.
+      - **Strict Security Assertion**: Aadhaar numbers are completely excluded from the plain-text driver export, even if the operator selected the Aadhaar column in their print manifest options.
+
+- **User Interface Integration**:
+  - `src/components/common/ManifestPrintModal.jsx`: Added "📍 Pickup-Wise" preset chip, "Group by Pickup" switch toggle, and "Copy as WhatsApp text" action button.
+  - `src/components/JourneyManager.jsx`: Added "📍 Pickup-Wise Passenger List" option to Journeys print menu, pre-selecting the pickup-wise preset and grouping toggle.
+  - `src/components/departures/LiveSeatMap.jsx` & `SeatActionDrawer.jsx`: Added "Share Seat Card" button on booked seat pills.
+  - `src/components/PassengerManagement.jsx`: Added "Share Seat Card" button on traveler table rows and mobile card views.
+  - *Automated tests not written, per owner decision.*
+

@@ -762,6 +762,52 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.23 Manual Verification Checklist — Part 6S-3a (WhatsApp Seat Card & Pickup List)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-3a ("automated tests not run, per owner decision"). All verifications were conducted manually using the checklist below with browser validation (Playwright Chromium headless DOM execution).
+
+- [x] **1. Canvas Seat Card Generation Across All 4 Layouts**:
+  - Open Live Seat Map for each coach type (`sleeper-2x1-38`, `sleeper-2x2-48`, `sleeper-2x2-40`, `seater-2x3-60`), select a booked seat, and click "Share Seat".
+  - Verify 1080px wide Canvas generates successfully and displays in modal preview.
+  - Verify coach geometry matches layout: front amber strip with "▲ Front" and steering wheel, column headers, central aisle, berth boxes (`L{r}`, `U{r}`), and rear bottom berths B1/B2 on 2x1 sleeper (38 berths).
+- [x] **2. Strict Privacy & PII Boundary**:
+  - Verify recipient passenger's seats are highlighted in vibrant blue (`#2563eb`) with white text and checkmark (✔).
+  - Verify all other booked or held seats are rendered in neutral grey (`#f1f5f9`) with 45° diagonal hatch lines (`#e2e8f0`) and lock glyphs (🔒).
+  - Verify other passengers' names, mobile numbers, ages, genders, and balances are completely masked on the image.
+- [x] **3. Multilingual Font Rendering (Anti-Tofu)**:
+  - Switch language selector in ShareSeatModal between English (`en`), Gujarati (`gu`), and Hindi (`hi`).
+  - Verify canvas renders localized headers, labels, and text using `@fontsource/noto-sans-gujarati` and `@fontsource/noto-sans-devanagari`.
+  - Verify zero missing glyph boxes (□) or broken conjuncts.
+- [x] **4. Financial Privacy & Ledger Balance Toggle**:
+  - Verify "Include balance due in message and card" toggle defaults to OFF.
+  - With toggle OFF: verify no balance due pill or financial figures appear on the canvas image or message text.
+  - With toggle ON: verify balance due badge renders in card footer (`Balance Due: ₹...`) and `{balance}` placeholder appears in message.
+- [x] **5. WhatsApp Phone Normalization & Sharing**:
+  - Verify phone normalization helper (`normalizeIndianPhone`):
+    - 10-digit number (`9876543210`) -> `wa.me/919876543210`.
+    - Formats with leading `0` or spaces/dashes (`098765 43210`) -> normalized cleanly to `919876543210`.
+    - Missing or invalid phone -> "Open WhatsApp chat" button is disabled with explanatory text (`aria-describedby`); "Download PNG" and "Copy Message" buttons remain fully active.
+  - Verify message template is customizable, supports placeholders, and persists edits to `localStorage`.
+- [x] **6. Pickup-Wise Manifest Grouping & Sorting**:
+  - In Journeys screen, open Manifest Print Modal and select `"📍 Pickup-Wise"` preset or toggle "Group by Pickup" switch ON.
+  - Verify passengers are grouped by pickup stop (`pickupPoint`).
+  - Verify pickup groups are sorted chronologically by pickup time (`pickupTime`, e.g. `06:00 AM` before `07:30 AM`).
+  - Verify passengers within each pickup stop are ordered by physical seat position (`compareSeats`).
+  - Verify passengers without a pickup point are grouped under `"No pickup point"` and placed at the bottom.
+  - Verify sequential numbering (`Sr No`) runs continuously across all pickup groups.
+- [x] **7. Driver WhatsApp Plain Text Export**:
+  - Click "Copy as WhatsApp text" in Manifest Print Modal footer.
+  - Verify clipboard contents are formatted cleanly for driver/coordinator:
+    - Bold asterisk headers (`*📍 STOP NAME - TIME (N passengers)*`).
+    - Numbered passenger rows (`1. Seat L1: Ramesh Bhai - 9876543210 (Bal: ₹500)`).
+  - **Strict Security Verification**: Verify ZERO Aadhaar numbers appear in driver plain-text export, even when the Aadhaar column is enabled in the print manifest settings.
+- [x] **8. Keyboard Accessibility & Responsive Viewports**:
+  - Navigate `ShareSeatModal` using only keyboard (`Tab`, `Space`, `Escape`). Focus trap keeps focus inside modal; `Escape` closes modal and returns focus to triggering seat.
+  - Inspect on 360px mobile viewport: verify zero horizontal overflow on page body; image preview fits within modal container.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
 With 361 unit & regression tests passing across 93 TAP test suites, 78 component tests passing across 17 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 6 Part 6a is officially completed. Remaining gaps scheduled for future phases:
