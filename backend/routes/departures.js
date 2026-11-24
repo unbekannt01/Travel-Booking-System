@@ -131,11 +131,16 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
       })
     }
 
-    const tourName = parts[0]
-    const dateStr = parts[1]
-    const busType = parts.slice(2).join("___")
+    const busType = parts[parts.length - 1]
+    const dateStr = parts[parts.length - 2]
+    const tourName = parts.slice(0, parts.length - 2).join("___")
 
     const { start, end } = getDayBounds(dateStr)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        error: "Invalid date in departure key format. Expected YYYY-MM-DD",
+      })
+    }
 
     const busCondition =
       busType === "2x1 Sleeper Luxury"
