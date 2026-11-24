@@ -1,3 +1,4 @@
+import { API_URL } from "../../config.js"
 import { request, setAuthToken, removeAuthToken, getAuthToken } from "../client"
 
 // Normalizers
@@ -775,6 +776,81 @@ export async function getRecordHistory(params = {}) {
   const qs = query.toString() ? `?${query.toString()}` : ""
   return request(`/api/history${qs}`)
 }
+
+export async function previewImportCsv(type, data) {
+  return request(`/api/import/${encodeURIComponent(type)}/preview`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function commitImportCsv(type, data) {
+  return request(`/api/import/${encodeURIComponent(type)}/commit`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function undoImportBatch(batchId) {
+  return request(`/api/import/batches/${encodeURIComponent(batchId)}/undo`, {
+    method: "POST",
+  })
+}
+
+export async function getImportBatches() {
+  return request("/api/import/batches")
+}
+
+export async function downloadExportCsv(type, params = {}) {
+  const query = new URLSearchParams()
+  if (params.startDate) query.set("startDate", params.startDate)
+  if (params.endDate) query.set("endDate", params.endDate)
+  if (params.category) query.set("category", params.category)
+  if (params.tourName) query.set("tourName", params.tourName)
+  const qs = query.toString() ? `?${query.toString()}` : ""
+
+  const response = await fetch(`${API_URL}/api/export/${encodeURIComponent(type)}${qs}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Authorization: `Bearer ${getAuthToken()}`,
+    },
+  })
+
+  if (!response.ok) {
+    let msg = "Failed to download export"
+    try {
+      const errJson = await response.json()
+      msg = errJson.message || msg
+    } catch {
+      // ignore
+    }
+    const error = new Error(msg)
+    error.status = response.status
+    throw error
+  }
+
+  const blob = await response.blob()
+  const contentDisposition = response.headers.get("content-disposition")
+  let filename = `yatrahub-${type}.csv`
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^";]+)"?/)
+    if (match && match[1]) filename = match[1]
+  }
+
+  if (typeof window !== "undefined" && window.document) {
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  }
+  return { success: true, filename }
+}
+
 
 
 

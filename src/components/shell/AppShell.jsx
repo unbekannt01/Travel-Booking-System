@@ -11,6 +11,7 @@ import {
   BookOpen,
   Settings,
   Trash2,
+  FileSpreadsheet,
   LogOut,
   Plus,
   AlertTriangle,
@@ -43,6 +44,7 @@ const DRAWER_ICONS = {
   ReceiptIndianRupee,
   BookOpen,
   Trash2,
+  FileSpreadsheet,
   Settings,
 }
 

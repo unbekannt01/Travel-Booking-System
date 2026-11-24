@@ -114,6 +114,7 @@ const ALL_SCREENS = [
   { id: "expenses", label: "Expenses", tabId: "expenses" },
   { id: "cashbook", label: "Cash Book", tabId: "cashbook" },
   { id: "trash", label: "Trash", tabId: "trash" },
+  { id: "data", label: "Import & Export", tabId: "data" },
   { id: "analytics", label: "Analytics", tabId: "analytics" },
   { id: "profit-loss", label: "Profit & Loss", isAnalyticsTab: "pnl" },
   { id: "settings", label: "Settings", tabId: "settings" },

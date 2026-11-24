@@ -19,6 +19,8 @@ import reminderRoutes from "./routes/reminders.js"
 import cashbookRoutes from "./routes/cashbook.js"
 import trashRoutes from "./routes/trash.js"
 import historyRoutes from "./routes/history.js"
+import exportRoutes from "./routes/export.js"
+import importRoutes from "./routes/import.js"
 
 const app = express()
 
@@ -50,6 +52,10 @@ app.use(cookieParser())
 app.use("/api/auth/update-company", express.json({ limit: "5mb" }))
 app.use("/api/auth/update-company", express.urlencoded({ limit: "5mb", extended: true }))
 
+// Route-specific 1.5MB payload limit for CSV import endpoints
+app.use("/api/import", express.json({ limit: "1.5mb" }))
+app.use("/api/import", express.urlencoded({ limit: "1.5mb", extended: true }))
+
 // Route-specific 500KB payload limit for document template assets (SEC-015)
 app.use("/api/document-templates/assets", express.json({ limit: "500kb" }))
 app.use("/api/document-templates/assets", express.urlencoded({ limit: "500kb", extended: true }))
@@ -75,6 +81,8 @@ app.use("/api/reminders", reminderRoutes)
 app.use("/api/cashbook", cashbookRoutes)
 app.use("/api/trash", trashRoutes)
 app.use("/api/history", historyRoutes)
+app.use("/api/export", exportRoutes)
+app.use("/api/import", importRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()

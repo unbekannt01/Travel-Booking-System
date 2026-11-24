@@ -1,6 +1,6 @@
 # YatraHub (TBS) — Test Strategy & Test Plan
 
-This document details the automated testing architecture, test runner configuration, coverage map across all 79 test suites (331 tests), the Vitest component test safety net (`npm run test:ui`, 61 tests across 15 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
+This document details the automated testing architecture, test runner configuration, coverage map across all 100 test files (417 tests), the Vitest component test safety net (`npm run test:ui`, 92 tests across 19 suites), automated UI smoke suite (`npm run ui:smoke`), and identified testing gaps.
 
 ---
 
@@ -31,10 +31,11 @@ npm run test:ui
 
 ## 2. Test Suites & Coverage Map
 
-### 2.1 Component Test Layer (87 Tests / 18 Suites)
+### 2.1 Component Test Layer (92 Tests / 19 Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/components/data-management.test.jsx`** | 4 | **Data Management & CSV Import/Export Screen (Part 6c)**: Renders Data Management screen with header and primary export cards (Customers, Expenses, Bookings, Cash Book, Receivables); Step 1 Wizard navigates to Import tab, toggles Customer/Expense data type, and handles starter template download; Recent Batches tab renders batch audit table and triggers ConfirmDialog on Undo action; renders calm inline `RateLimitNotice` when export API encounters HTTP 429. |
 | **`tests/components/trash.test.jsx`** | 6 | **Trash & History UI Components (Part 6b)**: Renders Trash screen with header, count badges, and table rows; debounced search filtering; disables Restore button with clear reason text when `restore.allowed` is false; opens ConfirmDialog on clicking active Restore button; renders `HistoryDrawer` timeline events with localized action badges and change summaries in English, Hindi, and Gujarati. |
 | **`tests/components/cashbook.test.jsx`** | 7 | **Cash Book & Books Close UI Components (Part 6a)**: Renders CashBook screen with 4 StatCards, lock alert banner, and DayBookTable; switches between Single Day and Date Range filters; opens CloseDayModal and validates counted cash discrepancy; opens ReopenCloseModal requiring step-up password and audit reason; renders DayBookTable running cash and bank balances. |
 | **`tests/components/reminders.test.jsx`** | 6 | **Payment Reminders UI Components (Part 5c)**: Renders ReminderModal with customer balance, contact details, tone selector, and generated WhatsApp click-to-chat link; enforces 24-hour reminder advisory; renders ReminderTemplateEditor with live simulated preview. |
@@ -54,10 +55,12 @@ npm run test:ui
 | **`tests/components/toast-dedup.test.jsx`** | 2 | Verifies 3-second toast deduplication suppresses duplicate alerts; verifies distinct messages trigger toasts independently. |
 | **`tests/components/tabs.test.jsx`** | 4 | Verifies Tabs container, active state transitions, and keyboard accessibility. |
 
-### 2.2 Pure Logic & Unit Test Suites (388 Tests / 35 Test Files / 96 TAP Suites)
+### 2.2 Pure Logic & Unit Test Suites (417 Tests / 100 Test Files / 98 TAP Suites)
 
 | Suite File | Subtests | Core Scenarios Covered |
 | :--- | :---: | :--- |
+| **`tests/csv-pure.test.js`** | 16 | **CSV Pure Engine & Formula Defense (Part 6c)**: Formula injection defense (prefixes single quote `'` on `=`, `+`, `-`, `@`, `\t`, `\r` and unsanitizes on read); RFC 4180 quote wrapping and escaping; state-machine tokenizer handling CRLF/LF line endings; bounds checking (`TOO_LARGE`, `TOO_MANY_ROWS`, `TOO_MANY_COLUMNS`, `CELL_TOO_LONG`, `BAD_QUOTE`, `EMPTY`); integer paise `parseMoney` converter; `parseDate` ISO and Indian format parser; `parseBool` trilingual parser (en, hi, gu); declarative schema mapping (`mapHeaders`) with auto-aliases in English, Hindi, and Gujarati; unsafe Aadhaar column detection (`hasUnsafeAadhaarHeader`); expense category and payment mode keyword matchers. |
+| **`tests/integration-csv.test.js`** | 5 | **CSV Export & Import Express Integration (Part 6c)**: `GET /api/export/:type` delivers UTF-8 BOM (`\uFEFF`), multi-tenant isolation, privacy projection (zero Aadhaar in bookings export), and audit logging; `POST /api/import/:type/preview` validates file, detects books lock violations, rejects Aadhaar headers, and returns signed HMAC-SHA256 token; `POST /api/import/:type/commit` verifies HMAC token, re-validates server-side, tags `importBatchId`, and creates `ImportBatch` document; `POST /api/import/batches/:id/undo` atomically rolls back imported batch, verifying dependencies against closed books and active bookings. |
 | **`tests/history-pure.test.js`** | 11 | **History & Restore Pure Engine (Part 6b)**: Validates `HISTORY_ENTITIES` and `TRACKED_FIELDS` whitelist; asserts zero PII leakage on text fields (records `changed: true` without `from`/`to`); integer paise money diffing; date and status diffing; trilingual change summaries in English, Hindi, Gujarati (`summarizeChanges`); `classifyRestore` rejection rules for `BOOKS_LOCKED`, `NUMBER_CONFLICT`, `SEAT_CONFLICT`, `PARENT_DELETED`, `ALREADY_ACTIVE`. |
 | **`tests/integration-trash.test.js`** | 4 | **Trash & Restore Express Integration (Part 6b)**: End-to-end soft delete, history logging, and restore; active customer phone collision rejected with HTTP 409 Conflict; books lock enforcement on restore (booking with advance in closed period rejected with HTTP 423 Locked); multi-tenant isolation (User B cannot view or restore User A's trash items). |
 | **`tests/cashbook-pure.test.js`** | 10 | **Cash Book & Books Close Pure Engine (Part 6a)**: `modeToAccount` payment mapping; integer paise balance rolling; same-day entry ordering (`TYPE_SORT_ORDER`); `computeClosePreview` difference calculation; standalone HTML day book rendering with strict CSP. |

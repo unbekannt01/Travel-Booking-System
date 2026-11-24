@@ -83,6 +83,12 @@ const expenseSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    importBatchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ImportBatch",
+      default: null,
+      index: true,
+    },
     deletedAt: {
       type: Date,
       default: null,

@@ -28,6 +28,7 @@ describe("App Shell & Navigation Configuration (Part 3.2)", () => {
           { id: "outstanding", label: "Outstanding" },
           { id: "cashbook", label: "Cash Book" },
           { id: "trash", label: "Trash" },
+          { id: "data", label: "Import & Export" },
           { id: "settings", label: "Settings" },
         ],
       )

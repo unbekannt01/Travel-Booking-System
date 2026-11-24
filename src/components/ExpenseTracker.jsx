@@ -28,6 +28,7 @@ import {
   Clock,
   CheckCircle2,
   History,
+  Upload,
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts"
 import { useToast } from "./common/useToast"
@@ -722,6 +723,18 @@ export default function ExpenseTracker({
               >
                 <Download className="h-4 w-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Export CSV</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => {
+                  window.location.hash = "#data"
+                }}
+                className="gap-2"
+                aria-label="Import or Export CSV Data"
+              >
+                <Upload className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Import CSV</span>
               </Button>
               <Button
                 variant="accent"

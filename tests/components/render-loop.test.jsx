@@ -21,6 +21,7 @@ import { ThemeProvider } from "../../src/theme/ThemeProvider"
 import Dashboard from "../../src/components/Dashboard"
 import CashBook from "../../src/components/cashbook/CashBook"
 import Trash from "../../src/components/trash/Trash"
+import DataManagement from "../../src/components/data/DataManagement"
 
 // Data APIs to mock
 import * as reportData from "../../src/data/reports"
@@ -31,6 +32,7 @@ import * as bookingData from "../../src/data/bookings"
 import * as tourData from "../../src/data/tours"
 import * as cashbookData from "../../src/data/cashbook"
 import * as trashData from "../../src/data/trash"
+import * as importExportData from "../../src/data/importExport"
 
 describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
   let consoleErrors = []
@@ -354,6 +356,18 @@ describe("Targeted Render Loop & Commit Count Safety Net (Task B)", () => {
     })
 
     const { assertNoRenderLoop } = renderWithProfiler(<Trash />, 15)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    assertNoRenderLoop()
+  })
+
+  it("DataManagement commits bounded times and never causes update depth error", async () => {
+    vi.spyOn(importExportData, "getImportBatches").mockResolvedValue({
+      batches: [],
+    })
+
+    const { assertNoRenderLoop } = renderWithProfiler(<DataManagement />, 15)
     await act(async () => {
       await Promise.resolve()
     })

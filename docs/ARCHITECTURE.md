@@ -827,6 +827,64 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
     - Lazy chunk code-splitting for `Trash.jsx` and `HistoryDrawer.jsx` in `Dashboard.jsx`.
     - Quick "History" launch button embedded directly in `CustomerDrawer.jsx`.
 
+---
+
+## 23. CSV Export & Import Architecture with Formula Defense and Atomic Undo (Part 6c)
+
+- **Pure CSV Engine (`shared/csv.js`)**:
+  - **Zero-Dependency Shared ESM**: Fully portable between Node.js 22 and browser environments.
+  - **Formula Injection Defense (CSV Injection / CWE-1236)**:
+    - `sanitizeCell(value)`: Prepend single quote (`'`) to any string starting with `=`, `+`, `-`, `@`, `\t`, or `\r`.
+    - RFC 4180 compliant: Encloses values containing quotes, commas, or line breaks in double quotes with escaped quotes (`""`).
+    - `unsanitizeCell(value)`: Strips defensive leading quote upon reading imported values.
+  - **State-Machine CSV Parser (`parseCsv`)**:
+    - Character-by-character tokenizer handling quotes, commas, CRLF/LF line endings, and multi-line fields.
+    - Enforces safety bounds: `TOO_LARGE` (>1.5MB), `TOO_MANY_ROWS` (>2000), `TOO_MANY_COLUMNS` (>50), `CELL_TOO_LONG` (>1000 chars), `BAD_QUOTE` (unmatched quotes), `EMPTY`.
+  - **Type Parsers**:
+    - `parseMoney(raw)`: Converts rupee strings (`1,500.50`, `₹250`) to exact integer paise with bounds checking.
+    - `parseDate(raw)`: Standardizes ISO `YYYY-MM-DD` and Indian `DD-MM-YYYY` formats.
+    - `parseBool(raw)`: Localized boolean detection across English (`yes/no`, `true/false`), Hindi (`हाँ/नहीं`), and Gujarati (`હા/ના`).
+  - **Header Mapping & Declarative Import Specs**:
+    - `mapHeaders(csvHeaders, spec)`: Auto-maps user CSV headers to internal field names using aliases in English, Hindi, and Gujarati.
+    - Detects unsafe Aadhaar headers (`aadhaar`, `uid`, `aadhar`, etc.) and halts import immediately for privacy protection.
+    - Frozen schemas: `CUSTOMER_IMPORT_SPEC` and `EXPENSE_IMPORT_SPEC`.
+
+- **Backend Export & Import Architecture (`backend/routes/export.js`, `backend/routes/import.js`)**:
+  - **CSV Export Engine (`GET /api/export/:type`)**:
+    - Supported types: `customers`, `expenses`, `bookings`, `cashbook`, `receivables`.
+    - Delivers UTF-8 BOM (`\uFEFF`) for seamless double-click opening in Microsoft Excel on Windows.
+    - Tenant-isolated and filtered by date range, tour, or category.
+    - Strict privacy rule: Passenger Aadhaar numbers are never included in booking exports.
+    - Audit logging: Records export activity in `AuditLog`.
+  - **Two-Phase Import Engine with Cryptographic Verification**:
+    - `POST /api/import/:type/preview`:
+      - Validates CSV structure, maps headers, and performs format checks.
+      - Rejects any file containing Aadhaar columns.
+      - Rejects expense dates lying within closed books periods (`lockDate`).
+      - Flags duplicate customer phone numbers as "skip existing".
+      - Generates an HMAC-SHA256 preview token embedding hash of payload, row counts, and 15-minute expiration.
+    - `POST /api/import/:type/commit`:
+      - Verifies HMAC token signature and expiration.
+      - Re-validates data server-side to prevent tampering between preview and commit.
+      - Inserts records in chunks with `importBatchId` tagged on each document.
+      - Records batch metadata in `ImportBatch` collection.
+  - **Atomic Batch Undo (`POST /api/import/batches/:id/undo`)**:
+    - Allows operator to roll back an entire spreadsheet import.
+    - Pre-validates dependencies:
+      - Expense undo blocked if expense date falls in a closed books period.
+      - Customer undo blocked if customer has active bookings created after the import.
+    - Soft-deletes imported items and updates batch status to `reverted` or `partially_reverted`.
+  - **Scope Limitation**: Booking import is deliberately excluded from CSV import due to seat assignment integrity, sequential invoice numbering, multi-installment payment allocation, and document issuance complexity (documented in project backlog).
+
+- **UI & App Shell Integration (`src/components/data/DataManagement.jsx`)**:
+  - Lazy-loaded chunk under `#data` route in `Dashboard.jsx`.
+  - Accessible tabbed interface (`Tabs` component):
+    1. **Export System Data**: One-click and filtered downloads for Customers, Expenses, Bookings, Cash Book, and Receivables with privacy notices.
+    2. **Import CSV Wizard**: 4-step wizard (Type & Template -> Upload -> Map Columns -> Preview & Commit).
+    3. **Recent Import Batches**: Audit history of previous imports with atomic undo triggers and status badges.
+  - Deep-link action buttons embedded in `CustomerManager.jsx` ("Import CSV") and `ExpenseTracker.jsx` ("Import CSV").
+
+
 
 
 

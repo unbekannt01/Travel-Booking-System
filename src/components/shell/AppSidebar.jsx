@@ -8,8 +8,9 @@ import {
   ReceiptText,
   ReceiptIndianRupee,
   BookOpen,
-  Settings,
   Trash2,
+  FileSpreadsheet,
+  Settings,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -30,6 +31,7 @@ const ICON_MAP = {
   ReceiptIndianRupee,
   BookOpen,
   Trash2,
+  FileSpreadsheet,
   Settings,
 }
 

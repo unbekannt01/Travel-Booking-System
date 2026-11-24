@@ -106,6 +106,15 @@ export const NAV_ITEMS = Object.freeze([
     mobilePrimary: false,
   },
   {
+    id: "data",
+    label: "Import & Export",
+    title: "Data Import & Export",
+    description: "Download CSV backups and import customer and expense spreadsheets.",
+    iconName: "FileSpreadsheet",
+    hasOwnHeading: false,
+    mobilePrimary: false,
+  },
+  {
     id: "settings",
     label: "Settings",
     title: "Settings",
@@ -229,6 +238,8 @@ export function getSkeletonVariant(activeTab) {
     case "expenses":
     case "outstanding":
     case "cashbook":
+    case "trash":
+    case "data":
       return "table"
     case "dashboard":
     default:

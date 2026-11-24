@@ -185,3 +185,21 @@ mkdir "%BACKUP_DIR%"
 mongodump --uri="mongodb://127.0.0.1:27017/yatrahub" --out="%BACKUP_DIR%"
 ```
 Schedule this script in **Windows Task Scheduler** to run daily at 11:59 PM.
+
+---
+
+## 7. CSV Import / Export Configuration & Operational Limits (Part 6c)
+
+### 7.1 Payload & File Size Configuration
+- **Backend Express Request Body Limit**: The import API endpoints (`/api/import`) have a dedicated `1.5mb` JSON body limit configured in `backend/index.js` to allow uploading spreadsheets with up to 2,000 rows without encountering `PayloadTooLargeError` (HTTP 413).
+- **Default Express Body Limit**: All other endpoints retain the strict `100kb` default limit.
+- **Client File Size Bound**: Client-side parsing enforces a maximum file size of 1.5 MB (`maxBytes: 1500000`). Files exceeding this size are rejected before upload.
+
+### 7.2 Safety & Import Bounds
+- **Maximum Rows**: 2,000 data rows per spreadsheet import.
+- **Maximum Columns**: 50 columns.
+- **Maximum Cell Length**: 1,000 characters per cell.
+- **Formula Injection Defense**: All exported cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r` are automatically prefixed with `'` to prevent command execution in Microsoft Excel and LibreOffice Calc.
+- **Data Minimization & Aadhaar Exclusion**: Passenger and customer Aadhaar numbers are strictly excluded from exports and rejected upon import.
+- **Preview Token Validity**: Import preview HMAC tokens expire after 15 minutes.
+

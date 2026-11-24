@@ -29,6 +29,7 @@ import {
   UserCheck,
   AlertCircle,
   Download,
+  Upload,
   Plus,
   Info,
   ChevronLeft,
@@ -233,6 +234,18 @@ export default function CustomerManager({ onNewBooking = null }) {
               className="flex-1 sm:flex-initial"
             >
               Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              leftIcon={<Upload className="w-4 h-4" />}
+              onClick={() => {
+                window.location.hash = "#data"
+              }}
+              className="flex-1 sm:flex-initial"
+              aria-label="Import or Export CSV Data"
+            >
+              Import CSV
             </Button>
             <Button
               variant="accent"

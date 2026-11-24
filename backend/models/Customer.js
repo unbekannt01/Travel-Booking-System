@@ -79,8 +79,14 @@ const customerSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ["booking", "manual", "backfill"],
+      enum: ["booking", "manual", "backfill", "import"],
       default: "manual",
+    },
+    importBatchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ImportBatch",
+      default: null,
+      index: true,
     },
     deletedAt: {
       type: Date,
