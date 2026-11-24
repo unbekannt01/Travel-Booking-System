@@ -299,9 +299,7 @@ export default function CustomerManager({
                     {(counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount) === 1 ? "booking needs attention" : "bookings need attention"}
                   </strong>
                   <p className="text-ink-muted text-xs mt-0.5">
-                    {(counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount) === 1
-                      ? "1 booking can be linked to a customer profile."
-                      : `${counts.actionableLinkableCount !== undefined ? counts.actionableLinkableCount : counts.unlinkedBookingsCount} bookings can be linked to customer profiles.`}
+                    Some older bookings are not linked to customer profiles.
                   </p>
                 </div>
               </div>

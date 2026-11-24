@@ -443,100 +443,57 @@ export default function CustomerDrawer({
                 No bookings recorded for this customer yet.
               </div>
             ) : (
-              <>
-                {/* Desktop/Tablet Table View (>=sm) */}
-                <div className="hidden sm:block">
-                  <Table ariaLabel="Customer booking history">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Invoice #</TableHead>
-                        <TableHead>Tour Name</TableHead>
-                        <TableHead>Journey Date</TableHead>
-                        <TableHead align="right">Amount</TableHead>
-                        <TableHead align="right">Paid</TableHead>
-                        <TableHead align="right">Balance</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bookings.map((b) => {
-                        const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
-                        const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
-                        return (
-                          <TableRow key={b.id || b._id}>
-                            <TableCell className="font-semibold text-ink font-tabular whitespace-nowrap">
-                              #{b.invoiceNo}
-                            </TableCell>
-                            <TableCell className="text-ink font-medium">
-                              {b.tourName}
-                            </TableCell>
-                            <TableCell className="text-xs text-ink-muted font-tabular whitespace-nowrap">
-                              {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}
-                            </TableCell>
-                            <TableCell align="right" className="font-tabular">
-                              {formatINR(b.totalAmount)}
-                            </TableCell>
-                            <TableCell align="right" className="font-tabular text-success">
-                              {formatINR(b.advanceReceived)}
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              className={`font-tabular font-bold ${
-                                !isCancelled && balance > 0 ? "text-warning" : "text-ink-muted"
-                              }`}
-                            >
-                              {isCancelled ? "₹0.00" : formatINR(balance)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
-                                {b.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile Stacked Card List (<sm, zero horizontal scroll at 360px) */}
-                <div
-                  role="region"
-                  aria-label="Customer booking history list"
-                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be focusable for keyboard arrow scrolling */
-                  tabIndex={0}
-                  className="sm:hidden space-y-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-[var(--yh-radius-md)]"
-                >
+              <Table ariaLabel="Customer booking history">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Invoice #</TableHead>
+                    <TableHead>Tour Name</TableHead>
+                    <TableHead>Journey Date</TableHead>
+                    <TableHead align="right">Amount</TableHead>
+                    <TableHead align="right">Paid</TableHead>
+                    <TableHead align="right">Balance</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {bookings.map((b) => {
                     const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
                     const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
                     return (
-                      <div
-                        key={b.id || b._id}
-                        className="p-3 bg-surface-muted/50 border border-border-subtle rounded-[var(--yh-radius-md)] space-y-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-ink font-tabular whitespace-nowrap">#{b.invoiceNo}</span>
+                      <TableRow key={b.id || b._id}>
+                        <TableCell className="font-semibold text-ink font-tabular whitespace-nowrap">
+                          #{b.invoiceNo}
+                        </TableCell>
+                        <TableCell className="text-ink font-medium">
+                          {b.tourName}
+                        </TableCell>
+                        <TableCell className="text-xs text-ink-muted font-tabular whitespace-nowrap">
+                          {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}
+                        </TableCell>
+                        <TableCell align="right" className="font-tabular">
+                          {formatINR(b.totalAmount)}
+                        </TableCell>
+                        <TableCell align="right" className="font-tabular text-success">
+                          {formatINR(b.advanceReceived)}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          className={`font-tabular font-bold ${
+                            !isCancelled && balance > 0 ? "text-warning" : "text-ink-muted"
+                          }`}
+                        >
+                          {isCancelled ? "₹0.00" : formatINR(balance)}
+                        </TableCell>
+                        <TableCell>
                           <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
                             {b.status}
                           </Badge>
-                        </div>
-                        <div className="text-ink font-medium">{b.tourName}</div>
-                        <div className="flex items-center justify-between text-ink-muted font-tabular">
-                          <span>Date: {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}</span>
-                          <span>Total: <strong className="text-ink">{formatINR(b.totalAmount)}</strong></span>
-                        </div>
-                        <div className="flex items-center justify-between font-tabular pt-1 border-t border-border-subtle">
-                          <span className="text-success font-medium">Paid: {formatINR(b.advanceReceived)}</span>
-                          <span className={!isCancelled && balance > 0 ? "text-warning font-bold" : "text-ink-muted"}>
-                            Due: {isCancelled ? "₹0.00" : formatINR(balance)}
-                          </span>
-                        </div>
-                      </div>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
-                </div>
-              </>
+                </TableBody>
+              </Table>
             )}
           </Card>
 

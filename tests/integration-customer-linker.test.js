@@ -54,10 +54,10 @@ describe("Integration Harness: Customer Linker Endpoint (POST /api/customers/lin
     const port = server.address().port
     baseUrl = `http://127.0.0.1:${port}`
 
-    // Clean test collections
-    await User.deleteMany({})
-    await Booking.deleteMany({})
-    await Customer.deleteMany({})
+    // Clean test records for this suite
+    await User.deleteMany({ email: { $in: ["linkera@example.com", "linkerb@example.com"] } })
+    await Booking.deleteMany({ invoiceNo: { $in: ["YHB-LINK-001", "YHB-LINK-002", "YHB-LINK-B01"] } })
+    await Customer.deleteMany({ phone: { $in: ["9876543210", "9876543211"] } })
 
     // Create User A and User B
     const passwordHash = await bcrypt.hash("Password123!", 10)
