@@ -1,4 +1,5 @@
 import { toDateInputValue } from "./date.js"
+import { calculateBookingFinancials } from "../../shared/profitLoss.js"
 
 /**
  * Pure helper utilities for the Dashboard Overview & Payment Tracker summary cards.
@@ -30,27 +31,37 @@ export function isBookingCancelled(booking) {
 }
 
 /**
- * Computes remaining balance for a booking (never negative).
- * @param {{ totalAmount?: number, advanceReceived?: number }} booking
+ * Computes remaining balance for a booking using authoritative ledger financials (never negative).
+ * @param {{ totalAmount?: number, advanceReceived?: number, payments?: Array }} booking
  * @returns {number}
  */
 export function getBookingBalance(booking) {
-  const total = Number(booking?.totalAmount) || 0
-  const paid = Number(booking?.advanceReceived) || 0
-  return Math.max(0, total - paid)
+  if (!booking) return 0
+  const fin = calculateBookingFinancials(booking)
+  return fin.outstanding
+}
+
+/**
+ * Computes total paid amount for a booking using authoritative ledger financials.
+ * @param {{ totalAmount?: number, advanceReceived?: number, payments?: Array }} booking
+ * @returns {number}
+ */
+export function getBookingPaidAmount(booking) {
+  if (!booking) return 0
+  const fin = calculateBookingFinancials(booking)
+  return fin.collected
 }
 
 /**
  * Resolves the canonical payment/lifecycle StatusPill value for a booking.
- * @param {{ status?: string, isPaid?: boolean, totalAmount?: number, advanceReceived?: number }} booking
+ * @param {{ status?: string, isPaid?: boolean, totalAmount?: number, advanceReceived?: number, payments?: Array }} booking
  * @returns {"Cancelled" | "Paid" | "Partial" | "Pending"}
  */
 export function getBookingPaymentStatus(booking) {
   if (isBookingCancelled(booking)) return "Cancelled"
-  const paid = Number(booking?.advanceReceived) || 0
-  const balance = getBookingBalance(booking)
-  if (booking?.isPaid || balance === 0) return "Paid"
-  if (paid > 0) return "Partial"
+  const fin = calculateBookingFinancials(booking)
+  if (booking?.isPaid || fin.outstanding === 0) return "Paid"
+  if (fin.collected > 0) return "Partial"
   return "Pending"
 }
 

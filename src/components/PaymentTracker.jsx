@@ -18,6 +18,7 @@ import { formatINR } from "../utils/formatters"
 import { cn } from "../utils/cn"
 import { getPaymentUrgencyMeta } from "../utils/dashboardOverview"
 import { listPayments } from "../data/payments"
+import { calculateBookingFinancials } from "../../shared/profitLoss.js"
 import ReceiptModal from "./common/ReceiptModal"
 import {
   Card,
@@ -84,10 +85,11 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
   const pendingPayments = bookings
     .filter((b) => {
       if (b.status === "Cancelled" || b.status === "cancelled") return false
-      const balance = b.totalAmount - (b.advanceReceived || 0)
-      return balance > 0
+      const fin = calculateBookingFinancials(b)
+      return fin.outstanding > 0
     })
     .map((b) => {
+      const fin = calculateBookingFinancials(b)
       const journeyDate = new Date(b.journeyDate)
       const today = new Date()
       const daysUntilJourney = Math.ceil((journeyDate - today) / (1000 * 60 * 60 * 24))
@@ -95,7 +97,8 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
 
       return {
         ...b,
-        balance: b.totalAmount - (b.advanceReceived || 0),
+        paid: fin.collected,
+        balance: fin.outstanding,
         daysUntilJourney,
         urgency: urgencyMeta.bucket,
         urgencyMeta,
@@ -116,15 +119,17 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
   }
 
   const handleSendReminder = (booking) => {
-    const message = `Hi ${booking.contactName}, this is a reminder that your balance of ₹${booking.totalAmount - (booking.advanceReceived || 0)} is due for ${booking.tourName} (Invoice: ${booking.invoiceNo}). Please make the payment at your earliest convenience. Thank you!`
+    const fin = calculateBookingFinancials(booking)
+    const message = `Hi ${booking.contactName}, this is a reminder that your balance of ₹${fin.outstanding} is due for ${booking.tourName} (Invoice: ${booking.invoiceNo}). Please make the payment at your earliest convenience. Thank you!`
     const phoneNumber = booking.contactPhone.replace(/\D/g, "")
     const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
   }
 
   const handleMarkPaid = (booking) => {
+    const fin = calculateBookingFinancials(booking)
     setSelectedBooking(booking)
-    setPaymentAmount((booking.totalAmount - (booking.advanceReceived || 0)).toString())
+    setPaymentAmount(fin.outstanding.toString())
     setPaymentMode(booking.paymentMode || "Cash")
     setPaymentNotes("")
   }
@@ -176,6 +181,13 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
       // Toast already shown
     }
   }
+
+  const ledgerFin = viewLedgerBooking
+    ? calculateBookingFinancials({
+        ...viewLedgerBooking,
+        payments: ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments,
+      })
+    : null
 
   return (
     <section aria-labelledby="payment-tracker-heading" className="space-y-4">
@@ -274,7 +286,7 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                     <div>
                       <p className="text-xs text-ink-muted">Advance</p>
                       <p className="font-semibold text-success-text tabular-nums mt-0.5">
-                        {formatINR(booking.advanceReceived || 0, 0)}
+                        {formatINR(booking.paid !== undefined ? booking.paid : (booking.advanceReceived || 0), 0)}
                       </p>
                     </div>
                     <div>
@@ -453,12 +465,12 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
               </div>
               <div className="p-3 bg-success-soft rounded-[var(--yh-radius-md)] text-success-text">
                 <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80 mb-0.5">Total Received</p>
-                <p className="text-base font-bold tabular-nums">{formatINR(viewLedgerBooking.advanceReceived || 0, 0)}</p>
+                <p className="text-base font-bold tabular-nums">{formatINR(ledgerFin?.collected || 0, 0)}</p>
               </div>
               <div className="p-3 bg-warning-soft rounded-[var(--yh-radius-md)] text-warning-text">
                 <p className="text-[10px] font-semibold uppercase tracking-wider opacity-80 mb-0.5">Balance Remaining</p>
                 <p className="text-base font-bold tabular-nums">
-                  {formatINR(Math.max(0, viewLedgerBooking.totalAmount - (viewLedgerBooking.advanceReceived || 0)), 0)}
+                  {formatINR(ledgerFin?.outstanding || 0, 0)}
                 </p>
               </div>
             </div>
@@ -595,10 +607,10 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                 </div>
               ) : (
                 <div className="p-6 text-center text-ink-muted text-xs">
-                  {(viewLedgerBooking.advanceReceived || 0) > 0 ? (
+                  {(ledgerFin?.collected || 0) > 0 ? (
                     <div>
                       <p className="font-semibold text-ink">
-                        Initial Advance Recorded: {formatINR(viewLedgerBooking.advanceReceived, 0)}
+                        Initial Advance Recorded: {formatINR(ledgerFin.collected, 0)}
                       </p>
                       <p className="text-xs text-ink-muted mt-1">Payment mode: {viewLedgerBooking.paymentMode || "Cash"}</p>
                       <Button
@@ -608,7 +620,7 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
                         onClick={() =>
                           setViewReceiptPayment({
                             receiptNo: `#${user?.receiptPrefix || "REC"}-001`,
-                            amount: viewLedgerBooking.advanceReceived,
+                            amount: ledgerFin.collected,
                             paymentDate: viewLedgerBooking.date,
                             paymentMode: viewLedgerBooking.paymentMode || "Cash",
                             notes: "Initial advance received upon booking",

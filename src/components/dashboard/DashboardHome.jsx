@@ -27,6 +27,7 @@ import {
   filterRecentBookings,
   getBookingBalance,
   getBookingPaymentStatus,
+  getBookingPaidAmount,
   isBookingCancelled,
 } from "../../utils/dashboardOverview"
 import {
@@ -610,7 +611,7 @@ export default function DashboardHome({
                       const bookingId = b._id || b.id
                       const isCancelled = isBookingCancelled(b)
                       const balance = getBookingBalance(b)
-                      const paidAmount = Number(b.advanceReceived) || 0
+                      const paidAmount = getBookingPaidAmount(b)
                       const paymentStatus = getBookingPaymentStatus(b)
                       const paxCount = b.passengers?.length || 0
                       const assignedSeats = (b.passengers || []).map((p) => p.seatId).filter(Boolean)
@@ -772,7 +773,7 @@ export default function DashboardHome({
                   const bookingId = b._id || b.id
                   const isCancelled = isBookingCancelled(b)
                   const balance = getBookingBalance(b)
-                  const paidAmount = Number(b.advanceReceived) || 0
+                  const paidAmount = getBookingPaidAmount(b)
                   const paymentStatus = getBookingPaymentStatus(b)
                   const paxCount = b.passengers?.length || 0
                   const assignedSeats = (b.passengers || []).map((p) => p.seatId).filter(Boolean)

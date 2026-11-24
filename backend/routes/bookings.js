@@ -50,6 +50,14 @@ export const maskBookingPaxAadhaar = (booking) => {
       return copy
     })
   }
+  if (b.advanceReceived === undefined || b.advanceReceived === null) {
+    if (Array.isArray(b.payments) && b.payments.length > 0) {
+      const nonVoid = b.payments.filter((p) => !p.isVoid)
+      b.advanceReceived = nonVoid.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    } else {
+      b.advanceReceived = 0
+    }
+  }
   return b
 }
 

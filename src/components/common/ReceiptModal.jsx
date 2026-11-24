@@ -15,6 +15,7 @@ import {
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../../i18n/documents"
 import { formatDisplayDate } from "../../utils/date"
 import { escapeHtml, sanitizeHexColor } from "../../utils/escapeHtml.js"
+import { calculateBookingFinancials } from "../../../shared/profitLoss.js"
 import { useFocusTrap } from "../ui/focusTrap"
 
 export default function ReceiptModal({
@@ -47,7 +48,9 @@ export default function ReceiptModal({
   const amount = Math.abs(Number(payment?.amount || payment?.paymentAmount || 0))
   const isRefund = payment?.type === "refund" || Number(payment?.amount) < 0
   const isVoid = Boolean(payment?.isVoid)
-  const balance = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
+  const fin = calculateBookingFinancials(booking)
+  const balance = fin.outstanding
+  const totalPaidSoFar = fin.collected
 
   const buildPrintableHTML = () => {
     const safeAccentColor = sanitizeHexColor(accentColor)
@@ -212,7 +215,7 @@ export default function ReceiptModal({
         </tr>
         <tr>
           <td><span class="label">${t.advancePaid} / ${t.totalPaidSoFar}</span></td>
-          <td style="color:#059669;">₹${(booking.advanceReceived || 0).toLocaleString()}</td>
+          <td style="color:#059669;">₹${totalPaidSoFar.toLocaleString()}</td>
         </tr>
         <tr>
           <td><span class="label">${t.balancePayable}</span></td>
