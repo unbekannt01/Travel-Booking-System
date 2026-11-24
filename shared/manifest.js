@@ -131,6 +131,17 @@ export const MANIFEST_COLUMNS = Object.freeze([
     width: "125px",
   }),
   Object.freeze({
+    id: "balanceDue",
+    label: "Balance Due",
+    labelHi: "बकाया राशि",
+    labelGu: "બાકી રકમ",
+    required: false,
+    defaultSelected: false,
+    sensitive: false,
+    align: "right",
+    width: "85px",
+  }),
+  Object.freeze({
     id: "boarded",
     label: "Boarded",
     labelHi: "सवार",
@@ -175,6 +186,18 @@ export const MANIFEST_PRESETS = Object.freeze({
     "mobile",
     "pickup",
     "aadhaar",
+    "boarded",
+  ]),
+  "pickup-wise": Object.freeze([
+    "srNo",
+    "name",
+    "seat",
+    "gender",
+    "age",
+    "mobile",
+    "pickup",
+    "paymentStatus",
+    "balanceDue",
     "boarded",
   ]),
   minimal: Object.freeze(["srNo", "name", "seat", "mobile", "boarded"]),
@@ -370,6 +393,14 @@ export function buildManifestRows({
         case "paymentStatus":
           row.paymentStatus = p.paymentStatus || (p.isPaid ? "Paid" : "Pending") || "—"
           break
+        case "balanceDue": {
+          const bal =
+            p.balanceDue !== undefined && p.balanceDue !== null
+              ? Number(p.balanceDue)
+              : 0
+          row.balanceDue = bal > 0 ? `₹${bal.toLocaleString("en-IN")}` : "Nil"
+          break
+        }
         case "aadhaar":
           row.aadhaar = formatAadhaar(p.aadhaar || p.aadhar, aadhaarMode)
           break
@@ -434,6 +465,64 @@ const I18N = {
 }
 
 /**
+ * Groups and sorts passengers by pickup point for boarding coordination.
+ * - Groups sorted by pickup time (earliest first), then alphabetical
+ * - "No Pickup Point" group is always last
+ * - Inside each group, passengers are sorted by natural seat number
+ */
+export function groupPassengersByPickup(passengers = [], layoutKeyOrBusType) {
+  const groupsMap = new Map()
+
+  for (const p of passengers) {
+    const rawPoint = p.pickupPoint || p.pickup || p.city || ""
+    const point = rawPoint.trim() || "No pickup point"
+    const rawTime = p.pickupTime ? String(p.pickupTime).trim() : ""
+
+    if (!groupsMap.has(point)) {
+      groupsMap.set(point, {
+        pickupPoint: point,
+        pickupTime: rawTime,
+        passengers: [],
+      })
+    }
+    const group = groupsMap.get(point)
+    if (!group.pickupTime && rawTime) {
+      group.pickupTime = rawTime
+    }
+    group.passengers.push(p)
+  }
+
+  // Sort groups
+  const groups = Array.from(groupsMap.values())
+  groups.sort((a, b) => {
+    const isANone = a.pickupPoint.toLowerCase().includes("no pickup")
+    const isBNone = b.pickupPoint.toLowerCase().includes("no pickup")
+    if (isANone && !isBNone) return 1
+    if (!isANone && isBNone) return -1
+
+    if (a.pickupTime && b.pickupTime) {
+      const cmp = a.pickupTime.localeCompare(b.pickupTime, undefined, { numeric: true })
+      if (cmp !== 0) return cmp
+    } else if (a.pickupTime && !b.pickupTime) {
+      return -1
+    } else if (!a.pickupTime && b.pickupTime) {
+      return 1
+    }
+
+    return a.pickupPoint.localeCompare(b.pickupPoint, undefined, { sensitivity: "base" })
+  })
+
+  // Sort passengers inside each group by natural seat number
+  for (const group of groups) {
+    group.passengers.sort((a, b) =>
+      compareSeats(a?.seat || a?.seatId, b?.seat || b?.seatId, layoutKeyOrBusType),
+    )
+  }
+
+  return groups
+}
+
+/**
  * Renders complete, print-ready, sandboxed HTML document string for the passenger manifest.
  *
  * @param {{
@@ -466,18 +555,89 @@ export function renderManifestHtml({
   aadhaarMode = "last4",
   orientation = "auto",
   showCompanyHeader = true,
+  groupByPickup = false,
   generatedAt = new Date(),
 } = {}) {
   const activeLang = I18N[language] || I18N.en
   const normColumns = normalizeColumnSelection(columns)
-  const rows = buildManifestRows({
-    passengers,
-    columns: normColumns,
-    sort,
-    aadhaarMode,
-    layoutKey: departure?.layoutKey,
-    busType: departure?.busType,
-  })
+  const effectiveLayout = manifest?.layoutKey || manifest?.busType
+
+  let rows = []
+  let groupsWithRows = []
+
+  if (groupByPickup) {
+    const groups = groupPassengersByPickup(passengers, effectiveLayout)
+    let runningSr = 1
+    groupsWithRows = groups.map((g) => {
+      const gRows = g.passengers.map((p) => {
+        const row = { _original: p }
+        for (const colId of normColumns) {
+          switch (colId) {
+            case "srNo":
+              row.srNo = runningSr++
+              break
+            case "name":
+              row.name = p.name ? String(p.name).trim() : "—"
+              break
+            case "seat":
+              row.seat = displaySeat(p.seat || p.seatId, effectiveLayout)
+              break
+            case "gender":
+              row.gender = p.gender ? String(p.gender).trim().toUpperCase().charAt(0) : "—"
+              break
+            case "age":
+              row.age = p.age !== undefined && p.age !== null && p.age !== "" ? String(p.age) : "—"
+              break
+            case "mobile":
+              row.mobile = p.mobile || p.contact || p.phone || "—"
+              break
+            case "city":
+              row.city = p.city ? String(p.city).trim() : "—"
+              break
+            case "pickup":
+              row.pickup = p.pickup || p.pickupPoint || "—"
+              break
+            case "bookingRef":
+              row.bookingRef = p.bookingRef || p.invoiceNo || "—"
+              break
+            case "paymentStatus":
+              row.paymentStatus = p.paymentStatus || (p.isPaid ? "Paid" : "Pending") || "—"
+              break
+            case "balanceDue": {
+              const bal =
+                p.balanceDue !== undefined && p.balanceDue !== null ? Number(p.balanceDue) : 0
+              row.balanceDue = bal > 0 ? `₹${bal.toLocaleString("en-IN")}` : "Nil"
+              break
+            }
+            case "aadhaar":
+              row.aadhaar = formatAadhaar(p.aadhaar || p.aadhar, aadhaarMode)
+              break
+            case "boarded":
+              row.boarded = Boolean(p.boarded || p.checkedIn)
+              break
+            case "remarks":
+              row.remarks = p.remarks ? String(p.remarks).trim() : ""
+              break
+            default:
+              row[colId] = p[colId] !== undefined && p[colId] !== null ? String(p[colId]) : "—"
+              break
+          }
+        }
+        return row
+      })
+      return { ...g, rows: gRows }
+    })
+    rows = groupsWithRows.flatMap((g) => g.rows)
+  } else {
+    rows = buildManifestRows({
+      passengers,
+      columns: normColumns,
+      sort,
+      aadhaarMode,
+      layoutKey: manifest?.layoutKey,
+      busType: manifest?.busType,
+    })
+  }
 
   // Auto orientation: if columns count > 7 or orientation is explicit landscape
   const effectiveOrientation =
@@ -695,6 +855,33 @@ export function renderManifestHtml({
       page-break-inside: avoid;
       break-inside: avoid;
     }
+    .pickup-group-banner {
+      background: #e0f2fe;
+      border: 1px solid #7dd3fc;
+      border-left: 4px solid #0284c7;
+      padding: 6px 10px;
+      margin-top: 14px;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    .pickup-group-title {
+      font-weight: 800;
+      font-size: 11px;
+      color: #0369a1;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .pickup-group-count {
+      font-weight: 700;
+      font-size: 10px;
+      color: #0c4a6e;
+    }
     .system-footer {
       margin-top: 16px;
       padding-top: 6px;
@@ -747,6 +934,55 @@ export function renderManifestHtml({
       </div>
     </section>
 
+    ${
+      groupByPickup
+        ? groupsWithRows.length === 0
+          ? `<table class="manifest-table"><tbody><tr><td style="text-align: center; padding: 24px; color: #64748b;">No passengers found for this departure.</td></tr></tbody></table>`
+          : groupsWithRows
+              .map(
+                (grp) => `
+    <div class="pickup-group-banner">
+      <span class="pickup-group-title">📍 ${escapeHtml(grp.pickupPoint)}${grp.pickupTime ? ` (${escapeHtml(grp.pickupTime)})` : ""}</span>
+      <span class="pickup-group-count">${escapeHtml(String(grp.rows.length))} ${grp.rows.length === 1 ? "Passenger" : "Passengers"}</span>
+    </div>
+    <table class="manifest-table" style="margin-bottom: 12px;">
+      <thead>
+        <tr>
+          ${columnDefs
+            .map(
+              (col) => `
+          <th style="width: ${escapeHtml(col.width)}; text-align: ${escapeHtml(col.align)};">
+            ${escapeHtml(getColLabel(col))}
+          </th>`,
+            )
+            .join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${grp.rows
+          .map(
+            (row) => `
+        <tr>
+          ${columnDefs
+            .map((col) => {
+              const val = row[col.id]
+              let cellContent = escapeHtml(String(val !== undefined && val !== null ? val : "—"))
+              if (col.id === "boarded") {
+                cellContent = `<span class="chk-box"></span>`
+              } else if (col.id === "remarks") {
+                cellContent = `<span class="write-in-cell"></span>`
+              }
+              return `<td style="text-align: ${escapeHtml(col.align)};">${cellContent}</td>`
+            })
+            .join("")}
+        </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>`,
+              )
+              .join("")
+        : `
     <table class="manifest-table">
       <thead>
         <tr>
@@ -785,7 +1021,8 @@ export function renderManifestHtml({
                 .join("")
         }
       </tbody>
-    </table>
+    </table>`
+    }
 
     ${
       hasAadhaar
@@ -812,4 +1049,65 @@ export function renderManifestHtml({
   </div>
 </body>
 </html>`
+}
+
+/**
+ * Builds formatted WhatsApp text for driver / tour coordinator.
+ * Groups passengers by pickup stop with continuous sequence numbers.
+ * STRICT PRIVACY: NEVER includes Aadhaar details.
+ */
+export function buildPickupWiseWhatsAppText({
+  manifest = {},
+  passengers = [],
+  columns = [],
+} = {}) {
+  const effectiveLayout = manifest.layoutKey || manifest.busType
+  const groups = groupPassengersByPickup(passengers, effectiveLayout)
+  const normColumns = normalizeColumnSelection(columns)
+  const includeBalance = normColumns.includes("balanceDue")
+
+  const companyTitle = manifest.companyName || "YatraHub"
+  const tourName = manifest.tourName || "Tour"
+  const dateStr =
+    manifest.dateStr ||
+    (manifest.journeyDate ? new Date(manifest.journeyDate).toISOString().slice(0, 10) : "")
+  const busType = manifest.busType || "Coach"
+
+  let text = `*📍 ${companyTitle.toUpperCase()} - PICKUP PASSENGER LIST*\n`
+  text += `🚌 *Tour:* ${tourName}\n`
+  text += `📅 *Date:* ${dateStr} • *Bus:* ${busType}\n`
+  text += `👥 *Total Passengers:* ${passengers.length}\n`
+  text += `──────────────────────\n\n`
+
+  if (groups.length === 0 || passengers.length === 0) {
+    text += `_No passengers booked for this departure._\n`
+    return text
+  }
+
+  let runningNumber = 1
+  for (const group of groups) {
+    const timeText = group.pickupTime ? ` (${group.pickupTime})` : ""
+    text += `*📍 ${group.pickupPoint.toUpperCase()}${timeText} — ${group.passengers.length} Pax*\n`
+
+    group.passengers.forEach((p) => {
+      const name = p.name ? String(p.name).trim() : "Traveler"
+      const seat = displaySeat(p.seat || p.seatId, effectiveLayout)
+      const phone = p.mobile || p.contact || p.phone || ""
+      const phoneText = phone ? ` • 📞 ${phone}` : ""
+
+      let balText = ""
+      if (includeBalance) {
+        const bal = p.balanceDue !== undefined ? Number(p.balanceDue) : 0
+        balText = bal > 0 ? ` • [Due: ₹${bal.toLocaleString("en-IN")}]` : ` • [Paid]`
+      }
+
+      text += `${runningNumber}. ${name} — Seat: *${seat}*${phoneText}${balText}\n`
+      runningNumber++
+    })
+    text += `\n`
+  }
+
+  text += `──────────────────────\n`
+  text += `_Note: Confidential coordinator manifest. Strictly for boarding operations._`
+  return text.trim()
 }

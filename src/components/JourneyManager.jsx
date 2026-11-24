@@ -604,6 +604,21 @@ export default function JourneyManager({
               >
                 Print Manifest (Without Aadhaar)
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExportOptions(false)
+                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                  setManifestModalConfig({
+                    isOpen: true,
+                    preset: "pickup-wise",
+                    departureKey: depKey,
+                  })
+                }}
+                className="w-full px-4 py-2 text-left text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle flex items-center gap-1.5"
+              >
+                <span>📍 Pickup-Wise Passenger List</span>
+              </button>
             </div>
           )}
         </div>
@@ -1664,6 +1679,7 @@ export default function JourneyManager({
             departures={departures}
             user={user}
             initialPreset={manifestModalConfig.preset}
+            initialGroupByPickup={manifestModalConfig.preset === "pickup-wise"}
           />
         </Suspense>
       )}

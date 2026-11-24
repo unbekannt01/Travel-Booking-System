@@ -8,16 +8,19 @@ import {
   FileText,
   Bus,
   Info,
+  Copy,
 } from "lucide-react"
 import {
   MANIFEST_COLUMNS,
   MANIFEST_PRESETS,
   normalizeColumnSelection,
   renderManifestHtml,
+  buildPickupWiseWhatsAppText,
 } from "../../../shared/manifest.js"
 import { getDepartureManifest, listDepartures } from "../../data/departures"
 import { formatDisplayDate } from "../../utils/date"
 import { cn } from "../../utils/cn"
+import { useToast } from "./ToastContext"
 import {
   Modal,
   Button,
@@ -36,6 +39,7 @@ const DEFAULT_SETTINGS = {
   orientation: "auto",
   language: "en",
   showCompanyHeader: true,
+  groupByPickup: false,
   aadhaarMode: "last4",
 }
 
@@ -57,6 +61,7 @@ function loadSavedPreferences() {
       language: ["en", "hi", "gu"].includes(parsed.language) ? parsed.language : "en",
       showCompanyHeader:
         typeof parsed.showCompanyHeader === "boolean" ? parsed.showCompanyHeader : true,
+      groupByPickup: typeof parsed.groupByPickup === "boolean" ? parsed.groupByPickup : false,
       aadhaarMode: ["full", "last4"].includes(parsed.aadhaarMode)
         ? parsed.aadhaarMode
         : "last4",
@@ -76,6 +81,7 @@ function savePreferences(settings) {
       orientation: settings.orientation,
       language: settings.language,
       showCompanyHeader: settings.showCompanyHeader,
+      groupByPickup: settings.groupByPickup,
       aadhaarMode: settings.aadhaarMode,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
@@ -91,9 +97,11 @@ export default function ManifestPrintModal({
   departures: initialDepartures = [],
   user,
   initialPreset = "without-aadhaar",
+  initialGroupByPickup = false,
 }) {
   const iframeRef = useRef(null)
   const saved = useMemo(() => loadSavedPreferences(), [])
+  const { toast } = useToast()
 
   const [availableDepartures, setAvailableDepartures] = useState(initialDepartures)
   const [selectedKey, setSelectedKey] = useState(departureKey || "")
@@ -101,7 +109,14 @@ export default function ManifestPrintModal({
     if (initialPreset === "with-aadhaar") {
       return [...MANIFEST_PRESETS["with-aadhaar"]]
     }
+    if (initialPreset === "pickup-wise") {
+      return [...MANIFEST_PRESETS["pickup-wise"]]
+    }
     return saved.columns
+  })
+  const [groupByPickup, setGroupByPickup] = useState(() => {
+    if (initialPreset === "pickup-wise" || initialGroupByPickup) return true
+    return Boolean(saved.groupByPickup)
   })
   const [sort, setSort] = useState(saved.sort)
   const [orientation, setOrientation] = useState(saved.orientation)
@@ -149,13 +164,20 @@ export default function ManifestPrintModal({
     if (isOpen) {
       if (initialPreset === "with-aadhaar") {
         setColumns([...MANIFEST_PRESETS["with-aadhaar"]])
+        setGroupByPickup(false)
       } else if (initialPreset === "without-aadhaar") {
         setColumns([...MANIFEST_PRESETS["without-aadhaar"]])
+        setGroupByPickup(false)
+      } else if (initialPreset === "pickup-wise") {
+        setColumns([...MANIFEST_PRESETS["pickup-wise"]])
+        setGroupByPickup(true)
+      } else if (initialGroupByPickup) {
+        setGroupByPickup(true)
       }
       setAadhaarSafetyConfirmed(false)
       setError(null)
     }
-  }, [isOpen, initialPreset])
+  }, [isOpen, initialPreset, initialGroupByPickup])
 
   const hasAadhaar = columns.includes("aadhaar")
 
@@ -202,33 +224,43 @@ export default function ManifestPrintModal({
         orientation,
         language,
         showCompanyHeader,
+        groupByPickup,
         aadhaarMode,
       })
     }
-  }, [isOpen, columns, sort, orientation, language, showCompanyHeader, aadhaarMode])
+  }, [isOpen, columns, sort, orientation, language, showCompanyHeader, groupByPickup, aadhaarMode])
 
   // Active preset detection
   const activePreset = useMemo(() => {
     const norm = normalizeColumnSelection(columns).sort().join(",")
     const withoutAadhaarNorm = [...MANIFEST_PRESETS["without-aadhaar"]].sort().join(",")
     const withAadhaarNorm = [...MANIFEST_PRESETS["with-aadhaar"]].sort().join(",")
+    const pickupWiseNorm = [...MANIFEST_PRESETS["pickup-wise"]].sort().join(",")
     const minimalNorm = [...MANIFEST_PRESETS.minimal].sort().join(",")
 
-    if (norm === withoutAadhaarNorm) return "without-aadhaar"
-    if (norm === withAadhaarNorm) return "with-aadhaar"
-    if (norm === minimalNorm) return "minimal"
+    if (groupByPickup && norm === pickupWiseNorm) return "pickup-wise"
+    if (!groupByPickup && norm === withoutAadhaarNorm) return "without-aadhaar"
+    if (!groupByPickup && norm === withAadhaarNorm) return "with-aadhaar"
+    if (!groupByPickup && norm === minimalNorm) return "minimal"
     return "custom"
-  }, [columns])
+  }, [columns, groupByPickup])
 
   const handleApplyPreset = (presetKey) => {
     if (presetKey === "without-aadhaar") {
       setColumns([...MANIFEST_PRESETS["without-aadhaar"]])
       setAadhaarSafetyConfirmed(false)
+      setGroupByPickup(false)
     } else if (presetKey === "with-aadhaar") {
       setColumns([...MANIFEST_PRESETS["with-aadhaar"]])
+      setGroupByPickup(false)
+    } else if (presetKey === "pickup-wise") {
+      setColumns([...MANIFEST_PRESETS["pickup-wise"]])
+      setGroupByPickup(true)
+      setAadhaarSafetyConfirmed(false)
     } else if (presetKey === "minimal") {
       setColumns([...MANIFEST_PRESETS.minimal])
       setAadhaarSafetyConfirmed(false)
+      setGroupByPickup(false)
     }
   }
 
@@ -248,6 +280,7 @@ export default function ManifestPrintModal({
     setOrientation("auto")
     setLanguage("en")
     setShowCompanyHeader(true)
+    setGroupByPickup(false)
     setAadhaarMode("last4")
     setAadhaarSafetyConfirmed(false)
   }
@@ -257,6 +290,26 @@ export default function ManifestPrintModal({
     if (iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.focus()
       iframeRef.current.contentWindow.print()
+    }
+  }
+
+  const handleCopyWhatsAppText = async () => {
+    try {
+      const text = buildPickupWiseWhatsAppText({
+        manifest: departureMeta || {
+          tourName: "Tour Departure",
+          dateStr: new Date().toISOString().slice(0, 10),
+          busType: "2x1 Sleeper Luxury",
+          companyName: user?.companyName || "YATRA HUB",
+          companyPhone: user?.phone || "",
+        },
+        passengers,
+        columns,
+      })
+      await navigator.clipboard.writeText(text)
+      toast.success("Driver WhatsApp pickup list copied to clipboard!")
+    } catch {
+      toast.error("Failed to copy WhatsApp text")
     }
   }
 
@@ -281,8 +334,20 @@ export default function ManifestPrintModal({
       aadhaarMode,
       orientation,
       showCompanyHeader,
+      groupByPickup,
     })
-  }, [departureMeta, user, passengers, columns, language, sort, aadhaarMode, orientation, showCompanyHeader])
+  }, [
+    departureMeta,
+    user,
+    passengers,
+    columns,
+    language,
+    sort,
+    aadhaarMode,
+    orientation,
+    showCompanyHeader,
+    groupByPickup,
+  ])
 
   const isPrintDisabled =
     loading ||
@@ -347,7 +412,18 @@ export default function ManifestPrintModal({
                 <span>{disabledReason}</span>
               </span>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                leftIcon={<Copy size={15} />}
+                onClick={handleCopyWhatsAppText}
+                disabled={loading || passengers.length === 0}
+                title="Copy driver pickup list formatted for WhatsApp"
+              >
+                Copy as WhatsApp text
+              </Button>
               <Button type="button" variant="ghost" size="sm" onClick={onClose}>
                 Cancel
               </Button>
@@ -416,6 +492,15 @@ export default function ManifestPrintModal({
                 onClick={() => handleApplyPreset("with-aadhaar")}
               >
                 With Aadhaar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={activePreset === "pickup-wise" ? "primary" : "outline"}
+                className="justify-start text-xs h-9 px-2.5"
+                onClick={() => handleApplyPreset("pickup-wise")}
+              >
+                📍 Pickup-Wise
               </Button>
               <Button
                 type="button"
@@ -589,12 +674,19 @@ export default function ManifestPrintModal({
               </Select>
             </div>
 
-            <div className="flex flex-col justify-end pb-1">
+            <div className="flex flex-col justify-end pb-1 space-y-2">
               <Switch
                 id="manifest-company-header"
                 checked={showCompanyHeader}
                 onChange={setShowCompanyHeader}
                 label="Company Header"
+                size="sm"
+              />
+              <Switch
+                id="manifest-group-pickup"
+                checked={groupByPickup}
+                onChange={setGroupByPickup}
+                label="Group by Pickup"
                 size="sm"
               />
             </div>
