@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, lazy, Suspense } from "react"
 import {
   Phone,
   Fingerprint,
@@ -13,12 +13,14 @@ import {
 } from "lucide-react"
 import { maskAadhaar, formatSeatLabel } from "../utils/formatters"
 import { isMaskedAadhaar } from "../utils/validators"
-import { formatDisplayDate } from "../utils/date"
+import { formatDisplayDate, toDateInputValue } from "../utils/date"
 import { downloadCsv } from "../utils/csv"
 import { request } from "../data/client"
 import { useConfirm } from "./common/useConfirm"
 import { useToast } from "./common/useToast"
 import BoardingPassModal from "./common/BoardingPassModal"
+
+const ManifestPrintModal = lazy(() => import("./common/ManifestPrintModal"))
 import {
   Card,
   Button,
@@ -70,6 +72,29 @@ export default function PassengerManagement({
 
   const uniqueTours = useMemo(() => {
     return [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
+  }, [bookings])
+
+  const departures = useMemo(() => {
+    const active = bookings.filter((b) => b.status !== "Cancelled" && b.status !== "cancelled")
+    const map = new Map()
+    for (const b of active) {
+      if (!b.tourName || !b.journeyDate) continue
+      const dateKey = toDateInputValue(b.journeyDate)
+      const bus = b.busType || "2x1 Sleeper Luxury"
+      const key = `${b.tourName}___${dateKey}___${bus}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          tourName: b.tourName,
+          journeyDate: b.journeyDate,
+          dateStr: dateKey,
+          busType: bus,
+          totalPax: 0,
+        })
+      }
+      map.get(key).totalPax += (b.passengers || []).length
+    }
+    return Array.from(map.values())
   }, [bookings])
 
   const filteredBookings = useMemo(() => {
@@ -219,10 +244,6 @@ export default function PassengerManagement({
   const handleOpenPrintPreview = (withAadhar) => {
     setIncludeAadhar(withAadhar)
     setShowPreview(true)
-  }
-
-  const handlePrint = () => {
-    window.print()
   }
 
   return (
@@ -627,148 +648,18 @@ export default function PassengerManagement({
         </>
       )}
 
-      {/* Manifest Print Preview Modal on Modal primitive */}
-      <Modal
-        isOpen={showPreview}
-        onClose={() => setShowPreview(false)}
-        size="xl"
-        className="max-w-4xl max-h-[92vh]"
-        title={
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand text-brand-fg shrink-0">
-              <Printer size={18} />
-            </div>
-            <div>
-              <span className="text-base font-bold text-ink">Passenger Manifest Preview</span>
-              <p className="text-xs text-ink-muted font-normal mt-0.5">
-                {includeAadhar ? "Includes passenger Aadhaar numbers" : "Without Aadhaar numbers"}
-              </p>
-            </div>
-          </div>
-        }
-        footer={
-          <div className="flex items-center justify-between w-full">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setIncludeAadhar((prev) => !prev)}
-            >
-              Toggle Aadhaar: {includeAadhar ? "Enabled" : "Disabled"}
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowPreview(false)}
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                leftIcon={<Printer size={16} />}
-                onClick={handlePrint}
-              >
-                Print Manifest
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        <div id="pdf-content" className="bg-white p-6 sm:p-8 rounded-xl border border-slate-200 text-slate-900 print-content">
-          <div className="text-center mb-6 border-b-2 border-indigo-600 pb-4">
-            <h2 className="text-2xl font-black text-indigo-600 mb-1">
-              {user?.companyName || "YATRA HUB"}
-            </h2>
-            <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-              Internal Passenger Manifest
-            </p>
-          </div>
-
-          <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Destination</span>
-              <span className="font-bold text-slate-800 text-sm">
-                {selectedTour === "all" ? "All Tours" : selectedTour}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Total Passengers</span>
-              <span className="font-bold text-slate-800 text-sm">{passengerEntries.length} PAX</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Generated On</span>
-              <span className="font-bold text-slate-800 text-sm">{new Date().toLocaleDateString()}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Aadhaar Stamped</span>
-              <span className="font-bold text-slate-800 text-sm">{includeAadhar ? "Yes" : "No"}</span>
-            </div>
-          </div>
-
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-100 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-600">
-                <th className="p-2">#</th>
-                <th className="p-2">Traveler Name</th>
-                <th className="p-2">City</th>
-                <th className="p-2">Contact</th>
-                <th className="p-2">Seat</th>
-                {includeAadhar && <th className="p-2">Aadhaar</th>}
-                <th className="p-2 text-center">Age/Sex</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {passengerEntries.map(({ booking: b, passenger: p }, idx) => (
-                <tr key={`${b.id || b._id}-${idx}`} className="hover:bg-slate-50">
-                  <td className="p-2 font-bold text-slate-500">{idx + 1}</td>
-                  <td className="p-2 font-bold text-slate-900">{p.name}</td>
-                  <td className="p-2 text-slate-700">{p.city || "—"}</td>
-                  <td className="p-2 text-slate-700">{p.contact || b.contactPhone || "—"}</td>
-                  <td className="p-2 font-bold text-indigo-700">{formatSeatLabel(p.seatId)}</td>
-                  {includeAadhar && (
-                    <td className="p-2 font-mono text-slate-700">
-                      {p.aadhar ? maskAadhaar(p.aadhar) : "—"}
-                    </td>
-                  )}
-                  <td className="p-2 text-center text-slate-700">
-                    {p.age}Y / {p.gender ? p.gender.charAt(0).toUpperCase() : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-500">
-            Confidential document generated for internal tour conductor operations.
-          </div>
-        </div>
-      </Modal>
-
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-content,
-          .print-content * {
-            visibility: visible;
-          }
-          .print-content {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-        }
-      `}</style>
+      {/* Passenger Manifest Print Builder Modal (Part 6d) */}
+      {showPreview && (
+        <Suspense fallback={null}>
+          <ManifestPrintModal
+            isOpen={showPreview}
+            onClose={() => setShowPreview(false)}
+            departures={departures}
+            user={user}
+            initialPreset={includeAadhar ? "with-aadhaar" : "without-aadhaar"}
+          />
+        </Suspense>
+      )}
 
       {/* Boarding Pass Modal */}
       {boardingPassTarget && (

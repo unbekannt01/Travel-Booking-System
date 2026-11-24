@@ -221,3 +221,23 @@ node scripts/migrate-import-batch-privacy.mjs --apply
 ```
 Safety: Targets `mongodb://127.0.0.1:27017/yatrahub`. Accidental execution on test databases (`*_test`) is blocked unless `--allow-test` is explicitly passed.
 
+---
+
+## 8. Passenger Manifest Print Builder & Departure Endpoints (Part 6d)
+
+### 8.1 API Endpoints
+- `GET /api/departures`: Lists coach departures aggregated by Tour, Date, and Bus Type.
+- `GET /api/departures/:key/manifest`: Generates verified departure passenger manifest data.
+  - Query parameters:
+    - `columns`: comma-separated column list (e.g. `srNo,name,seat,mobile,aadhaar,boarded`).
+    - `aadhaar`: `"yes"` | `"no"` (triggers on-demand AES-256-GCM decryption).
+    - `sort`: `"seat"` | `"name"` | `"booking"`.
+    - `aadhaarMode`: `"full"` | `"last4"`.
+
+### 8.2 Security & Rate Limiting
+- `departureReadLimiter`: 120 requests per 15-minute window per IP.
+- `manifestAadhaarLimiter`: Strict limiter of 10 requests per 15-minute window per user/IP applied dynamically when `aadhaar=yes` or `aadhaar=true` is requested.
+- `Cache-Control: no-store` header is strictly emitted on manifest endpoints to prevent caching of passenger PII.
+- Operational audit logging: Records manifest access with departure key and column selections in `AuditLog`, strictly omitting passenger names, phone numbers, or Aadhaar numbers.
+
+

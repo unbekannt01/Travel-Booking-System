@@ -857,6 +857,32 @@ export async function downloadExportCsv(type, params = {}) {
   return { success: true, filename }
 }
 
+// --- DEPARTURES & MANIFEST (Part 6d) ---
+export async function listDepartures() {
+  const data = await request("/api/departures")
+  return data?.departures || []
+}
+
+export async function getDepartureManifest(key, options = {}) {
+  const query = new URLSearchParams()
+  if (options.columns) {
+    const colStr = Array.isArray(options.columns) ? options.columns.join(",") : options.columns
+    query.set("columns", colStr)
+  }
+  if (options.aadhaar) {
+    query.set("aadhaar", options.aadhaar === true || options.aadhaar === "yes" ? "yes" : "no")
+  }
+  if (options.sort) {
+    query.set("sort", options.sort)
+  }
+  if (options.aadhaarMode) {
+    query.set("aadhaarMode", options.aadhaarMode)
+  }
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return request(`/api/departures/${encodeURIComponent(key)}/manifest${qs}`)
+}
+
+
 
 
 

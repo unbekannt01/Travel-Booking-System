@@ -21,6 +21,7 @@ import trashRoutes from "./routes/trash.js"
 import historyRoutes from "./routes/history.js"
 import exportRoutes from "./routes/export.js"
 import importRoutes from "./routes/import.js"
+import departureRoutes from "./routes/departures.js"
 
 const app = express()
 
@@ -83,6 +84,7 @@ app.use("/api/trash", trashRoutes)
 app.use("/api/history", historyRoutes)
 app.use("/api/export", exportRoutes)
 app.use("/api/import", importRoutes)
+app.use("/api/departures", departureRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()

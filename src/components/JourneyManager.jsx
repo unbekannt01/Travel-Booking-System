@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, lazy, Suspense } from "react"
 import {
   MapPin,
   Check,
@@ -31,6 +31,8 @@ import { toDateInputValue, formatDisplayDate } from "../utils/date"
 import { formatINR, formatSeatLabel } from "../utils/formatters"
 import BoardingPassModal from "./common/BoardingPassModal"
 import SeatLayoutModal from "./common/SeatLayoutModal"
+
+const ManifestPrintModal = lazy(() => import("./common/ManifestPrintModal"))
 import {
   Card,
   Button,
@@ -95,7 +97,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
   const [customDate, setCustomDate] = useState(todayStr)
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
-  const [includeAadhar, setIncludeAadhar] = useState(true)
+  const [manifestModalConfig, setManifestModalConfig] = useState(null)
 
   // Trip expenses & financials state
   const [tripExpenses, setTripExpenses] = useState(initialExpenses)
@@ -460,31 +462,6 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
     window.location.href = mailUrl
   }
 
-  const handlePrintSeatLayout = (withAadhar) => {
-    setIncludeAadhar(withAadhar)
-    setShowExportOptions(false)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.print())
-    })
-  }
-
-  const getSortedSeatRows = (passengers) => {
-    const list = Array.isArray(passengers) ? passengers : []
-    const sorted = [...list].sort((a, b) =>
-      (a?.seatId || "").localeCompare(b?.seatId || "", undefined, { numeric: true }),
-    )
-
-    const rows = []
-    sorted.forEach((passenger) => {
-      if (rows.length === 0 || rows[rows.length - 1].length === 4) {
-        rows.push([])
-      }
-      rows[rows.length - 1].push(passenger)
-    })
-
-    return rows
-  }
-
   return (
     <div className="space-y-6">
       {/* View Switcher Tabs & Print Header (no-print) */}
@@ -578,14 +555,30 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
               </button>
               <button
                 type="button"
-                onClick={() => handlePrintSeatLayout(true)}
+                onClick={() => {
+                  setShowExportOptions(false)
+                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                  setManifestModalConfig({
+                    isOpen: true,
+                    preset: "with-aadhaar",
+                    departureKey: depKey,
+                  })
+                }}
                 className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
               >
                 Print Manifest (With Aadhaar)
               </button>
               <button
                 type="button"
-                onClick={() => handlePrintSeatLayout(false)}
+                onClick={() => {
+                  setShowExportOptions(false)
+                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                  setManifestModalConfig({
+                    isOpen: true,
+                    preset: "without-aadhaar",
+                    departureKey: depKey,
+                  })
+                }}
                 className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
               >
                 Print Manifest (Without Aadhaar)
@@ -827,6 +820,22 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
                     >
                       <Layers size={13} className="mr-1 text-brand" />
                       <span>Layout</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setManifestModalConfig({
+                          isOpen: true,
+                          preset: "without-aadhaar",
+                          departureKey: dep.key,
+                        })
+                      }}
+                      title="Configure and Print Passenger Manifest"
+                    >
+                      <Printer size={13} className="mr-1 text-brand" />
+                      <span>Manifest</span>
                     </Button>
                     <Button
                       type="button"
@@ -1282,106 +1291,6 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
               )
             })
           )}
-
-          {/* Printable Manifest (Untouched layout for physical printing) */}
-          <div className="print-only hidden">
-            {journeyBookings.map((booking) => {
-              const printPax = Array.isArray(booking.passengers) ? booking.passengers : []
-              const seatRows = getSortedSeatRows(printPax)
-              return (
-                <div key={booking.id || booking._id} className="page-break-after py-10">
-                  <div className="max-w-6xl mx-auto bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-xl">
-                    <div className="bg-indigo-600 text-white px-8 py-8">
-                      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.3em] opacity-80">YatraHub Bus Seat Manifest</div>
-                          <h1 className="mt-4 text-4xl font-black leading-tight">{booking.tourName}</h1>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs uppercase tracking-[0.25em] opacity-80">Invoice</div>
-                          <div className="mt-2 text-3xl font-black">#{booking.invoiceNo}</div>
-                        </div>
-                      </div>
-                      <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                        <div className="rounded-3xl bg-white/10 p-4">
-                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Journey Date</div>
-                          <div className="mt-2 text-lg font-black">{formatDisplayDate(booking.journeyDate)}</div>
-                        </div>
-                        <div className="rounded-3xl bg-white/10 p-4">
-                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Passengers</div>
-                          <div className="mt-2 text-lg font-black">{printPax.length} PAX</div>
-                        </div>
-                        <div className="rounded-3xl bg-white/10 p-4">
-                          <div className="text-[10px] uppercase tracking-[0.2em] opacity-80">Coach Config</div>
-                          <div className="mt-2 text-lg font-black">{booking.busType || "2x1 Sleeper"}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="px-8 py-10">
-                      <div className="mb-8">
-                        <h2 className="text-2xl font-black text-slate-900 mb-4">Seat Allocation Map</h2>
-                        <div className="grid gap-4">
-                          {seatRows.map((row, rowIdx) => (
-                            <div key={`row-${rowIdx}`} className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                              {row.map((passenger) => (
-                                <div key={passenger.seatId || passenger.name} className="border border-slate-200 rounded-3xl p-4 bg-slate-50">
-                                  <div className="text-[10px] uppercase tracking-[0.25em] text-slate-500 mb-2">Seat {passenger.seatId || "—"}</div>
-                                  <div className="text-lg font-black text-slate-900">{passenger.name}</div>
-                                  <div className="mt-3 text-sm text-slate-600">{passenger.city}</div>
-                                  <div className="mt-2 text-[11px] uppercase tracking-[0.2em] text-slate-400">{passenger.age} years • {passenger.gender}</div>
-                                  {includeAadhar && (
-                                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700">
-                                      Aadhaar: {passenger.aadhar || "N/A"}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                              {Array.from({ length: 4 - row.length }).map((_, emptyIdx) => (
-                                <div key={`empty-${emptyIdx}`} className="border border-dashed border-slate-200 rounded-3xl p-4 bg-white/60" />
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-[2rem] border border-slate-200 overflow-hidden">
-                        <div className="bg-slate-100 px-6 py-4 uppercase tracking-[0.25em] text-slate-500 text-xs font-black">Passenger Manifest</div>
-                        <table className="w-full text-left border-collapse">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">#</th>
-                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Name</th>
-                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Seat</th>
-                              {includeAadhar && <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Aadhaar</th>}
-                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">City</th>
-                              <th className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Age/Gender</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {printPax.map((p, idx) => (
-                              <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                                <td className="px-4 py-3 text-sm font-bold text-slate-500">{idx + 1}</td>
-                                <td className="px-4 py-3 text-sm font-black text-slate-900">{p.name}</td>
-                                <td className="px-4 py-3 text-sm font-bold text-indigo-700">{p.seatId || "—"}</td>
-                                {includeAadhar && <td className="px-4 py-3 text-sm text-slate-600">{p.aadhar || "N/A"}</td>}
-                                <td className="px-4 py-3 text-sm text-slate-600">{p.city}</td>
-                                <td className="px-4 py-3 text-sm font-bold text-slate-700">{p.age} / {p.gender}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-8 text-center text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Generated by YatraHub — tour operator seat manifest
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
         </div>
         </PanelErrorBoundary>
       )}
@@ -1681,6 +1590,20 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
             setActiveLayoutDeparture(null)
           }}
         />
+      )}
+
+      {/* Passenger Manifest Print Builder Modal (Part 6d) */}
+      {manifestModalConfig?.isOpen && (
+        <Suspense fallback={null}>
+          <ManifestPrintModal
+            isOpen={manifestModalConfig.isOpen}
+            onClose={() => setManifestModalConfig(null)}
+            departureKey={manifestModalConfig.departureKey}
+            departures={departures}
+            user={user}
+            initialPreset={manifestModalConfig.preset}
+          />
+        </Suspense>
       )}
     </div>
   )

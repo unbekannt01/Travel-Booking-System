@@ -86,6 +86,8 @@ npm run ui:smoke
 ```
 
 ### Test Coverage Summary (**388 unit tests + 87 component tests across 114 total suites**):
+0. **Passenger Manifest Print Builder & Aadhaar Guard** (`shared/manifest.js`, `backend/routes/departures.js`, `src/components/common/ManifestPrintModal.jsx`):
+   - Custom column selector across 13 columns with canonical normalization; presets ("Without Aadhaar", "With Aadhaar", "Minimal", "Custom"); natural alphanumeric seat sorting; on-demand AES-256-GCM Aadhaar decryption gated by mandatory safety confirmation checkbox; strict dual rate limiters (120 req/15min general, 10 req/15min Aadhaar-gated); zero Aadhaar in `localStorage`; sandboxed iframe preview with strict CSP (`default-src 'none'`); and print-ready multi-page table formatting with trilingual support (en/hi/gu).
 0. **Component Safety Net (`tests/components/**/*.test.jsx`)**:
    - Comprehensive Vitest + React Testing Library + JSDOM suite testing all core screens (Overview, Travelers, Journeys, Destinations, Expenses, Analytics, Customers, Outstanding & Aging, Cash Book, Trash & History, Data Management, Settings, Invoices modal, and 4-step BookingForm), verifying clean renders with full mock data and empty states, defensive null-safety on legacy bookings lacking passengers array, `StatCard` polymorphism, tab panel error boundaries, bounded render commits via React Profiler, and 3-second toast deduplication.
 1. **CSV Export, Two-Phase Import & Granular Undo** (`tests/csv-pure.test.js`, `tests/csv-export.test.js`, `tests/csv-parser-limits.test.js`, `tests/import-token-hmac.test.js`, `tests/import-batch-privacy.test.js`, `tests/integration-csv.test.js`, `tests/integration-export-new.test.js`, `tests/integration-import-undo.test.js`):

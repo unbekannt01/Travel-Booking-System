@@ -904,6 +904,59 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
     3. **Recent Import Batches**: Audit history of previous imports with per-row undo triggers, status badges, and granular undo reason breakdowns.
   - Deep-link action buttons embedded in `CustomerManager.jsx` ("Import CSV") and `ExpenseTracker.jsx` ("Import CSV").
 
+---
+
+## 24. Passenger Manifest Print Builder & Aadhaar Guard Architecture (Part 6d)
+
+- **Pure Shared Manifest Engine (`shared/manifest.js`)**:
+  - Pure JavaScript module shared across frontend and Node.js environments.
+  - **Column Definitions (`MANIFEST_COLUMNS`)**:
+    - Frozen catalog of 13 supported manifest columns: `srNo` (required), `name` (required), `seat`, `gender`, `age`, `mobile`, `city`, `pickup`, `bookingRef`, `paymentStatus`, `aadhaar` (sensitive), `boarded` (checkbox), and `remarks` (conductor notes).
+    - Localized column headers across English (`label`), Hindi (`labelHi`), and Gujarati (`labelGu`).
+  - **Standard Manifest Presets (`MANIFEST_PRESETS`)**:
+    - `without-aadhaar`: `["srNo", "name", "seat", "gender", "age", "mobile", "pickup", "boarded"]` (Default operational manifest).
+    - `with-aadhaar`: `["srNo", "name", "seat", "gender", "age", "mobile", "pickup", "aadhaar", "boarded"]` (Statutory / border verification manifest).
+    - `minimal`: `["srNo", "name", "seat", "mobile", "boarded"]`.
+    - `custom`: Arbitrary user-selected combinations.
+  - **Column Normalization (`normalizeColumnSelection`)**:
+    - Enforces canonical column ordering defined in `MANIFEST_COLUMNS`.
+    - Automatically guarantees `srNo` and `name` are present and immutable.
+    - Strips unrecognized column IDs and de-duplicates selections.
+  - **Natural Seat Sorting (`compareSeats`, `buildManifestRows`)**:
+    - Natural alphanumeric seat comparator (`lower-L1`, `lower-L2`, `lower-L10`, `upper-R1`) using `{ numeric: true }`.
+    - Supports sorting by `seat` (default), `name` (alphabetical), or `booking` (chronological booking reference).
+    - Emits continuous 1-based sequential numbering (`srNo`).
+    - Formats missing values as `—` (em dash) while keeping `remarks` blank and `boarded` as an interactive checkbox.
+  - **Sandboxed Print HTML Generator (`renderManifestHtml`)**:
+    - Self-contained, CSP-enforced HTML document (`default-src 'none'; style-src 'unsafe-inline'; img-src data:`).
+    - Repeated `thead` on every printed page (`display: table-header-group`) and non-breaking rows (`break-inside: avoid`).
+    - Dynamic orientation switching: Auto-computes Landscape when active columns > 7, else Portrait.
+    - Full multi-language dictionary for headers, labels, and footers across English (`en`), Hindi (`hi`), and Gujarati (`gu`).
+    - Prominent Aadhaar statutory confidentiality warning rendered strictly when `aadhaar` is active.
+
+- **Backend Departure & Manifest API (`backend/routes/departures.js`)**:
+  - `GET /api/departures`: Aggregates active bookings into departure summaries grouped by `<tourName>___<dateKey>___<busType>`.
+  - `GET /api/departures/:key/manifest`:
+    - Strict query validation using Zod: `columns`, `aadhaar: "yes" | "no" | "true" | "false"`, `sort`, `aadhaarMode`.
+    - Dual rate limiters:
+      - `departureReadLimiter`: General departure queries (120 req / 15 min).
+      - `manifestAadhaarLimiter`: Dedicated strict limiter applied only when Aadhaar numbers are requested (10 req / 15 min per user/IP).
+    - On-demand AES-256-GCM decryption: Aadhaar is decrypted ONLY if explicitly requested (`aadhaar === "yes"`) and column is active.
+    - Security headers: `Cache-Control: no-store` prevents intermediate caching or disk persistence of decrypted PII.
+    - Privacy-first operational audit logging: Logs `{ departureKey, passengerCount, columns, aadhaar: boolean }` without storing passenger names, contact numbers, or Aadhaar values.
+
+- **Frontend Print Builder UI (`src/components/common/ManifestPrintModal.jsx`)**:
+  - Built on Design System v2 `Modal` primitive with lazy loading via `React.lazy` and `Suspense`.
+  - Responsive two-column layout:
+    - Left Panel: Departure picker, preset chips, column checklist with sensitive badges, format selector (`last4` vs `full`), sorting, orientation, trilingual selector, and company header switch.
+    - Right Panel: Sandboxed `<iframe>` preview with live rendering and native browser print trigger.
+  - **Aadhaar Privacy Guard & Safety Gate**:
+    - Aadhaar column is strictly OFF by default and is NEVER persisted in `localStorage`.
+    - Gated by mandatory safety checkbox: *"This printout will contain Aadhaar numbers. I will keep it safe."*
+    - The "Print Manifest" button is disabled until the safety acknowledgment is verified.
+    - Decrypted data is ephemeral in React state and is dropped immediately upon closing the modal.
+
+
 
 
 
