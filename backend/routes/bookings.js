@@ -5,6 +5,7 @@ import Payment from "../models/Payment.js"
 import Tour from "../models/Tour.js"
 import Counter from "../models/Counter.js"
 import Customer from "../models/Customer.js"
+import SeatHold from "../models/SeatHold.js"
 import { logAudit } from "../models/AuditLog.js"
 import { encryptAadhaar, decryptAadhaar, maskAadhaar, validateVerhoeff, isMaskedOrUnchangedAadhaar } from "../utils/aadhaar.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
@@ -201,6 +202,7 @@ export const checkSeatConflicts = async ({
   busType,
   passengers,
   excludeBookingId = null,
+  holdId = null,
 }) => {
   const seatIds = (passengers || []).map((p) => p.seatId).filter(Boolean)
   if (seatIds.length === 0) return null
@@ -230,6 +232,7 @@ export const checkSeatConflicts = async ({
     if (seen.has(norm)) {
       return {
         status: 409,
+        code: "SEAT_CONFLICT",
         message: `Seat "${seatIds[i]}" is assigned to multiple passengers in this booking.`,
         conflictingSeats: [seatIds[i]],
       }
@@ -299,12 +302,79 @@ export const checkSeatConflicts = async ({
   if (conflicts.length > 0) {
     return {
       status: 409,
+      code: "SEAT_CONFLICT",
       message: `Seat(s) ${conflicts.join(", ")} already booked for ${tourName} on this departure.`,
       conflictingSeats: conflicts,
     }
   }
 
-  return null
+  // 4. Check against effective seat holds/blocks for this departure
+  const now = new Date()
+  const activeHolds = await SeatHold.find({
+    userId,
+    tourName,
+    journeyDate: { $gte: start, $lte: end },
+    status: "active",
+    ...busCondition,
+    $or: [{ mode: "manual" }, { expiresAt: { $gt: now } }],
+  }).lean()
+
+  let authorizedHold = null
+  if (holdId) {
+    authorizedHold = activeHolds.find(
+      (h) => h._id.toString() === holdId.toString() && h.kind === "hold",
+    )
+  }
+
+  const heldConflicts = []
+  let holdInfo = null
+
+  for (const h of activeHolds) {
+    // Authorized hold exempts its held seats from being marked conflicting for this booking
+    if (authorizedHold && authorizedHold._id.toString() === h._id.toString()) {
+      continue
+    }
+
+    const hLayoutKey = h.seatLayoutKey || layoutKey
+    const hSeats = (h.seatIds || []).map((s) => resolveSeatId(hLayoutKey, s))
+    for (let i = 0; i < normalizedSeatIds.length; i++) {
+      const canon = normalizedSeatIds[i]
+      if (hSeats.includes(canon)) {
+        heldConflicts.push(seatIds[i])
+        if (!holdInfo) {
+          holdInfo = {
+            kind: h.kind,
+            holderName: h.holderName || "",
+            mode: h.mode,
+            expiresAt: h.expiresAt,
+          }
+        }
+      }
+    }
+  }
+
+  if (heldConflicts.length > 0) {
+    const isBlock = holdInfo?.kind === "block"
+    const message = isBlock
+      ? `Seat(s) ${heldConflicts.join(", ")} are currently blocked.`
+      : `Seat(s) ${heldConflicts.join(", ")} are currently held${
+          holdInfo?.holderName ? ` for ${holdInfo.holderName}` : ""
+        }${
+          holdInfo?.mode === "timed" && holdInfo?.expiresAt
+            ? ` until ${new Date(holdInfo.expiresAt).toLocaleTimeString()}`
+            : ""
+        }.`
+
+    return {
+      status: 409,
+      code: "SEAT_HELD",
+      message,
+      conflictingSeats: heldConflicts,
+      holdInfo,
+    }
+  }
+
+  return { authorizedHold }
 }
 
 // POST /api/bookings/generate-invoice
@@ -481,11 +551,14 @@ router.post("/", verifyToken, async (req, res) => {
       journeyDate,
       busType,
       passengers,
+      holdId: req.body.holdId || null,
     })
-    if (seatConflict) {
-      return res.status(seatConflict.status).json({
+    if (seatConflict && seatConflict.conflictingSeats) {
+      return res.status(seatConflict.status || 409).json({
+        code: seatConflict.code || "SEAT_CONFLICT",
         message: seatConflict.message,
         conflictingSeats: seatConflict.conflictingSeats,
+        holdInfo: seatConflict.holdInfo,
       })
     }
 
@@ -657,6 +730,31 @@ router.post("/", verifyToken, async (req, res) => {
       user: req.user,
     })
 
+    // If booking was authorized via a seat hold, convert the hold
+    if (seatConflict?.authorizedHold) {
+      try {
+        await SeatHold.findByIdAndUpdate(seatConflict.authorizedHold._id, {
+          status: "converted",
+          convertedBookingId: savedBooking._id,
+        })
+        await logAudit({
+          userId: req.user.id,
+          action: "seat_hold_converted",
+          category: "seat_management",
+          entityType: "SeatHold",
+          entityId: seatConflict.authorizedHold._id,
+          description: `Hold converted into booking ${savedBooking.invoiceNo}`,
+          metadata: {
+            bookingId: savedBooking._id,
+            invoiceNo: savedBooking.invoiceNo,
+            seatIds: seatConflict.authorizedHold.seatIds,
+          },
+        })
+      } catch (hErr) {
+        console.warn("Could not mark hold converted:", hErr)
+      }
+    }
+
     res.status(201).json(maskBookingPaxAadhaar(savedBooking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
@@ -767,11 +865,14 @@ router.put("/:id", verifyToken, async (req, res) => {
         busType: effectiveBusType,
         passengers: effectivePassengers,
         excludeBookingId: booking._id,
+        holdId: req.body.holdId || null,
       })
-      if (seatConflict) {
-        return res.status(seatConflict.status).json({
+      if (seatConflict && seatConflict.conflictingSeats) {
+        return res.status(seatConflict.status || 409).json({
+          code: seatConflict.code || "SEAT_CONFLICT",
           message: seatConflict.message,
           conflictingSeats: seatConflict.conflictingSeats,
+          holdInfo: seatConflict.holdInfo,
         })
       }
     }
@@ -1084,10 +1185,12 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
           passengers: proposedPassengers,
           excludeBookingId: booking._id,
         })
-        if (seatConflict) {
-          return res.status(seatConflict.status).json({
+        if (seatConflict && seatConflict.conflictingSeats) {
+          return res.status(seatConflict.status || 409).json({
+            code: seatConflict.code || "SEAT_CONFLICT",
             message: seatConflict.message,
             conflictingSeats: seatConflict.conflictingSeats,
+            holdInfo: seatConflict.holdInfo,
           })
         }
       }

@@ -30,6 +30,7 @@ import { formatINR, maskAadhaar } from "../utils/formatters"
 import { isMaskedAadhaar } from "../utils/validators"
 import { lookupCustomerByPhone } from "../data/customers"
 import { cn } from "../utils/cn"
+import { getAuthToken } from "../data/adapters/rest"
 import {
   BOOKING_STEPS,
   validateBookingStep,
@@ -175,12 +176,12 @@ function PricingSummaryRows({ summary }) {
 
 export default function BookingForm({ onSave, tours = [], editData, onCancel, bookings = [] }) {
   const { toast } = useToast()
-  const isEditMode = Boolean(editData)
+  const isEditMode = Boolean(editData && !editData.isNewFromSeatMap)
 
   const [formData, setFormData] = useState(() => ({
-    id: editData?.id || editData?._id || Date.now().toString(),
-    _id: editData?._id || editData?.id,
-    invoiceNo: editData?.invoiceNo || "",
+    id: editData?.isNewFromSeatMap ? Date.now().toString() : (editData?.id || editData?._id || Date.now().toString()),
+    _id: editData?.isNewFromSeatMap ? null : (editData?._id || editData?.id),
+    invoiceNo: editData?.isNewFromSeatMap ? "" : (editData?.invoiceNo || ""),
     date: toDateInputValue(editData?.date || new Date()),
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
@@ -189,6 +190,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     journeyDate: toDateInputValue(editData?.journeyDate),
     duration: editData?.duration || "",
     busType: editData?.busType || "",
+    holdId: editData?.holdId || "",
     paymentMode: editData?.paymentMode || "Cash",
     totalAmount: editData?.totalAmount || 0,
     baseAmount: editData?.baseAmount || editData?.totalAmount || 0,
@@ -322,6 +324,32 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     return seats
   }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
 
+  const [activeHolds, setActiveHolds] = useState([])
+  useEffect(() => {
+    if (!formData.tourName || !formData.journeyDate) {
+      setActiveHolds([])
+      return
+    }
+    let cancelled = false
+    const bus = formData.busType || "2x1 Sleeper Luxury"
+    const key = `${formData.tourName}___${formData.journeyDate}___${bus}`
+    fetch(`/api/departures/${encodeURIComponent(key)}/seat-holds`, {
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) {
+          setActiveHolds(data.filter((h) => h.isEffective))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [formData.tourName, formData.journeyDate, formData.busType])
+
   const bookedSeatsMap = useMemo(() => {
     const layoutKey = layoutKeyForBusType(formData.busType || formData.seatLayout)
     const map = {}
@@ -333,8 +361,24 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
         invoiceNo: bs.invoiceNo,
       }
     })
+
+    activeHolds.forEach((h) => {
+      if (formData.holdId && (h._id === formData.holdId || h.id === formData.holdId)) {
+        return // Permitted for this booking!
+      }
+      (h.seatIds || []).forEach((s) => {
+        const canonicalId = resolveSeatId(layoutKey, s)
+        map[canonicalId] = {
+          status: h.kind === "block" ? "blocked" : "held",
+          holderName: h.holderName,
+          mode: h.mode,
+          note: h.note,
+        }
+      })
+    })
+
     return map
-  }, [bookedSeats, formData.busType, formData.seatLayout])
+  }, [bookedSeats, activeHolds, formData.holdId, formData.busType, formData.seatLayout])
 
   const clearFieldError = (fieldId) => {
     if (!stepErrors[fieldId]) return

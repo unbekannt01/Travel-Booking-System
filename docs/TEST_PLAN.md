@@ -674,6 +674,49 @@ npm run ui:smoke -- --quick
   - Attempt to submit an invalid bus type (e.g. via direct API write); verify server rejects with HTTP 400 and clear message listing all 4 allowed standard types.
   - Verify existing destinations and bookings with legacy bus types ("2x1 Sleeper Luxury", "2x2 Sleeper Luxury", "2x1", etc.) load and display without errors.
 
+## 3.21 Manual Verification Checklist — Part 6S-2a (Live Seat Map, Seat Hold & Block, and Move Seat)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-2a ("automated tests not run, per owner decision"). All verifications are conducted manually using the checklist below.
+
+- [ ] **1. Live Seat Map Departure Rendering & Layouts**:
+  - Open Journeys screen (`#journeys`), click the "Seat Map" button on a departure card.
+  - Verify Live Seat Map opens showing accurate header info (tour name, formatted journey date, bus type, and layout badge).
+  - Verify stats summary counter bar shows Total, Available, Booked, Held, and Blocked counts.
+  - Verify layout renders with proper geometry for the selected bus type (e.g. 2x1 sleeper, 2x2 sleeper 48, 2x2 sleeper 40, or 2x3 seater 60).
+- [ ] **2. Timed Hold & Real-Time Countdown**:
+  - Click any available seat to open the Seat Action Drawer.
+  - Select "Hold Seat", choose a timed duration (e.g. 15 minutes), enter optional customer name ("Ramesh Bhai") and phone.
+  - Save hold; verify seat turns yellow (`held`), shows holder name, clock icon, and live countdown timer ticking down every 30 seconds.
+  - Attempt to book the held seat from another session or tab without `holdId`; verify server rejects with HTTP 409 `SEAT_HELD` and descriptive message.
+- [ ] **3. Manual Hold vs Block Distinction**:
+  - Create a manual hold (no expiration) on a seat; verify yellow badge with pin icon and "Manual Hold" indicator.
+  - Create a block (maintenance / VIP) on another seat; verify red/gray blocked styling with lock icon and note.
+- [ ] **4. Hold Expiry Without Background Job (TTL-Free Computed Expiry)**:
+  - Create a timed hold for a short period.
+  - Once expiry timestamp passes, refresh or query the seat map; verify seat status immediately shifts to `available` without requiring a background cron daemon or MongoDB TTL runner.
+- [ ] **5. Release Hold / Block**:
+  - In Seat Action Drawer for a held or blocked seat, click "Release Hold" / "Unblock Seat".
+  - Confirm release; verify seat immediately transitions back to green `available` state and counts update.
+- [ ] **6. Book from Held Seat (Conversion)**:
+  - For a seat held by customer, click "Book Held Seat" in the Action Drawer.
+  - Verify Booking Form opens with pre-selected seat and hold reference.
+  - Submit booking; verify hold record transitions to `status: "converted"` with `convertedBookingId` recorded.
+  - Verify seat displays as blue `booked` on the Live Seat Map.
+- [ ] **7. Move Booked Seat (Reassignment Without Billing Impact)**:
+  - On a booked seat, open the Action Drawer and click "Move Seat".
+  - In Move Seat Modal, select an available destination seat on the bus.
+  - Confirm move; verify passenger is reassigned to the new seat, the old seat immediately becomes available, and booking total fare / billing remains untouched.
+  - Attempt to move passenger into a held or blocked seat; verify server rejects with HTTP 409 `SEAT_HELD`.
+- [ ] **8. Keyboard Accessibility & WCAG Standards**:
+  - Navigate the seat map using only the keyboard (`Tab`, `Shift+Tab`).
+  - Press `Enter` or `Space` on any seat button to open the action drawer.
+  - Press `Escape` to close the action drawer or modal, and verify focus returns to the triggering seat button.
+- [ ] **9. Responsive Layout & Touch Targets**:
+  - Inspect on mobile viewport (360px) and desktop (1440px).
+  - Verify zero page-level horizontal overflow scrollbars.
+  - Verify all touch targets meet minimum 44px clickable dimensions.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap

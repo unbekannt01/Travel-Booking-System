@@ -956,6 +956,67 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
     - The "Print Manifest" button is disabled until the safety acknowledgment is verified.
     - Decrypted data is ephemeral in React state and is dropped immediately upon closing the modal.
 
+---
+
+## 25. Bus Seat Foundation, Configurable Layouts & Server-Side Conflict Guard (Part 6S-1 & 6S-1 Fix)
+
+- **Pure ESM Seat Layout Engine (`shared/seatLayouts.js`)**:
+  - Zero-dependency ESM pure module shared across client browser and Node.js backend.
+  - Configurable data-driven layouts for 4 bus types:
+    1. `sleeper-2x1-38`: 2x1 sleeper, 38 seats (6 full rows of 3 + 2 extra berths in Row 7; Left single L1..L7, Right pairs R1..R6).
+    2. `sleeper-2x2-48`: 2x2 sleeper, 48 seats (6 rows x 4 berths per deck: L1..L12, R1..R12).
+    3. `sleeper-2x2-40`: 2x2 sleeper, 40 seats (5 rows x 4 berths per deck: L1..L10, R1..R10).
+    4. `seater-2x3-60`: 2+3 seater, 60 seats (12 rows x 5 seats, numbered 1..60).
+  - Canonical seat IDs (`lower-L1`, `upper-R2-1`, `seat-14`) and bidirectional alias resolution via `resolveSeatId`.
+  - Canonical bus type registry: `STANDARD_BUS_TYPES`, `LEGACY_BUS_TYPES`, `ALLOWED_BUS_TYPES`, and case-insensitive `isValidBusType` / `normalizeBusType`.
+
+---
+
+## 26. Live Seat Map, Seat Hold & Block, and Move Seat Architecture (Part 6S-2a)
+
+- **SeatHold Data Model (`backend/models/SeatHold.js`)**:
+  - Strict tenant isolation with compound indexes:
+    - `{ userId: 1, tourName: 1, journeyDate: 1, busType: 1, status: 1 }`
+    - `{ userId: 1, status: 1, expiresAt: 1 }`
+  - Core fields: `userId`, `tourName`, `journeyDate`, `busType`, `seatLayoutKey`, `seatIds[]`, `mode` (`"timed"` | `"manual"`), `expiresAt`, `kind` (`"hold"` | `"block"`), `holderName`, `phone`, `note`, `status` (`"active"` | `"released"` | `"converted"`), `releasedAt`, `convertedBookingId`.
+  - **TTL-Free Computed Expiry**: Holds evaluate expiration dynamically in real-time (`status === "active" && (mode === "manual" || expiresAt > new Date())`). Eliminates reliance on MongoDB background TTL worker delays or external cron daemons.
+
+- **Authoritative Departure Seat Map API (`backend/routes/seatHolds.js` & `backend/routes/departures.js`)**:
+  - `GET /api/departures/:key/seat-map`:
+    - Rate limited via `seatMapReadLimiter` (120 req / 15 min).
+    - Unifies canonical bus layout with active bookings (Aadhaar omitted for privacy) and currently effective holds/blocks.
+    - Computes authoritative ledger-backed payment status (`paid`, `partial`, `unpaid`) using `calculateBookingFinancials` from `shared/profitLoss.js`.
+    - Returns real-time departure seat counts (`total`, `available`, `booked`, `held`, `blocked`).
+  - `GET /api/departures/:key/seat-holds`: Returns recent and active holds for the departure.
+
+- **Seat Hold & Block Management (`/api/seat-holds`)**:
+  - `POST /api/seat-holds`: Zod-validated creation with `seatHoldWriteLimiter` (60 req / 15 min). Timed duration clamped between 5 minutes and 30 days (43,200 min); manual mode requires `expiresAt: null`. Validates availability and rejects occupied or held seats with HTTP 409 (`SEAT_CONFLICT` / `SEAT_HELD`).
+  - `PATCH /api/seat-holds/:id/extend`: Extends timed holds up to 30 days.
+  - `PATCH /api/seat-holds/:id/convert-mode`: Seamlessly switches between timed and manual modes.
+  - `POST /api/seat-holds/:id/release`: Releases hold or unblocks seat immediately.
+  - Audit logging: Records non-PII operational events (`seat_hold_created`, `seat_hold_released`, `seat_hold_extended`, `seat_hold_converted`, `seat_block_created`).
+
+- **Server-Side Seat Conflict Protection & Hold Conversion (`backend/routes/bookings.js`)**:
+  - `checkSeatConflicts`: Re-checks booked seats and effective holds immediately before saving. Rejects held/blocked seats with HTTP 409 and code `SEAT_HELD`, returning holder name and expiration timestamp.
+  - **Hold Conversion Gate**: When creating a booking with `holdId`, `checkSeatConflicts` authorizes booking the held seats if the hold belongs to the user and is of kind `"hold"`. On successful save, updates hold to `status: "converted"`, links `convertedBookingId: booking._id`, and logs `seat_hold_converted`.
+  - **Move Seat (Passenger Reassignment)**: `PUT /api/bookings/:id/passengers/:passengerIdentifier` reassigns a passenger's seat to any available seat on the departure without modifying billing or financials. Rejects moves to held/blocked seats with HTTP 409 `SEAT_HELD`.
+  - **Trash Restore Protection**: Restoring a soft-deleted booking re-checks conflicts against both booked seats and effective holds.
+
+- **Concurrency & Residual Race Condition Handling**:
+  - Standalone MongoDB deployments lack multi-document replica-set transactions. To prevent double-booking or double-holding, atomic read-check-write validation runs immediately prior to `.save()` on both holds and bookings. While the residual race window is minimized to single-digit milliseconds, any collision returns a graceful HTTP 409 `SEAT_HELD` / `SEAT_CONFLICT` to the client.
+
+- **Frontend Live Seat Map UI (`src/components/departures/`)**:
+  - `LiveSeatMap.jsx`: High-performance interactive seat map embedded into Journeys (`JourneyManager.jsx`). Features header summary counters, real-time 30-second countdown updates, visibility-aware 60-second auto-refresh, and multi-seat batch selection.
+  - `SeatActionDrawer.jsx`: Slide-out action drawer triggered by tapping/clicking any seat. Offers context-sensitive actions:
+    - *Available*: Book Now, Hold Seat, Block Seat.
+    - *Booked*: Passenger details (name, age, gender, contact, pickup), payment state badge, Move Seat button.
+    - *Held*: Holder info, countdown timer, Extend duration, Convert to Manual/Timed, Release Hold, Book Held Seat.
+    - *Blocked*: Reason note, Unblock Seat.
+  - `HoldModal.jsx`: Modal for creating timed/manual holds and blocks with duration presets (15m, 30m, 1h, 2h, 4h, 24h, 7d) and custom minutes.
+  - `MoveSeatModal.jsx`: Modal for picking a new free seat to reassign a passenger.
+  - Zero page-level horizontal overflow, 44px minimum touch targets, and full keyboard accessibility (`Tab`, `Enter`, `Escape`).
+  - *Automated tests not written, per owner decision.*
+
 
 
 

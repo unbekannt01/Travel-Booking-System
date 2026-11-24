@@ -7,6 +7,10 @@ import User from "../models/User.js"
 import { logAudit } from "../models/AuditLog.js"
 import { decryptAadhaar } from "../utils/aadhaar.js"
 import { getDayBounds } from "../../shared/businessLogic.js"
+import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
+import { getDepartureSeatMap, getDepartureSeatHolds, seatMapReadLimiter } from "./seatHolds.js"
+
+export { parseDepartureKey, getBusCondition }
 
 const router = express.Router()
 
@@ -123,43 +127,16 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
 
     res.setHeader("Cache-Control", "no-store")
 
-    const rawKey = decodeURIComponent(req.params.key)
-    const parts = rawKey.split("___")
-    if (parts.length < 3) {
+    const rawKey = req.params.key
+    const dep = parseDepartureKey(rawKey)
+    if (!dep) {
       return res.status(400).json({
         error: "Invalid departure key format. Expected <tourName>___<dateKey>___<busType>",
       })
     }
 
-    const busType = parts[parts.length - 1]
-    const dateStr = parts[parts.length - 2]
-    const tourName = parts.slice(0, parts.length - 2).join("___")
-
-    const { start, end } = getDayBounds(dateStr)
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return res.status(400).json({
-        error: "Invalid date in departure key format. Expected YYYY-MM-DD",
-      })
-    }
-
-    const is2x1Default =
-      busType === "2x1 Sleeper Luxury (38 berths)" ||
-      busType === "2x1 Sleeper Luxury" ||
-      busType === "2x1" ||
-      !busType
-
-    const busCondition = is2x1Default
-      ? {
-          $or: [
-            { busType: "2x1 Sleeper Luxury (38 berths)" },
-            { busType: "2x1 Sleeper Luxury" },
-            { busType: "2x1" },
-            { busType: { $exists: false } },
-            { busType: null },
-            { busType: "" },
-          ],
-        }
-      : { busType }
+    const { tourName, dateStr, start, end, busType } = dep
+    const busCondition = getBusCondition(busType)
 
     const bookings = await Booking.find({
       userId: req.user.id,
@@ -252,5 +229,11 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
     return res.status(500).json({ error: "Failed to generate departure manifest" })
   }
 })
+
+// GET /api/departures/:key/seat-map
+router.get("/:key/seat-map", seatMapReadLimiter, verifyToken, getDepartureSeatMap)
+
+// GET /api/departures/:key/seat-holds
+router.get("/:key/seat-holds", seatMapReadLimiter, verifyToken, getDepartureSeatHolds)
 
 export default router

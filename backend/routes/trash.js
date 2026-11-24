@@ -222,6 +222,7 @@ router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, re
 
     const lockDate = await getEffectiveLockDate(userId)
     const conflicts = {}
+    let seatConflict = null
 
     if (type === "customer") {
       const activePhone = await Customer.findOne({
@@ -252,7 +253,7 @@ router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, re
       record.payments = bookingPayments
 
       // Check seat conflicts for this booking using authoritative normalizing check
-      const seatConflict = await checkSeatConflicts({
+      seatConflict = await checkSeatConflicts({
         userId,
         tourName: record.tourName,
         journeyDate: record.journeyDate,
@@ -260,7 +261,7 @@ router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, re
         passengers: record.passengers,
         excludeBookingId: record._id,
       })
-      if (seatConflict) {
+      if (seatConflict && seatConflict.conflictingSeats) {
         conflicts.seatConflict = true
       }
     }
@@ -291,8 +292,12 @@ router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, re
         })
       }
       if (restoreEval.reasons.includes("SEAT_CONFLICT")) {
+        const isHeld = seatConflict?.code === "SEAT_HELD"
         return res.status(409).json({
-          message: "The seats on this departure are already booked by another active booking.",
+          message: seatConflict?.message || "The seats on this departure are already booked by another active booking.",
+          code: isHeld ? "SEAT_HELD" : "SEAT_CONFLICT",
+          conflictingSeats: seatConflict?.conflictingSeats || [],
+          holdInfo: seatConflict?.holdInfo,
           reasons: restoreEval.reasons,
         })
       }

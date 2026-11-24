@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react"
-import { Check, Lock, User, Layers, Info } from "lucide-react"
+import { Check, Lock, Clock, Pin, Ban, User, Layers, Info } from "lucide-react"
 import { getSeatLayout, DEFAULT_LAYOUT_KEY, resolveSeatId } from "../../../shared/seatLayouts.js"
 import { cn } from "../../utils/cn"
 
@@ -11,10 +11,11 @@ import { cn } from "../../utils/cn"
  *
  * @param {Object} props
  * @param {Object|string} props.layout - Layout definition object or layout key
- * @param {Object|Map} [props.seatStates] - Map/object of canonicalId -> { status, passengerName, invoiceNo }
+ * @param {Object|Map} [props.seatStates] - Map/object of canonicalId -> { status, passengerName, invoiceNo, ... }
  * @param {Function} [props.onSeatClick] - (seatId, seat) => void
  * @param {string[]} [props.selectedIds=[]] - Array of currently selected seat IDs
  * @param {boolean} [props.readOnly=false] - Whether clicking seats is disabled
+ * @param {boolean} [props.interactiveAll=false] - If true, booked, held and blocked seats are also clickable
  * @param {'sm'|'md'|'lg'} [props.size='md'] - Visual density sizing
  * @param {string} [props.className] - Container class name
  */
@@ -24,6 +25,7 @@ export default function SeatMap({
   onSeatClick,
   selectedIds = [],
   readOnly = false,
+  interactiveAll = false,
   size = "md",
   className,
 }) {
@@ -87,19 +89,37 @@ export default function SeatMap({
     }
 
     const state = statesMap.get(seat.id)
-    const isBooked = state?.status === "booked"
+    const status = state?.status || "available"
+    const isBooked = status === "booked"
+    const isHeld = status === "held"
+    const isBlocked = status === "blocked"
     const isSelected = selectedSet.has(seat.id)
-    const isAvailable = !isBooked && !isSelected
+    const isAvailable = status === "available" && !isSelected
 
     let statusText = "available"
     if (isSelected) statusText = "selected"
     else if (isBooked) statusText = "booked"
+    else if (isHeld) statusText = "held"
+    else if (isBlocked) statusText = "blocked"
 
-    const accessibleName = `Seat ${seat.number}, ${seat.name}, ${statusText}${
-      isBooked && state?.passengerName ? `, booked by ${state.passengerName}` : ""
-    }`
+    let accessibleName = `Seat ${seat.number}, ${seat.name}, ${statusText}`
+    if (isBooked && state?.passengerName) {
+      accessibleName += `, booked by ${state.passengerName}, ${state.gender || ""}, payment ${state.paymentState || ""}`
+    } else if (isHeld) {
+      accessibleName += `, held${state?.holderName ? ` for ${state.holderName}` : ""}${
+        state?.remainingText ? ` (${state.remainingText})` : ""
+      }`
+    } else if (isBlocked) {
+      accessibleName += `, blocked${state?.note ? `: ${state.note}` : ""}`
+    }
 
-    const isClickable = !readOnly && !isBooked
+    const isClickable = interactiveAll ? !readOnly : !readOnly && !isBooked && !isHeld && !isBlocked
+
+    const groupTag = state?.bookingRef
+      ? state.bookingRef.split("-").slice(-1)[0]
+      : state?.groupId
+        ? state.groupId.slice(-3).toUpperCase()
+        : null
 
     return (
       <button
@@ -110,11 +130,11 @@ export default function SeatMap({
         aria-pressed={isSelected}
         onClick={() => {
           if (isClickable && onSeatClick) {
-            onSeatClick(seat.id, seat)
+            onSeatClick(seat.id, { ...seat, ...state })
           }
         }}
         className={cn(
-          "relative flex flex-col items-center justify-between p-1.5 rounded-[var(--yh-radius-md)] border text-left transition-all",
+          "relative flex flex-col items-center justify-between p-1 rounded-[var(--yh-radius-md)] border text-left transition-all",
           "min-w-[48px] min-h-[48px] sm:min-w-[54px] sm:min-h-[52px]",
           "focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1",
           // Available state
@@ -127,52 +147,142 @@ export default function SeatMap({
           ],
           // Booked state
           isBooked && [
-            "bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed opacity-90",
-            "dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-400",
+            "bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800/80 dark:border-slate-700 dark:text-slate-200",
+            interactiveAll ? "cursor-pointer hover:border-slate-400 hover:shadow-xs" : "cursor-not-allowed opacity-90",
+          ],
+          // Held state
+          isHeld && [
+            "bg-amber-500/15 border-amber-400 text-amber-900 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-200",
+            interactiveAll ? "cursor-pointer hover:border-amber-500 hover:shadow-xs" : "cursor-not-allowed opacity-90",
+          ],
+          // Blocked state
+          isBlocked && [
+            "bg-rose-500/15 border-rose-400 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200",
+            interactiveAll ? "cursor-pointer hover:border-rose-500 hover:shadow-xs" : "cursor-not-allowed opacity-90",
           ],
           // Sizing adjustments
-          size === "sm" && "min-w-[44px] min-h-[44px] p-1 text-[10px]",
+          size === "sm" && "min-w-[44px] min-h-[44px] p-0.5 text-[10px]",
         )}
       >
-        {/* Top bar: Seat number & Status Icon */}
-        <div className="flex items-center justify-between w-full gap-1">
+        {/* Top bar: Seat number & Indicators */}
+        <div className="flex items-center justify-between w-full gap-0.5 px-0.5">
           <span
             className={cn(
               "font-bold tabular-nums text-xs leading-none",
-              isSelected ? "text-brand-fg" : isBooked ? "text-slate-600 dark:text-slate-400" : "text-ink",
+              isSelected
+                ? "text-brand-fg"
+                : isBooked
+                  ? "text-ink"
+                  : isHeld
+                    ? "text-amber-800 dark:text-amber-300"
+                    : isBlocked
+                      ? "text-rose-800 dark:text-rose-300"
+                      : "text-ink",
             )}
           >
             {seat.number}
           </span>
 
-          <span className="shrink-0" aria-hidden="true">
+          <div className="flex items-center gap-0.5 shrink-0" aria-hidden="true">
             {isSelected ? (
               <Check size={12} className="text-brand-fg stroke-[3]" />
             ) : isBooked ? (
-              <Lock size={11} className="text-slate-400 dark:text-slate-500" />
+              <div className="flex items-center gap-0.5">
+                {/* Payment Mark */}
+                <span
+                  className={cn(
+                    "text-[10px] font-black leading-none",
+                    state.paymentState === "paid" && "text-emerald-600 dark:text-emerald-400",
+                    state.paymentState === "partial" && "text-amber-600 dark:text-amber-400",
+                    state.paymentState === "unpaid" && "text-rose-600 dark:text-rose-400",
+                  )}
+                  title={`Payment: ${state.paymentState || "unpaid"}`}
+                >
+                  {state.paymentState === "paid" ? "✓" : state.paymentState === "partial" ? "½" : "✗"}
+                </span>
+                {/* Gender Mark */}
+                {state.gender && (
+                  <span
+                    className={cn(
+                      "px-0.5 rounded text-[8px] font-bold leading-none",
+                      state.gender.toLowerCase() === "female"
+                        ? "bg-purple-200 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300"
+                        : state.gender.toLowerCase() === "male"
+                          ? "bg-blue-200 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300"
+                          : "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300",
+                    )}
+                    title={`Gender: ${state.gender}`}
+                  >
+                    {state.gender.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+            ) : isHeld ? (
+              <span className="text-amber-600 dark:text-amber-400" title="Held Seat">
+                {state.mode === "manual" ? <Pin size={10} /> : <Clock size={10} />}
+              </span>
+            ) : isBlocked ? (
+              <span className="text-rose-600 dark:text-rose-400" title="Blocked Seat">
+                <Lock size={10} />
+              </span>
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
             )}
-          </span>
+          </div>
         </div>
 
-        {/* Center / Bottom: Cabin / Berth display */}
-        <div className="w-full text-center mt-1">
+        {/* Center / Bottom: Cabin / Berth display & contextual tags */}
+        <div className="w-full text-center mt-0.5 px-0.5">
           <span
             className={cn(
               "block text-[10px] font-semibold truncate leading-tight",
               isSelected
                 ? "text-brand-fg"
                 : isBooked
-                  ? "text-slate-600 dark:text-slate-400"
-                  : "text-ink-secondary",
+                  ? "text-ink"
+                  : isHeld
+                    ? "text-amber-900 dark:text-amber-200"
+                    : isBlocked
+                      ? "text-rose-900 dark:text-rose-200"
+                      : "text-ink-secondary",
             )}
           >
             {isSleeper ? (seat.deck === "lower" ? `${seat.cabin} L` : `${seat.cabin} U`) : seat.name}
           </span>
-          {isBooked && state?.passengerName && (
-            <span className="block text-[8px] truncate text-slate-500 max-w-[50px] mx-auto mt-0.5" title={state.passengerName}>
-              {state.passengerName.split(" ")[0]}
+
+          {isBooked && (
+            <div className="flex items-center justify-center gap-0.5 mt-0.5">
+              {groupTag && (
+                <span
+                  className="px-1 py-0.2 rounded text-[7px] font-mono bg-slate-200/90 dark:bg-slate-700/90 text-slate-700 dark:text-slate-300 shrink-0"
+                  title={`Group Ref: ${state.bookingRef || state.groupId}`}
+                >
+                  #{groupTag}
+                </span>
+              )}
+              {state.passengerName && (
+                <span
+                  className="block text-[8px] truncate font-medium text-ink-muted max-w-[42px]"
+                  title={state.passengerName}
+                >
+                  {state.passengerName.split(" ")[0]}
+                </span>
+              )}
+            </div>
+          )}
+
+          {isHeld && (
+            <span
+              className="block text-[8px] font-bold text-amber-700 dark:text-amber-300 truncate mt-0.5"
+              title={state.holderName || "Held"}
+            >
+              {state.remainingText || (state.mode === "manual" ? "Manual" : "Held")}
+            </span>
+          )}
+
+          {isBlocked && (
+            <span className="block text-[8px] font-bold text-rose-700 dark:text-rose-300 truncate mt-0.5">
+              Blocked
             </span>
           )}
         </div>

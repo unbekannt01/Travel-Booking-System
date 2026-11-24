@@ -53,6 +53,7 @@ import {
 } from "./ui"
 import { cn } from "../utils/cn"
 import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
+import LiveSeatMap from "./departures/LiveSeatMap"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
@@ -61,7 +62,14 @@ const generateAllSeats = (busType) => {
   return layout ? layout.seats.map((s) => s.id) : []
 }
 
-export default function JourneyManager({ bookings = [], onUpdateBooking, user, expenses: initialExpenses = [] }) {
+export default function JourneyManager({
+  bookings = [],
+  onUpdateBooking,
+  user,
+  expenses: initialExpenses = [],
+  onNavigate,
+  onEditBooking,
+}) {
   const { toast } = useToast()
   const [boardingPassTarget, setBoardingPassTarget] = useState(null)
   const todayStr = useMemo(() => toDateInputValue(new Date()), [])
@@ -513,6 +521,27 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
             <Users size={15} />
             Boarding Manifest
           </button>
+          {selectedDepartureKey && (
+            <button
+              id="journey-tab-seatmap"
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "seatmap"}
+              aria-controls={viewMode === "seatmap" ? "journey-panel-seatmap" : undefined}
+              tabIndex={viewMode === "seatmap" ? 0 : -1}
+              onClick={() => setViewMode("seatmap")}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-10",
+                viewMode === "seatmap"
+                  ? "bg-surface text-brand font-bold shadow-xs"
+                  : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
+                FOCUS_RING_CLASS,
+              )}
+            >
+              <Layout size={15} />
+              Live Seat Map
+            </button>
+          )}
         </div>
 
         {/* Print / Export Action Menu */}
@@ -798,7 +827,20 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
                   </div>
 
                   {/* Card Actions */}
-                  <div className="pt-4 mt-4 border-t border-border-subtle flex items-center gap-2">
+                  <div className="pt-4 mt-4 border-t border-border-subtle flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedDepartureKey(dep.key)
+                        setViewMode("seatmap")
+                      }}
+                      title="Live Seat Map & Berth Holds"
+                    >
+                      <Bus size={13} className="mr-1 text-brand" />
+                      <span>Seat Map</span>
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -1284,6 +1326,34 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
           )}
         </div>
         </PanelErrorBoundary>
+      )}
+
+      {/* ────────────────────────────────────────────────────────── */}
+      {/* MODE 3: LIVE COACH SEAT MAP (Holds, Blocks, Move Seat)   */}
+      {/* ────────────────────────────────────────────────────────── */}
+      {viewMode === "seatmap" && selectedDepartureKey && (
+        <LiveSeatMap
+          departureKey={selectedDepartureKey}
+          onBack={() => setViewMode("departures")}
+          onBookSeat={({ tourName, journeyDate, busType, seatId, holdId, holderName, phone }) => {
+            if (onNavigate) {
+              onNavigate("form")
+            }
+            if (onEditBooking) {
+              onEditBooking({
+                isNewFromSeatMap: true,
+                tourName,
+                journeyDate,
+                busType,
+                contactName: holderName || "",
+                contactPhone: phone || "",
+                passengers: [{ name: holderName || "", contact: phone || "", seatId: seatId || "" }],
+                holdId,
+              })
+            }
+          }}
+          user={user}
+        />
       )}
 
       {/* Accessible Seat Swap Modal */}

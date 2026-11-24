@@ -679,7 +679,13 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             )}
 
             {activeTab === "journey" && (
-              <JourneyManager bookings={bookings} onUpdateBooking={handleUpdateBookingState} user={user} />
+              <JourneyManager
+                bookings={bookings}
+                onUpdateBooking={handleUpdateBookingState}
+                user={user}
+                onNavigate={handleNavigate}
+                onEditBooking={handleEditBookingByIdOrObj}
+              />
             )}
 
             {activeTab === "analytics" && <TourAnalytics bookings={bookings} tours={tours} user={user} />}
