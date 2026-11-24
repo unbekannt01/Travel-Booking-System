@@ -486,6 +486,11 @@ export function renderManifestHtml({
       .no-print {
         display: none !important;
       }
+      .chk-box {
+        border-color: #000000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
     }
     .manifest-container {
       width: 100%;
@@ -586,19 +591,18 @@ export function renderManifestHtml({
     }
     .chk-box {
       display: inline-block;
-      width: 13px;
-      height: 13px;
-      border: 1.5px solid #475569;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #334155;
       border-radius: 2px;
       background: #ffffff;
-      text-align: center;
-      line-height: 11px;
-      font-size: 10px;
-      font-weight: bold;
-      color: #16a34a;
+      vertical-align: middle;
+      box-sizing: border-box;
     }
-    .chk-box.checked::before {
-      content: "✓";
+    .write-in-cell {
+      display: inline-block;
+      min-width: 48px;
+      min-height: 14px;
     }
     .footer-sign-block {
       margin-top: 20px;
@@ -708,9 +712,9 @@ export function renderManifestHtml({
               const val = row[col.id]
               let cellContent = escapeHtml(String(val !== undefined && val !== null ? val : "—"))
               if (col.id === "boarded") {
-                cellContent = `<span class="chk-box${val ? " checked" : ""}"></span>`
+                cellContent = `<span class="chk-box"></span>`
               } else if (col.id === "remarks") {
-                cellContent = escapeHtml(val || "")
+                cellContent = `<span class="write-in-cell"></span>`
               }
               return `<td style="text-align: ${escapeHtml(col.align)};">${cellContent}</td>`
             })
