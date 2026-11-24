@@ -142,17 +142,24 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
       })
     }
 
-    const busCondition =
-      busType === "2x1 Sleeper Luxury"
-        ? {
-            $or: [
-              { busType: "2x1 Sleeper Luxury" },
-              { busType: { $exists: false } },
-              { busType: null },
-              { busType: "" },
-            ],
-          }
-        : { busType }
+    const is2x1Default =
+      busType === "2x1 Sleeper Luxury (38 berths)" ||
+      busType === "2x1 Sleeper Luxury" ||
+      busType === "2x1" ||
+      !busType
+
+    const busCondition = is2x1Default
+      ? {
+          $or: [
+            { busType: "2x1 Sleeper Luxury (38 berths)" },
+            { busType: "2x1 Sleeper Luxury" },
+            { busType: "2x1" },
+            { busType: { $exists: false } },
+            { busType: null },
+            { busType: "" },
+          ],
+        }
+      : { busType }
 
     const bookings = await Booking.find({
       userId: req.user.id,

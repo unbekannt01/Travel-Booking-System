@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { ALLOWED_BUS_TYPES, STANDARD_BUS_TYPES } from "../../shared/seatLayouts.js"
 
 const tourSchema = new mongoose.Schema(
   {
@@ -13,7 +14,10 @@ const tourSchema = new mongoose.Schema(
     busType: {
       type: String,
       required: true,
-      enum: ["2x1 Sleeper Luxury", "2x2 Sleeper Luxury"],
+      enum: {
+        values: [...ALLOWED_BUS_TYPES],
+        message: `Invalid bus type '{VALUE}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+      },
     },
     journeyDate: {
       type: String,

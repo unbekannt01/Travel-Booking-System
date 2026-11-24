@@ -24,13 +24,7 @@ import {
 } from "./ui/index"
 import { formatINR } from "../utils/formatters"
 import { cn } from "../utils/cn"
-
-const BUS_TYPE_OPTIONS = [
-  "2x1 Sleeper Luxury (38 berths)",
-  "2x2 Sleeper Luxury (48 berths)",
-  "2x2 Sleeper Standard (40 berths)",
-  "2x3 Seater Express (60 seats)",
-]
+import { STANDARD_BUS_TYPES } from "../../shared/seatLayouts"
 
 /**
  * Derives the invoice sequence prefix format preview from destination name and date.
@@ -49,7 +43,7 @@ const getInvoicePreview = (name, date) => {
 const DEFAULT_FORM_STATE = {
   name: "",
   duration: "",
-  busType: BUS_TYPE_OPTIONS[0],
+  busType: STANDARD_BUS_TYPES[0],
   journeyDate: "",
   pricingType: "berth",
   fixedPrice: "",
@@ -88,7 +82,7 @@ export default function TourInventory({ tours = [], onAdd, onDelete }) {
     setFormData({
       name: tour.name || "",
       duration: tour.duration || "",
-      busType: tour.busType || BUS_TYPE_OPTIONS[0],
+      busType: tour.busType || STANDARD_BUS_TYPES[0],
       journeyDate: tour.journeyDate || "",
       pricingType: tour.pricingType || (tour.upperPrice ? "berth" : "fixed"),
       fixedPrice: tour.fixedPrice !== undefined && tour.fixedPrice !== null ? String(tour.fixedPrice) : "",
@@ -363,11 +357,14 @@ export default function TourInventory({ tours = [], onAdd, onDelete }) {
                 value={formData.busType}
                 onChange={(e) => setFormData({ ...formData, busType: e.target.value })}
               >
-                {BUS_TYPE_OPTIONS.map((type) => (
+                {STANDARD_BUS_TYPES.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
                 ))}
+                {formData.busType && !STANDARD_BUS_TYPES.includes(formData.busType) && (
+                  <option value={formData.busType}>{formData.busType}</option>
+                )}
               </Select>
             </Field>
           </div>

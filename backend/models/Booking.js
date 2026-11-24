@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { isValidBusType, STANDARD_BUS_TYPES } from "../../shared/seatLayouts.js"
 
 const passengerSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -27,7 +28,16 @@ const bookingSchema = new mongoose.Schema(
     tourName: { type: String, required: true },
     journeyDate: { type: Date, required: true },
     duration: { type: String },
-    busType: { type: String },
+    busType: {
+      type: String,
+      validate: {
+        validator: function (v) {
+          if (v === null || v === undefined || v === "") return true
+          return isValidBusType(v)
+        },
+        message: (props) => `Invalid bus type '${props.value}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+      },
+    },
     seatLayoutKey: { type: String, default: null },
     contactName: { type: String, required: true },
     contactPhone: { type: String, required: true },

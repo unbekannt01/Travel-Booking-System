@@ -22,7 +22,7 @@ import {
   calculatePricing,
 } from "../../shared/businessLogic.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
-import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId, isValidBusType, STANDARD_BUS_TYPES, normalizeBusType } from "../../shared/seatLayouts.js"
 import { assertBooksOpen, BooksLockedError } from "../utils/booksLock.js"
 import recordHistory from "../utils/recordHistory.js"
 
@@ -241,18 +241,23 @@ export const checkSeatConflicts = async ({
   const { start, end } = getDayBounds(journeyDate)
 
   const normalizedBus = (busType || "").trim()
-  const busCondition =
-    !normalizedBus || normalizedBus === "2x1 Sleeper Luxury" || normalizedBus === "2x1"
-      ? {
-          $or: [
-            { busType: "2x1 Sleeper Luxury" },
-            { busType: "2x1" },
-            { busType: { $exists: false } },
-            { busType: null },
-            { busType: "" },
-          ],
-        }
-      : { busType: normalizedBus }
+  const is2x1Default =
+    !normalizedBus ||
+    normalizedBus === "2x1 Sleeper Luxury (38 berths)" ||
+    normalizedBus === "2x1 Sleeper Luxury" ||
+    normalizedBus === "2x1"
+  const busCondition = is2x1Default
+    ? {
+        $or: [
+          { busType: "2x1 Sleeper Luxury (38 berths)" },
+          { busType: "2x1 Sleeper Luxury" },
+          { busType: "2x1" },
+          { busType: { $exists: false } },
+          { busType: null },
+          { busType: "" },
+        ],
+      }
+    : { busType: normalizedBus }
 
   const query = {
     userId,
@@ -428,6 +433,13 @@ router.post("/", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "Contact name, phone, tour name, and journey date are required." })
     }
 
+    if (busType && !isValidBusType(busType)) {
+      return res.status(400).json({
+        message: `Invalid bus type '${busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+      })
+    }
+    const canonicalBusType = busType ? normalizeBusType(busType) : ""
+
     const bookingDate = req.body.date || new Date()
     const checkAdvance = Math.round(Number(advanceReceived || 0) * 100) / 100
     if (checkAdvance > 0) {
@@ -555,8 +567,8 @@ router.post("/", verifyToken, async (req, res) => {
       tourName,
       journeyDate: normalizedJourneyDate,
       duration: duration || "",
-      busType: busType || "",
-      seatLayoutKey: layoutKeyForBusType(busType || ""),
+      busType: canonicalBusType || "",
+      seatLayoutKey: layoutKeyForBusType(canonicalBusType || ""),
       contactName,
       contactPhone,
       contactEmail: contactEmail || "",
@@ -771,7 +783,14 @@ router.put("/:id", verifyToken, async (req, res) => {
     }
 
     if (req.body.busType !== undefined) {
-      booking.seatLayoutKey = layoutKeyForBusType(req.body.busType)
+      if (req.body.busType && !isValidBusType(req.body.busType)) {
+        return res.status(400).json({
+          message: `Invalid bus type '${req.body.busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+        })
+      }
+      const canonicalBus = req.body.busType ? normalizeBusType(req.body.busType) : ""
+      booking.seatLayoutKey = layoutKeyForBusType(canonicalBus)
+      booking.busType = canonicalBus
     }
 
     // Recompute server pricing

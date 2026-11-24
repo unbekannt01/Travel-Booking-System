@@ -664,6 +664,16 @@ npm run ui:smoke -- --quick
 - [ ] **Legacy Seat ID Mapping**:
   - Verify existing bookings with legacy IDs (e.g. `lower-L1-1` or `lower-L1-2`) resolve to canonical layout seats without throwing errors or requiring destructive DB migrations.
 
+## 3.20 Manual Verification Checklist — Part 6S-1 Fix (Bus Type Enum Validation & Unification)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-1 Fix ("automated tests not run, per owner decision"). All verifications are conducted manually using the checklist below.
+
+- [ ] **Destination / Tour Creation with All 4 Bus Types**:
+  - In Destinations (`#tours`) screen, create a destination with each of the 4 bus types ("2x1 Sleeper Luxury (38 berths)", "2x2 Sleeper Luxury (48 berths)", "2x2 Sleeper Standard (40 berths)", "2x3 Seater Express (60 seats)"); verify each creates and saves successfully without Mongoose enum validation errors.
+  - Attempt to submit an invalid bus type (e.g. via direct API write); verify server rejects with HTTP 400 and clear message listing all 4 allowed standard types.
+  - Verify existing destinations and bookings with legacy bus types ("2x1 Sleeper Luxury", "2x2 Sleeper Luxury", "2x1", etc.) load and display without errors.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap

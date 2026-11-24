@@ -580,6 +580,62 @@ export const SEAT_LAYOUTS = Object.freeze({
 
 export const DEFAULT_LAYOUT_KEY = "sleeper-2x1-38"
 
+export const STANDARD_BUS_TYPES = Object.freeze([
+  "2x1 Sleeper Luxury (38 berths)",
+  "2x2 Sleeper Luxury (48 berths)",
+  "2x2 Sleeper Standard (40 berths)",
+  "2x3 Seater Express (60 seats)",
+])
+
+export const LEGACY_BUS_TYPES = Object.freeze([
+  "2x1 Sleeper Luxury",
+  "2x2 Sleeper Luxury",
+  "2x1 Sleeper Luxury (36 berths)",
+  "2x2 Sleeper Luxury (40 berths)",
+  "2x1",
+  "2x2",
+  "2x1 Sleeper",
+  "2x2 Sleeper",
+  "2x2 Semi-Sleeper",
+  "2x1 Luxury Sleeper",
+  "2x2 Luxury Sleeper",
+  "2x1 Luxury AC Sleeper",
+  "AC Sleeper 2+1",
+  "2+3 Seater (60 Seats)",
+  "2+3 Seater",
+  "2x3 Seater Express",
+  "BharatBenz 2+1 AC Sleeper Coach (GJ-03-BX-9988)",
+])
+
+export const ALLOWED_BUS_TYPES = Object.freeze([
+  ...STANDARD_BUS_TYPES,
+  ...LEGACY_BUS_TYPES,
+])
+
+/**
+ * Validates whether a busType string is recognized (standard or legacy).
+ * @param {string|null|undefined} busType
+ * @returns {boolean}
+ */
+export function isValidBusType(busType) {
+  if (!busType || typeof busType !== "string") return false
+  const trimmed = busType.trim()
+  if (!trimmed) return false
+  return ALLOWED_BUS_TYPES.some((allowed) => allowed.toLowerCase() === trimmed.toLowerCase())
+}
+
+/**
+ * Normalizes a busType to its exact canonical string in ALLOWED_BUS_TYPES if matched.
+ * @param {string|null|undefined} busType
+ * @returns {string|null}
+ */
+export function normalizeBusType(busType) {
+  if (!busType || typeof busType !== "string") return null
+  const trimmed = busType.trim()
+  const matched = ALLOWED_BUS_TYPES.find((allowed) => allowed.toLowerCase() === trimmed.toLowerCase())
+  return matched || trimmed
+}
+
 /**
  * Returns layout definition for a given key.
  * @param {string} key

@@ -1,6 +1,7 @@
 import express from "express"
 import Tour from "../models/Tour.js"
 import verifyToken from "../middleware/auth.js"
+import { isValidBusType, STANDARD_BUS_TYPES, normalizeBusType } from "../../shared/seatLayouts.js"
 
 const router = express.Router()
 
@@ -23,10 +24,18 @@ router.post("/", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "Name, duration, and bus type are required." })
     }
 
+    if (!isValidBusType(busType)) {
+      return res.status(400).json({
+        message: `Invalid bus type '${busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+      })
+    }
+
+    const canonicalBusType = normalizeBusType(busType)
+
     const tour = new Tour({
       name,
       duration,
-      busType,
+      busType: canonicalBusType,
       journeyDate: journeyDate || "",
       pricingType: pricingType || "berth",
       fixedPrice: Math.max(0, Number(fixedPrice) || 0),
@@ -52,6 +61,15 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     if (tour.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to update this tour" })
+    }
+
+    if (req.body.busType !== undefined) {
+      if (!isValidBusType(req.body.busType)) {
+        return res.status(400).json({
+          message: `Invalid bus type '${req.body.busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+        })
+      }
+      req.body.busType = normalizeBusType(req.body.busType)
     }
 
     // Whitelist allowed fields

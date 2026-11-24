@@ -51,7 +51,7 @@ import {
   FOCUS_RING_CLASS,
 } from "./ui"
 import SeatMap from "./seats/SeatMap"
-import { layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts"
+import { layoutKeyForBusType, resolveSeatId, STANDARD_BUS_TYPES } from "../../shared/seatLayouts"
 
 /* ── Accessible Token-Based Gender Selector ── */
 function GenderSelector({ value, onChange, ariaLabel }) {
@@ -912,19 +912,14 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         }}
                       >
                         <option value="">Select bus type...</option>
-                        <option value="2x1 Sleeper Luxury (38 berths)">2x1 Sleeper Luxury (38 berths)</option>
-                        <option value="2x2 Sleeper Luxury (48 berths)">2x2 Sleeper Luxury (48 berths)</option>
-                        <option value="2x2 Sleeper Standard (40 berths)">2x2 Sleeper Standard (40 berths)</option>
-                        <option value="2x3 Seater Express (60 seats)">2x3 Seater Express (60 seats)</option>
-                        {formData.busType &&
-                          ![
-                            "2x1 Sleeper Luxury (38 berths)",
-                            "2x2 Sleeper Luxury (48 berths)",
-                            "2x2 Sleeper Standard (40 berths)",
-                            "2x3 Seater Express (60 seats)",
-                          ].includes(formData.busType) && (
-                            <option value={formData.busType}>{formData.busType}</option>
-                          )}
+                        {STANDARD_BUS_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                        {formData.busType && !STANDARD_BUS_TYPES.includes(formData.busType) && (
+                          <option value={formData.busType}>{formData.busType}</option>
+                        )}
                       </Select>
                     )}
                   </Field>

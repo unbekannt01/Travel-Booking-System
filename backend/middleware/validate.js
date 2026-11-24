@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { isValidBusType, STANDARD_BUS_TYPES } from "../../shared/seatLayouts.js"
 
 export const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid ObjectId")
 
@@ -32,7 +33,12 @@ export const createBookingSchema = z.object({
   customerEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   customerCity: z.string().max(100).optional(),
   customerAadhar: z.string().max(20).optional(),
-  busType: z.string().optional(),
+  busType: z
+    .string()
+    .refine((val) => !val || isValidBusType(val), {
+      message: `Invalid bus type. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+    })
+    .optional(),
   passengers: z.array(passengerSchema).min(1, "At least one passenger is required"),
   discount: z.number().min(0).optional(),
   advanceReceived: z.number().min(0).optional(),
@@ -52,7 +58,12 @@ export const createTourSchema = z.object({
   source: z.string().max(100).optional(),
   destination: z.string().max(100).optional(),
   durationDays: z.number().int().min(1).optional(),
-  busType: z.string().optional(),
+  busType: z
+    .string()
+    .refine((val) => !val || isValidBusType(val), {
+      message: `Invalid bus type. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
+    })
+    .optional(),
   capacity: z.number().int().min(1).max(100).optional(),
   pricingType: z.enum(["fixed", "berth"]).optional(),
   fixedPrice: z.number().min(0).optional(),
