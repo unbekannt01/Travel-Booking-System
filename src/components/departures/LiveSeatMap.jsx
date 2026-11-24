@@ -22,6 +22,7 @@ import SeatActionDrawer from "./SeatActionDrawer"
 import HoldModal from "./HoldModal"
 import MoveSeatModal from "./MoveSeatModal"
 import SeatSettingsModal from "./SeatSettingsModal"
+import ShareSeatModal from "../seats/ShareSeatModal"
 import { useToast } from "../common/ToastContext"
 import { formatDisplayDate } from "../../utils/date"
 import { formatSeatLabel } from "../../utils/formatters"
@@ -45,6 +46,7 @@ export default function LiveSeatMap({
   const [holdModalConfig, setHoldModalConfig] = useState(null) // { selectedSeats: [], kind: 'hold' }
   const [moveModalConfig, setMoveModalConfig] = useState(null) // { bookingId, passenger }
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const [shareModalConfig, setShareModalConfig] = useState(null)
 
   // Multi-select batch mode
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
@@ -75,6 +77,40 @@ export default function LiveSeatMap({
       fetchSeatMap(true)
     } catch (err) {
       toast.error(err.message)
+    }
+  }
+
+  const handleOpenShareModal = async (seat) => {
+    if (!seat?.bookingId) return
+    try {
+      const token = getAuthToken()
+      const res = await fetch(`/api/bookings/${seat.bookingId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        throw new Error("Failed to load booking details")
+      }
+      const data = await res.json()
+      const booking = data.booking || data
+      setShareModalConfig({
+        booking,
+        initialSeatId: seat.seatId,
+        departureInfo: {
+          tourName: mapData?.tourName,
+          journeyDate: mapData?.journeyDate,
+          busType: mapData?.busType,
+          layoutKey: mapData?.layoutKey,
+          companyName: mapData?.companyName,
+          companyPhone: mapData?.companyPhone,
+        },
+        occupiedSeatsMap: mapData?.seats || {},
+        operatorInfo: {
+          companyName: mapData?.companyName,
+          phone: mapData?.companyPhone,
+        },
+      })
+    } catch (err) {
+      toast.error(err.message || "Failed to load booking details for sharing")
     }
   }
 
@@ -576,6 +612,7 @@ export default function LiveSeatMap({
           onOpenMoveModal={({ bookingId, passenger }) =>
             setMoveModalConfig({ bookingId, passenger })
           }
+          onOpenShareModal={handleOpenShareModal}
           onBookSeat={handleBookFromDrawer}
           onRefresh={() => fetchSeatMap(true)}
         />
@@ -613,6 +650,19 @@ export default function LiveSeatMap({
             passenger={moveModalConfig.passenger}
             availableSeats={availableSeatsList}
             onSuccess={() => fetchSeatMap(true)}
+          />
+        )}
+
+        {/* ── WhatsApp Seat Share Modal ── */}
+        {shareModalConfig && (
+          <ShareSeatModal
+            isOpen={Boolean(shareModalConfig)}
+            onClose={() => setShareModalConfig(null)}
+            booking={shareModalConfig.booking}
+            departureInfo={shareModalConfig.departureInfo}
+            initialSeatId={shareModalConfig.initialSeatId}
+            occupiedSeatsMap={shareModalConfig.occupiedSeatsMap}
+            operatorInfo={shareModalConfig.operatorInfo}
           />
         )}
       </div>

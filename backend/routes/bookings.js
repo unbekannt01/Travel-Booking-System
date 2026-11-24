@@ -568,6 +568,9 @@ router.post("/", verifyToken, async (req, res) => {
       gstRate = 0,
       isTaxInclusive = false,
       invoiceNo: clientInvoiceNo,
+      pickupPoint,
+      pickupTime,
+      dropPoint,
     } = req.body
 
     // Basic required validations
@@ -719,6 +722,9 @@ router.post("/", verifyToken, async (req, res) => {
       contactName,
       contactPhone,
       contactEmail: contactEmail || "",
+      pickupPoint: pickupPoint || "",
+      pickupTime: pickupTime || "",
+      dropPoint: dropPoint || "",
       paymentMode: paymentMode || "Cash",
       totalAmount: finalServerTotal,
       advanceReceived: numAdvance,
@@ -732,6 +738,8 @@ router.post("/", verifyToken, async (req, res) => {
       payments: initialPayments,
       passengers: passengers.map((p) => {
         const paxObj = { ...p }
+        paxObj.pickupPoint = paxObj.pickupPoint || pickupPoint || ""
+        paxObj.pickupTime = paxObj.pickupTime || pickupTime || ""
         if (paxObj.aadhar) {
           paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
           paxObj.aadharEncrypted = true
@@ -1014,6 +1022,9 @@ router.put("/:id", verifyToken, async (req, res) => {
       "contactName",
       "contactPhone",
       "contactEmail",
+      "pickupPoint",
+      "pickupTime",
+      "dropPoint",
       "tourName",
       "duration",
       "busType",
@@ -1089,6 +1100,8 @@ router.put("/:id", verifyToken, async (req, res) => {
           paxObj.aadhar = ""
           paxObj.aadharEncrypted = false
         }
+        paxObj.pickupPoint = p.pickupPoint !== undefined ? p.pickupPoint : (matched && matched.pickupPoint) || ""
+        paxObj.pickupTime = p.pickupTime !== undefined ? p.pickupTime : (matched && matched.pickupTime) || ""
         delete paxObj.aadhaar
         delete paxObj.aadhaarEncrypted
 

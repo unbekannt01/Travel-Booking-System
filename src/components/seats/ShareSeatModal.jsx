@@ -1,0 +1,607 @@
+import { useState, useEffect, useMemo, useRef } from "react"
+import {
+  Share2,
+  Download,
+  Copy,
+  Check,
+  ExternalLink,
+  MessageSquare,
+  AlertCircle,
+  X,
+  RotateCcw,
+  Info,
+  Phone,
+  User,
+} from "lucide-react"
+import {
+  generateSeatImageBlob,
+  downloadSeatImage,
+  formatWhatsAppSeatMessage,
+  normalizeIndianPhone,
+} from "../../utils/seatImage"
+import { resolveSeatId } from "../../../shared/seatLayouts.js"
+import { formatSeatLabel } from "../../utils/seatFormatting"
+import { useToast } from "../common/ToastContext"
+import { Button, Badge, FOCUS_RING_CLASS } from "../ui"
+
+/**
+ * ShareSeatModal (Part 6S-3a)
+ *
+ * Manual WhatsApp seat card and text sharing dialog for bus operators.
+ * - Live preview of Canvas-drawn 1080px seat image matching coach layout
+ * - Multi-passenger selection (default all booking passengers)
+ * - Language selection (en, gu, hi)
+ * - Opt-in balance due toggle (default OFF per privacy rule)
+ * - Editable message template with localStorage persistence
+ * - Web Share API / PNG download / Clipboard copy / wa.me chat launcher
+ * - Accessible dialog with keyboard trapping and phone validation
+ */
+export default function ShareSeatModal({
+  isOpen,
+  onClose,
+  booking = {},
+  departureInfo = {},
+  initialSeatId = null,
+  occupiedSeatsMap = {},
+  operatorInfo = {},
+}) {
+  const { toast } = useToast()
+  const modalRef = useRef(null)
+
+  // Selected passengers for this share card
+  const [selectedPaxKeys, setSelectedPaxKeys] = useState(new Set())
+  const [lang, setLang] = useState("en")
+  const [showBalance, setShowBalance] = useState(false)
+  const [imageBlob, setImageBlob] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const [customTemplate, setCustomTemplate] = useState("")
+  const [isTemplateCustomized, setIsTemplateCustomized] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const [isWebShareSupported, setIsWebShareSupported] = useState(false)
+
+  // Check Web Share API support
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      setIsWebShareSupported(true)
+    }
+  }, [])
+
+  // All valid passengers in booking with a seat
+  const passengers = useMemo(() => {
+    return (booking.passengers || []).map((p, idx) => ({
+      ...p,
+      _key: String(p._id || idx),
+      seatId: p.seatId || "",
+    }))
+  }, [booking.passengers])
+
+  // Initialize selected passengers when modal opens or booking changes
+  useEffect(() => {
+    if (!isOpen) return
+
+    // If initialSeatId is provided, ensure valid passenger selection
+    const keys = new Set(passengers.map((p) => p._key))
+    if (initialSeatId) {
+      const match = passengers.find(
+        (p) =>
+          resolveSeatId(booking.seatLayoutKey, p.seatId) ===
+          resolveSeatId(booking.seatLayoutKey, initialSeatId),
+      )
+      if (match) {
+        keys.add(match._key)
+      }
+    }
+    setSelectedPaxKeys(keys)
+    setShowBalance(false)
+
+    // Load custom template from localStorage if present
+    try {
+      const saved = localStorage.getItem(`yatrahub_seat_msg_template_${lang}`)
+      if (saved && saved.trim()) {
+        setCustomTemplate(saved)
+        setIsTemplateCustomized(true)
+      } else {
+        setCustomTemplate("")
+        setIsTemplateCustomized(false)
+      }
+    } catch {
+      // Fallback
+    }
+  }, [isOpen, booking, passengers, lang, initialSeatId])
+
+  // Target passenger seats array
+  const sharedSeatIds = useMemo(() => {
+    return passengers
+      .filter((p) => selectedPaxKeys.has(p._key) && p.seatId)
+      .map((p) => p.seatId)
+  }, [passengers, selectedPaxKeys])
+
+  // Compute recipient phone number
+  const recipientPhone = useMemo(() => {
+    const selectedPax = passengers.filter((p) => selectedPaxKeys.has(p._key))
+    // First try contact of selected passengers
+    for (const p of selectedPax) {
+      if (p.contact && p.contact.trim()) {
+        return p.contact.trim()
+      }
+    }
+    // Fall back to booking contact phone
+    return booking.contactPhone || ""
+  }, [passengers, selectedPaxKeys, booking.contactPhone])
+
+  const normalizedPhone = useMemo(() => {
+    return normalizeIndianPhone(recipientPhone)
+  }, [recipientPhone])
+
+  const isPhoneValid = Boolean(normalizedPhone)
+
+  // Compute final WhatsApp text message
+  const messageText = useMemo(() => {
+    return formatWhatsAppSeatMessage({
+      departureInfo,
+      booking,
+      sharedSeatIds,
+      operatorInfo,
+      showBalance,
+      lang,
+      customTemplate: isTemplateCustomized ? customTemplate : "",
+    })
+  }, [
+    departureInfo,
+    booking,
+    sharedSeatIds,
+    operatorInfo,
+    showBalance,
+    lang,
+    isTemplateCustomized,
+    customTemplate,
+  ])
+
+  // Generate Canvas image blob on parameters change
+  useEffect(() => {
+    if (!isOpen) return
+
+    let isSubscribed = true
+    setGenerating(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const blob = await generateSeatImageBlob({
+          layoutKey: booking.seatLayoutKey || departureInfo.layoutKey,
+          busType: booking.busType || departureInfo.busType,
+          departureInfo,
+          booking,
+          sharedSeatIds,
+          occupiedSeatsMap,
+          operatorInfo,
+          showBalance,
+          lang,
+        })
+
+        if (!isSubscribed) return
+
+        setImageBlob(blob)
+        const url = URL.createObjectURL(blob)
+        setPreviewUrl((prevUrl) => {
+          if (prevUrl) URL.revokeObjectURL(prevUrl)
+          return url
+        })
+      } catch (err) {
+        if (isSubscribed) {
+          console.error("Failed to generate seat image:", err)
+          toast.error("Failed to generate seat preview image")
+        }
+      } finally {
+        if (isSubscribed) setGenerating(false)
+      }
+    }, 150)
+
+    return () => {
+      isSubscribed = false
+      clearTimeout(timer)
+    }
+  }, [
+    isOpen,
+    booking,
+    departureInfo,
+    sharedSeatIds,
+    occupiedSeatsMap,
+    operatorInfo,
+    showBalance,
+    lang,
+    toast,
+  ])
+
+  // Clean up object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  // Handle escape key to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  // Passenger toggle handler
+  const handleTogglePassenger = (paxKey) => {
+    setSelectedPaxKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(paxKey)) {
+        if (next.size > 1) next.delete(paxKey)
+        else toast.info("At least one passenger must remain selected.")
+      } else {
+        next.add(paxKey)
+      }
+      return next
+    })
+  }
+
+  // Template text edit handler
+  const handleTemplateChange = (val) => {
+    setCustomTemplate(val)
+    setIsTemplateCustomized(true)
+    try {
+      localStorage.setItem(`yatrahub_seat_msg_template_${lang}`, val)
+    } catch {
+      // Non-blocking localStorage error
+    }
+  }
+
+  // Reset to default template handler
+  const handleResetTemplate = () => {
+    setIsTemplateCustomized(false)
+    setCustomTemplate("")
+    try {
+      localStorage.removeItem(`yatrahub_seat_msg_template_${lang}`)
+    } catch {
+      // Non-blocking
+    }
+    toast.success("Reset to default template")
+  }
+
+  // Action 1: Web Share API
+  const handleWebShare = async () => {
+    if (!imageBlob) return
+    try {
+      const file = new File(
+        [imageBlob],
+        `seat-confirmation-${booking.invoiceNo || "bus"}.png`,
+        { type: "image/png" },
+      )
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: "Seat Confirmation",
+          text: messageText,
+          files: [file],
+        })
+        toast.success("Shared successfully via system share!")
+      } else {
+        // Fallback: copy and download
+        handleDownload()
+        toast.info("Image downloaded. Opening WhatsApp chat...")
+        handleOpenWhatsApp()
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        toast.error(err.message || "Sharing failed")
+      }
+    }
+  }
+
+  // Action 2: Download PNG Image
+  const handleDownload = () => {
+    if (!imageBlob) return
+    const filename = `seat-confirmation-${booking.invoiceNo || "booking"}.png`
+    downloadSeatImage(imageBlob, filename)
+    toast.success("Seat confirmation image downloaded!")
+  }
+
+  // Action 3: Copy Message Text
+  const handleCopyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(messageText)
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+      toast.success("WhatsApp message copied to clipboard!")
+    } catch {
+      toast.error("Failed to copy message to clipboard")
+    }
+  }
+
+  // Action 4: Open WhatsApp Web / App
+  const handleOpenWhatsApp = () => {
+    if (!isPhoneValid) return
+    const waUrl = `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(messageText)}`
+    window.open(waUrl, "_blank", "noopener,noreferrer")
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="share-seat-modal-title"
+      ref={modalRef}
+    >
+      <div className="relative w-full max-w-4xl bg-surface border border-border-subtle rounded-[var(--yh-radius-2xl)] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle bg-surface-muted/30">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Share2 size={20} />
+            </div>
+            <div>
+              <h2
+                id="share-seat-modal-title"
+                className="text-base sm:text-lg font-bold text-ink"
+              >
+                Share Seat Confirmation via WhatsApp
+              </h2>
+              <p className="text-xs text-ink-muted">
+                {departureInfo.tourName || booking.tourName} • Invoice #{booking.invoiceNo || "—"}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="p-1.5 rounded-lg text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors cursor-pointer"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Modal Body: Split 2-Column on Desktop */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* LEFT COLUMN: Controls & Options (5 cols) */}
+          <div className="lg:col-span-5 space-y-4">
+            {/* 1. Language Toggle */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider block">
+                Language (ભાષા / भाषा)
+              </span>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-surface-muted rounded-lg border border-border-subtle text-xs">
+                {[
+                  { id: "en", label: "English" },
+                  { id: "gu", label: "ગુજરાતી" },
+                  { id: "hi", label: "हिन्दी" },
+                ].map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => setLang(l.id)}
+                    className={`py-1.5 px-2 rounded-md font-bold transition-all cursor-pointer ${
+                      lang === l.id
+                        ? "bg-brand text-brand-fg shadow-xs"
+                        : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Passenger Selection */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                  Select Passenger(s) to Include
+                </span>
+                <span className="text-[11px] text-ink-muted">
+                  {selectedPaxKeys.size} of {passengers.length} selected
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl border border-border-subtle bg-surface-muted/20 space-y-2 max-h-40 overflow-y-auto">
+                {passengers.map((p) => {
+                  const isChecked = selectedPaxKeys.has(p._key)
+                  return (
+                    <label
+                      key={p._key}
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-hover cursor-pointer text-xs transition-colors border border-transparent hover:border-border-subtle"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleTogglePassenger(p._key)}
+                          className="rounded border-border text-brand focus:ring-brand"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <User size={13} className="text-ink-muted" />
+                          <span className="font-semibold text-ink">{p.name}</span>
+                        </div>
+                      </div>
+                      <Badge variant="primary" size="sm">
+                        {formatSeatLabel(p.seatId)}
+                      </Badge>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 3. Balance Due Toggle (Default OFF per privacy rule) */}
+            <div className="p-3 rounded-xl border border-border-subtle bg-surface-muted/30 space-y-1.5">
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-xs font-bold text-ink">
+                  Include Balance Due on Image &amp; Message
+                </span>
+                <input
+                  type="checkbox"
+                  checked={showBalance}
+                  onChange={(e) => setShowBalance(e.target.checked)}
+                  className="rounded border-border text-brand focus:ring-brand h-4 w-4"
+                />
+              </label>
+              <p className="text-[11px] text-ink-muted">
+                Off by default. When checked, shows remaining ledger balance (or &quot;Paid in Full&quot;).
+              </p>
+            </div>
+
+            {/* 4. Editable WhatsApp Message Preview */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="share-message-textarea"
+                  className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1"
+                >
+                  <MessageSquare size={13} />
+                  WhatsApp Message Text
+                </label>
+                {isTemplateCustomized && (
+                  <button
+                    type="button"
+                    onClick={handleResetTemplate}
+                    className="text-[11px] font-semibold text-brand hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw size={11} /> Reset
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                id="share-message-textarea"
+                value={isTemplateCustomized ? customTemplate : messageText}
+                onChange={(e) => handleTemplateChange(e.target.value)}
+                rows={7}
+                className={`w-full text-xs font-mono p-2.5 rounded-xl border border-border-subtle bg-surface text-ink resize-y ${FOCUS_RING_CLASS}`}
+                placeholder="WhatsApp message text..."
+              />
+            </div>
+
+            {/* Recipient Phone Validation Banner */}
+            <div className="p-2.5 rounded-xl border border-border-subtle bg-surface-muted/40 space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-ink flex items-center gap-1">
+                  <Phone size={13} className="text-ink-muted" /> Recipient Phone:
+                </span>
+                <span className="font-mono font-bold text-brand">
+                  {recipientPhone || "None specified"}
+                </span>
+              </div>
+              {!isPhoneValid && (
+                <p
+                  id="invalid-phone-hint"
+                  className="text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1 mt-0.5"
+                >
+                  <AlertCircle size={12} className="shrink-0" />
+                  Invalid or missing 10-digit Indian phone number. WhatsApp chat link will be disabled.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Live Image Preview (7 cols) */}
+          <div className="lg:col-span-7 flex flex-col space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                Live Seat Image Preview (1080px)
+              </span>
+              {generating && (
+                <span className="text-xs text-brand animate-pulse font-medium">
+                  Generating canvas...
+                </span>
+              )}
+            </div>
+
+            <div className="relative flex-1 min-h-[360px] max-h-[500px] rounded-2xl border-2 border-border-subtle bg-surface-muted/30 p-2 overflow-auto flex items-center justify-center shadow-inner">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Seat Confirmation Card Preview"
+                  className="max-w-full h-auto max-h-[460px] rounded-xl shadow-md object-contain border border-border-subtle transition-opacity duration-200"
+                />
+              ) : (
+                <div className="text-center text-ink-muted text-xs p-6 space-y-2">
+                  <div className="inline-block animate-spin text-brand">
+                    <RotateCcw size={24} />
+                  </div>
+                  <p>Rendering seat card...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Helpful Hint on WhatsApp Web */}
+            <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs">
+              <Info size={15} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <span>
+                <strong>Tip for WhatsApp Web:</strong> Download the image card, click &quot;Open WhatsApp Chat&quot;, then drag &amp; drop or paste the downloaded image directly into the chat.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer: Action Buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 px-5 py-3.5 border-t border-border-subtle bg-surface-muted/40">
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Copy Message */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleCopyMessage}
+              icon={copyFeedback ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+            >
+              {copyFeedback ? "Copied!" : "Copy Message"}
+            </Button>
+
+            {/* Download Image */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDownload}
+              icon={<Download size={14} />}
+              disabled={!imageBlob || generating}
+            >
+              Download PNG
+            </Button>
+
+            {/* System Web Share (Mobile / Chrome) */}
+            {isWebShareSupported && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleWebShare}
+                icon={<Share2 size={14} />}
+                disabled={!imageBlob || generating}
+              >
+                Share
+              </Button>
+            )}
+
+            {/* Open WhatsApp Chat */}
+            <Button
+              variant="primary"
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
+              onClick={handleOpenWhatsApp}
+              disabled={!isPhoneValid}
+              aria-describedby={!isPhoneValid ? "invalid-phone-hint" : undefined}
+              icon={<ExternalLink size={14} />}
+            >
+              Open WhatsApp Chat
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

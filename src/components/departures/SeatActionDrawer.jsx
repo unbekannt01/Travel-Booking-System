@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
   Heart,
+  Share2,
 } from "lucide-react"
 import { Drawer, Button, ConfirmDialog, Field, Select, Input } from "../ui"
 import { formatINR, formatSeatLabel } from "../../utils/formatters"
@@ -29,6 +30,7 @@ export default function SeatActionDrawer({
   onUpdateSeatConfig,
   onOpenHoldModal,
   onOpenMoveModal,
+  onOpenShareModal,
   onBookSeat,
   onRefresh,
 }) {
@@ -359,6 +361,17 @@ export default function SeatActionDrawer({
 
               {/* Action buttons */}
               <div className="space-y-2 pt-2">
+                <Button
+                  variant="primary"
+                  className="w-full justify-center min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
+                  onClick={() => {
+                    onClose()
+                    if (onOpenShareModal) onOpenShareModal(seat)
+                  }}
+                  icon={<Share2 size={15} />}
+                >
+                  Share Seat via WhatsApp
+                </Button>
                 <Button
                   variant="secondary"
                   className="w-full justify-center min-h-11"

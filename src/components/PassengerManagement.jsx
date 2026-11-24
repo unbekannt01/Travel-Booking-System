@@ -10,6 +10,7 @@ import {
   Ticket,
   Users,
   CheckCircle2,
+  Share2,
 } from "lucide-react"
 import { maskAadhaar, formatSeatLabel } from "../utils/formatters"
 import { isMaskedAadhaar } from "../utils/validators"
@@ -19,6 +20,7 @@ import { request } from "../data/client"
 import { useConfirm } from "./common/useConfirm"
 import { useToast } from "./common/useToast"
 import BoardingPassModal from "./common/BoardingPassModal"
+import ShareSeatModal from "./seats/ShareSeatModal"
 
 const ManifestPrintModal = lazy(() => import("./common/ManifestPrintModal"))
 import {
@@ -69,6 +71,7 @@ export default function PassengerManagement({
   const [includeAadhar, setIncludeAadhar] = useState(true)
   const [unmaskedAadhaar, setUnmaskedAadhaar] = useState({})
   const [boardingPassTarget, setBoardingPassTarget] = useState(null)
+  const [shareSeatTarget, setShareSeatTarget] = useState(null)
 
   const uniqueTours = useMemo(() => {
     return [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
@@ -517,6 +520,20 @@ export default function PassengerManagement({
                       <TableCell align="right">
                         <div className="flex items-center justify-end gap-1">
                           <IconButton
+                            aria-label={`Share seat confirmation for ${p.name}`}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setShareSeatTarget({
+                                booking: b,
+                                initialSeatId: p.seatId,
+                              })
+                            }
+                            title="Share Seat via WhatsApp"
+                          >
+                            <Share2 size={16} />
+                          </IconButton>
+                          <IconButton
                             aria-label={`View boarding pass for ${p.name}`}
                             variant="ghost"
                             size="sm"
@@ -624,6 +641,21 @@ export default function PassengerManagement({
                       type="button"
                       variant="secondary"
                       size="sm"
+                      className="min-h-11 flex-1 text-emerald-700 dark:text-emerald-400"
+                      leftIcon={<Share2 size={16} />}
+                      onClick={() =>
+                        setShareSeatTarget({
+                          booking: b,
+                          initialSeatId: p.seatId,
+                        })
+                      }
+                    >
+                      Share Seat
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
                       className="min-h-11 flex-1"
                       leftIcon={<Ticket size={16} />}
                       onClick={() => setBoardingPassTarget({ booking: b, paxIndex: idx })}
@@ -668,6 +700,28 @@ export default function PassengerManagement({
           user={user}
           initialPassengerIndex={boardingPassTarget.paxIndex}
           onClose={() => setBoardingPassTarget(null)}
+        />
+      )}
+
+      {/* WhatsApp Seat Share Modal (Part 6S-3a) */}
+      {shareSeatTarget && (
+        <ShareSeatModal
+          isOpen={Boolean(shareSeatTarget)}
+          onClose={() => setShareSeatTarget(null)}
+          booking={shareSeatTarget.booking}
+          initialSeatId={shareSeatTarget.initialSeatId}
+          departureInfo={{
+            tourName: shareSeatTarget.booking?.tourName,
+            journeyDate: shareSeatTarget.booking?.journeyDate,
+            busType: shareSeatTarget.booking?.busType,
+            layoutKey: shareSeatTarget.booking?.seatLayoutKey,
+            companyName: user?.companyName,
+            companyPhone: user?.phone,
+          }}
+          operatorInfo={{
+            companyName: user?.companyName,
+            phone: user?.phone,
+          }}
         />
       )}
     </div>
