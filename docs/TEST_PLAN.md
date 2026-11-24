@@ -562,6 +562,57 @@ npm run ui:smoke -- --quick
   - Clicking "Undo" on a committed batch prompts confirmation.
   - Undo reverses records not locked by books close, correctly setting status to `reverted` or `partially_reverted` and displaying breakdown toast.
 
+## 3.17 Manual Verification Checklist — Part 6f Bug Fixes & Refinements
+
+> [!NOTE]
+> Per explicit owner decision, no new automated tests were added in Part 6f. All verifications are conducted manually using the checklist below and throwaway browser checks with Playwright.
+
+- [ ] **Bug 1: Dialog Stacking & Focus Isolation (PaymentTracker & ReceiptModal)**:
+  - On Overview or Payment Tracking screen, click "Payment History" on any booking; verify exactly 1 dialog opens.
+  - Inside the ledger modal, click "Receipt" on any payment row; verify Receipt modal opens cleanly on top (2 dialogs stacked).
+  - Press `Escape`; verify ONLY the Receipt modal closes and focus returns to the ledger; ledger modal remains open.
+  - Press `Escape` again; verify ledger modal closes cleanly.
+- [ ] **Bug 2: Financial Calculation Synchronization Across Screens**:
+  - Open a booking with multiple payments/advances (e.g. `YHB-NST-NOV-001`).
+  - Compare Total, Paid, and Balance figures across:
+    - (a) Overview booking table row
+    - (b) Payment Tracking card
+    - (c) Payment History ledger modal header
+    - (d) Customer Drawer financial summary
+  - Verify all 4 surfaces display identical, authoritative numbers computed from non-void ledger payments.
+- [ ] **Bugs 3 & 4: Drawer Backdrop Stacking, Responsive Layout & History Drawer**:
+  - Open Customer Drawer on desktop; verify drawer contents are crisp and sharp, with no overlay blur bleeding into the panel.
+  - Verify Close Drawer button (`X`) is immediately clickable without backdrop pointer-event interception.
+  - View Customer Drawer at 360px viewport width (e.g. Chrome DevTools mobile emulation); verify `document.body.scrollWidth === window.innerWidth` (zero horizontal page scroll).
+  - Check large currency figures in StatCards; verify text wraps/scales cleanly without text clipping.
+  - Open History Drawer on any booking with no prior edit history; verify localized empty state message:
+    - English: "No changes recorded for this item yet. Change history is recorded from the version that introduced it, so older edits are not available."
+    - हिन्दी: "इस आइटम के लिए अभी तक कोई बदलाव दर्ज नहीं किया गया है। परिवर्तन इतिहास उस संस्करण से दर्ज किया गया है जिसमें इसे पेश किया गया था, इसलिए पुराने संपादन उपलब्ध नहीं हैं।"
+    - ગુજરાતી: "આ આઇટમ માટે હજુ સુધી કોઈ ફેરફારો નોંધાયા નથી. ફેરફાર ઇતિહાસ તે સંસ્કરણથી રેકોર્ડ કરવામાં આવ્યો છે જેમાં તે રજૂ કરવામાં આવ્યો હતો, તેથી જૂના ફેરફારો ઉપલબ્ધ નથી."
+  - Verify language toggle buttons have minimum 44px touch targets.
+- [ ] **Bug 5: Seat Layout Modal Opening in Booking Form**:
+  - Open Booking Form in new booking or edit booking mode.
+  - Navigate to Step 2 ("Passengers & Seats").
+  - Click "Select seat from coach layout" (or "Seat <ID>"); verify "Choose Seat" modal opens immediately.
+  - Verify seat grid renders and coach berths can be clicked and selected.
+  - Click "Confirm Selection"; verify modal closes and selected seat is assigned.
+- [ ] **Step 2a: UI Smoke Script Assertions & Extra Checks**:
+  - Verify `TARGET_URL` is used for navigation restore at line 931.
+  - Verify "Verified..." log is printed only after assertions pass.
+  - Verify extra checks for Payment History (1 dialog) and Manifest modal (preview iframe & enabled print) run without errors.
+  - Verify any assertion failure records an error in `report.md`, sets failure flag, and exits non-zero.
+- [ ] **Step 2b: Departure Key Special Characters**:
+  - Create or inspect a tour whose name contains special characters (`___`, `/`, `?`, `#`, spaces, Hindi, or Gujarati).
+  - Open manifest for that departure; verify backend parses key from the right (`busType = parts[last]`, `dateStr = parts[last-1]`, `tourName = parts[0..last-2]`).
+  - Verify manifest loads without HTTP 400 or invalid date errors.
+- [ ] **Step 2c: Manifest Print Boarded Box & Remarks Layout**:
+  - Open Print Manifest preview; verify "Boarded" column renders as an empty printed box (`<span class="chk-box"></span>`), never an `<input>` element.
+  - Verify "Remarks" column renders as an empty write-in cell (`<span class="write-in-cell"></span>`) with baseline height for handwriting.
+- [ ] **Step 2d: Customer Link Banner Actionability & Grammar**:
+  - In Customer Master, verify the "Needs Attention" alert banner counts only actionable linkable bookings (`evalResult.canLink`).
+  - Verify correct grammar: "1 booking needs attention" vs "N bookings need attention".
+  - Click "Link now" or link all unlinked bookings; verify banner completely disappears once actionable count reaches 0.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap
