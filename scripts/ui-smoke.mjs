@@ -179,6 +179,7 @@ async function run() {
   const tabVisitDurations = [] // { screen, tab, viewport, theme, durationMs }
   const groupedAxeViolations = new Map()
   const completedScreens = []
+  const extraCheckFailures = []
   let totalScreenshots = 0
 
   // Capture uncaught page errors (Task C.1)
@@ -475,6 +476,17 @@ async function run() {
         reportLines.push(
           `| ${td.screen} | ${td.tab} | ${td.viewport}px | ${td.theme} | ${td.durationMs.toLocaleString()}ms | ${flag} |`,
         )
+      }
+    }
+
+    reportLines.push("")
+    reportLines.push("## 8. Extra Workflow Checks")
+    if (extraCheckFailures.length === 0) {
+      reportLines.push("✅ **All extra workflow checks passed cleanly.**")
+    } else {
+      reportLines.push(`❌ **${extraCheckFailures.length} extra check failure(s) detected:**`)
+      for (const ef of extraCheckFailures) {
+        reportLines.push(`- ❌ **${ef.name}** (${ef.screen}): ${ef.error}`)
       }
     }
 
@@ -924,15 +936,95 @@ async function run() {
           const currentUrl = page.url()
           const isDataHash = currentUrl.includes("#data")
           const isStep1Visible = await page.getByText(/Step 1: Choose Data Type/i).isVisible().catch(() => false)
-          if (isDataHash && isStep1Visible) {
-            console.log(`[ui:smoke] Verified 'Import CSV' navigation from ${screen.label} to #data?tab=import (wizard step 1 visible).`)
+          if (!isDataHash || !isStep1Visible) {
+            throw new Error(`Import CSV did not navigate to #data?tab=import (url: ${currentUrl}, step1: ${isStep1Visible})`)
           }
+          console.log(`[ui:smoke] Verified 'Import CSV' navigation from ${screen.label} to #data?tab=import (wizard step 1 visible).`)
           // Navigate back to restore screen
-          await page.goto(`${BASE_URL}#${screen.tabId || screen.id}`)
+          await page.goto(`${TARGET_URL}#${screen.tabId || screen.id}`)
           await page.waitForTimeout(300)
         }
       } catch (err) {
-        console.warn(`[ui:smoke] Import CSV nav check error on ${screen.label}: ${err.message}`)
+        console.error(`[ui:smoke] Extra check failed - Import CSV nav check error on ${screen.label}: ${err.message}`)
+        extraCheckFailures.push({
+          name: "Import CSV navigation",
+          screen: screen.label,
+          error: err.message,
+        })
+      }
+    }
+
+    // Extra Check: Payment History opens one dialog (Overview screen)
+    if (screen.id === "dashboard") {
+      try {
+        const historyBtn = page.getByRole("button", { name: /payment history/i }).first()
+        if (await historyBtn.isVisible().catch(() => false)) {
+          await historyBtn.click()
+          await page.waitForTimeout(500)
+          const dialogs = await page.$$('[role="dialog"]')
+          if (dialogs.length !== 1) {
+            throw new Error(`Expected exactly 1 dialog open on Payment History, found ${dialogs.length}`)
+          }
+          await page.keyboard.press("Escape")
+          await page.waitForTimeout(300)
+          const remainingDialogs = await page.$$('[role="dialog"]')
+          if (remainingDialogs.length !== 0) {
+            throw new Error(`Dialog remained open after Escape, count: ${remainingDialogs.length}`)
+          }
+          console.log(`[ui:smoke] Verified 'Payment History opens one dialog' on ${screen.label}.`)
+        }
+      } catch (err) {
+        console.error(`[ui:smoke] Extra check failed - Payment History dialog on ${screen.label}: ${err.message}`)
+        extraCheckFailures.push({
+          name: "Payment History opens one dialog",
+          screen: screen.label,
+          error: err.message,
+        })
+      }
+    }
+
+    // Extra Check: Manifest modal check (Journeys screen)
+    if (screen.id === "journey") {
+      try {
+        const manifestMenuBtn = page.getByRole("button", { name: /print manifest/i }).first()
+        if (await manifestMenuBtn.isVisible().catch(() => false)) {
+          await manifestMenuBtn.click()
+          await page.waitForTimeout(300)
+          const withoutAadhaarOption = page.locator('button:has-text("Print Manifest (Without Aadhaar)")').first()
+          if (await withoutAadhaarOption.isVisible().catch(() => false)) {
+            await withoutAadhaarOption.click()
+            await page.waitForTimeout(600)
+            const modal = page.locator('[role="dialog"]')
+            if (!(await modal.isVisible().catch(() => false))) {
+              throw new Error("Manifest Print modal did not open")
+            }
+            const iframe = page.locator('iframe[title="Manifest Print Preview"]')
+            if (!(await iframe.isVisible().catch(() => false))) {
+              throw new Error("Manifest live print preview iframe not found or not visible")
+            }
+            const printBtn = page.locator('[role="dialog"] button:has-text("Print Manifest")')
+            const isPrintDisabled = await printBtn.isDisabled().catch(() => true)
+            if (isPrintDisabled) {
+              throw new Error("Print Manifest button is unexpectedly disabled for Without Aadhaar preset")
+            }
+            // Close modal
+            const cancelBtn = page.locator('[role="dialog"] button:has-text("Cancel")')
+            if (await cancelBtn.isVisible().catch(() => false)) {
+              await cancelBtn.click()
+            } else {
+              await page.keyboard.press("Escape")
+            }
+            await page.waitForTimeout(300)
+            console.log(`[ui:smoke] Verified 'Manifest modal check (Without Aadhaar preset)' on ${screen.label}.`)
+          }
+        }
+      } catch (err) {
+        console.error(`[ui:smoke] Extra check failed - Manifest modal check on ${screen.label}: ${err.message}`)
+        extraCheckFailures.push({
+          name: "Manifest modal check",
+          screen: screen.label,
+          error: err.message,
+        })
       }
     }
 
@@ -989,7 +1081,8 @@ async function run() {
     hasCoverageFailures ||
     budgetBreaches.length > 0 ||
     hasErrors ||
-    hasStrictWarnings
+    hasStrictWarnings ||
+    extraCheckFailures.length > 0
 
   if (hasFailures) {
     const reasons = []
@@ -1000,6 +1093,7 @@ async function run() {
     if (fallbackFindings.length > 0) reasons.push(`${fallbackFindings.length} UI fallback(s)`)
     if (hasCoverageFailures) reasons.push("tab coverage failure(s)")
     if (budgetBreaches.length > 0) reasons.push(`${budgetBreaches.length} budget breach(es)`)
+    if (extraCheckFailures.length > 0) reasons.push(`${extraCheckFailures.length} extra check failure(s)`)
 
     console.error(`[ui:smoke] FAILED: Issues found in ${reasons.join(", ")}.`)
     process.exit(1)
