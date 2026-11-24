@@ -10,16 +10,23 @@ const SIZE_CLASSES = {
   md: "max-w-lg",
   lg: "max-w-2xl",
   xl: "max-w-4xl",
+  "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
+  "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
+  "6xl": "max-w-6xl",
+  full: "max-w-full",
 }
 
 /**
  * Accessible modal dialog with focus trap, Escape to close, aria-modal, focus restoration, and body scroll lock.
  * @param {{
- *   isOpen: boolean,
+ *   isOpen?: boolean,
+ *   open?: boolean,
  *   onClose: () => void,
  *   title?: import("react").ReactNode,
  *   description?: import("react").ReactNode,
- *   size?: "sm" | "md" | "lg" | "xl",
+ *   size?: "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "6xl" | "full",
  *   closeOnBackdrop?: boolean,
  *   closeOnEscape?: boolean,
  *   hideCloseButton?: boolean,
@@ -30,6 +37,7 @@ const SIZE_CLASSES = {
  */
 export function Modal({
   isOpen,
+  open,
   onClose,
   title,
   description,
@@ -41,13 +49,14 @@ export function Modal({
   className,
   children,
 }) {
+  const isModalOpen = isOpen !== undefined ? Boolean(isOpen) : Boolean(open)
   const panelRef = useRef(null)
   const titleId = useId()
   const descId = useId()
 
-  useFocusTrap({ isOpen, containerRef: panelRef, onClose, closeOnEscape })
+  useFocusTrap({ isOpen: isModalOpen, containerRef: panelRef, onClose, closeOnEscape })
 
-  if (!isOpen || typeof document === "undefined") return null
+  if (!isModalOpen || typeof document === "undefined") return null
 
   return createPortal(
     <div className="fixed inset-0 z-[var(--yh-z-modal)] flex items-center justify-center p-4">

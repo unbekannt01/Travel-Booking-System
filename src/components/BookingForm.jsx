@@ -1994,7 +1994,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
 
       {/* ── Coach Seat Picker Modal (Migrated to Modal primitive) ── */}
       <Modal
-        open={showSeatMap}
+        isOpen={showSeatMap}
         onClose={() => setShowSeatMap(false)}
         size="5xl"
         title="Choose Seat"
