@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   FileText,
   Bus,
+  Info,
 } from "lucide-react"
 import {
   MANIFEST_COLUMNS,
@@ -16,6 +17,7 @@ import {
 } from "../../../shared/manifest.js"
 import { getDepartureManifest, listDepartures } from "../../data/departures"
 import { formatDisplayDate } from "../../utils/date"
+import { cn } from "../../utils/cn"
 import {
   Modal,
   Button,
@@ -287,6 +289,13 @@ export default function ManifestPrintModal({
     passengers.length === 0 ||
     (hasAadhaar && !aadhaarSafetyConfirmed)
 
+  const disabledReason = useMemo(() => {
+    if (loading) return "Loading passengers..."
+    if (passengers.length === 0) return "No passengers on this departure"
+    if (hasAadhaar && !aadhaarSafetyConfirmed) return "Safety acknowledgment required to print Aadhaar"
+    return null
+  }, [loading, passengers.length, hasAadhaar, aadhaarSafetyConfirmed])
+
   return (
     <Modal
       isOpen={isOpen}
@@ -319,10 +328,23 @@ export default function ManifestPrintModal({
           </Button>
 
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-            {hasAadhaar && !aadhaarSafetyConfirmed && (
-              <span className="text-xs text-warning font-medium flex items-center gap-1">
-                <AlertTriangle size={13} />
-                Safety acknowledgment required to print Aadhaar
+            {isPrintDisabled && disabledReason && (
+              <span
+                id="manifest-print-disabled-reason"
+                className={cn(
+                  "text-xs font-medium flex items-center gap-1",
+                  hasAadhaar && !aadhaarSafetyConfirmed ? "text-warning" : "text-ink-muted",
+                )}
+                role="status"
+              >
+                {hasAadhaar && !aadhaarSafetyConfirmed ? (
+                  <AlertTriangle size={13} aria-hidden="true" />
+                ) : loading ? (
+                  <Spinner size="sm" aria-hidden="true" className="h-3.5 w-3.5 border" />
+                ) : (
+                  <Info size={13} aria-hidden="true" />
+                )}
+                <span>{disabledReason}</span>
               </span>
             )}
             <div className="flex items-center gap-2">
@@ -335,6 +357,7 @@ export default function ManifestPrintModal({
                 size="sm"
                 leftIcon={<Printer size={16} />}
                 disabled={isPrintDisabled}
+                aria-describedby={isPrintDisabled && disabledReason ? "manifest-print-disabled-reason" : undefined}
                 onClick={handlePrint}
               >
                 Print Manifest

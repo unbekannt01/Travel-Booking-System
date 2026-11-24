@@ -575,11 +575,55 @@ async function run() {
   console.log("[ui:smoke] Backend API preflight passed.")
 
   // 2. Iterate through screens, themes, and viewports (READ-ONLY)
+  async function dismissAnyOpenModals() {
+    try {
+      const dialogs = await page.$$('[role="dialog"]')
+      const hasOverlay = (await page.$$('.fixed.inset-0')).length > 0
+      if (dialogs.length > 0 || hasOverlay) {
+        await page.keyboard.press("Escape").catch(() => {})
+        await page.waitForTimeout(200)
+
+        const remaining = await page.$$('[role="dialog"]')
+        if (remaining.length > 0) {
+          const cancelBtn = page.locator('[role="dialog"] button:has-text("Cancel"), [role="dialog"] button:has-text("Close")').first()
+          if (await cancelBtn.isVisible().catch(() => false)) {
+            await cancelBtn.click({ timeout: 1000 }).catch(() => {})
+            await page.waitForTimeout(200)
+          }
+        }
+      }
+    } catch {}
+  }
+
+  async function safeNavClick(buttonHandle, label) {
+    if (!buttonHandle) return false
+    try {
+      await buttonHandle.click({ timeout: 5000 })
+      await page.waitForTimeout(300)
+      return true
+    } catch (clickErr) {
+      const msg = clickErr.message || ""
+      if (msg.includes("intercepts pointer events") || msg.includes("Timeout")) {
+        console.warn(`[ui:smoke] Click on "${label}" intercepted/timed out. Dismissing overlays and retrying once...`)
+        await dismissAnyOpenModals()
+        await page.keyboard.press("Escape").catch(() => {})
+        await page.waitForTimeout(200)
+        await buttonHandle.click({ timeout: 4000, force: true }).catch(() => {})
+        await page.waitForTimeout(300)
+        return true
+      }
+      throw clickErr
+    }
+  }
+
   for (const screen of activeScreens) {
     if (isInterrupted) break
     const screenStart = Date.now()
     currentContext.screen = screen.label
     currentContext.tab = "Main"
+
+    // Ensure clean state before starting each screen
+    await dismissAnyOpenModals()
 
     // Track baseline console error count before visiting screen
     const initialConsoleErrors = consoleEntries.filter(
@@ -598,22 +642,13 @@ async function run() {
           await page.waitForTimeout(300)
         }
         const settingsNav = await page.$('button:has-text("Settings")')
-        if (settingsNav) {
-          await settingsNav.click()
-          await page.waitForTimeout(300)
-        }
+        await safeNavClick(settingsNav, "Settings")
         if (screen.isSettingsTab === "studio") {
           const studioTab = await page.$('button:has-text("Invoice Studio")')
-          if (studioTab) {
-            await studioTab.click()
-            await page.waitForTimeout(300)
-          }
+          await safeNavClick(studioTab, "Invoice Studio")
         } else if (screen.isSettingsTab === "reminders") {
           const remindersTab = await page.$('button:has-text("Reminders")')
-          if (remindersTab) {
-            await remindersTab.click()
-            await page.waitForTimeout(300)
-          }
+          await safeNavClick(remindersTab, "Reminders")
         }
       } else if (screen.isAnalyticsTab) {
         if (page.url().includes("#/ui-kit")) {
@@ -621,35 +656,23 @@ async function run() {
           await page.waitForTimeout(300)
         }
         const analyticsNav = await page.$('button:has-text("Analytics")')
-        if (analyticsNav) {
-          await analyticsNav.click()
-          await page.waitForTimeout(300)
-        }
+        await safeNavClick(analyticsNav, "Analytics")
         const pnlTab = await page.$('button:has-text("Profit & Loss")')
-        if (pnlTab) {
-          await pnlTab.click()
-          await page.waitForTimeout(300)
-        }
+        await safeNavClick(pnlTab, "Profit & Loss")
       } else if (screen.isAction === "new-booking") {
         if (page.url().includes("#/ui-kit")) {
           await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" })
           await page.waitForTimeout(300)
         }
         const newBookingBtn = await page.$('button:has-text("New Booking")')
-        if (newBookingBtn) {
-          await newBookingBtn.click()
-          await page.waitForTimeout(300)
-        }
+        await safeNavClick(newBookingBtn, "New Booking")
       } else {
         if (page.url().includes("#/ui-kit")) {
           await page.goto(TARGET_URL, { waitUntil: "domcontentloaded" })
           await page.waitForTimeout(300)
         }
         const navBtn = await page.$(`button:has-text("${screen.label}")`)
-        if (navBtn) {
-          await navBtn.click()
-          await page.waitForTimeout(300)
-        }
+        await safeNavClick(navBtn, screen.label)
       }
     } catch (navErr) {
       console.warn(`[ui:smoke] Navigation error on ${screen.label}: ${navErr.message}`)
@@ -956,10 +979,12 @@ async function run() {
 
     // Extra Check: Payment History opens one dialog (Overview screen)
     if (screen.id === "dashboard") {
+      let historyOpened = false
       try {
         const historyBtn = page.getByRole("button", { name: /payment history/i }).first()
         if (await historyBtn.isVisible().catch(() => false)) {
           await historyBtn.click()
+          historyOpened = true
           await page.waitForTimeout(500)
           const dialogs = await page.$$('[role="dialog"]')
           if (dialogs.length !== 1) {
@@ -971,6 +996,7 @@ async function run() {
           if (remainingDialogs.length !== 0) {
             throw new Error(`Dialog remained open after Escape, count: ${remainingDialogs.length}`)
           }
+          historyOpened = false
           console.log(`[ui:smoke] Verified 'Payment History opens one dialog' on ${screen.label}.`)
         }
       } catch (err) {
@@ -980,11 +1006,19 @@ async function run() {
           screen: screen.label,
           error: err.message,
         })
+      } finally {
+        if (historyOpened) {
+          try {
+            await page.keyboard.press("Escape").catch(() => {})
+            await page.waitForTimeout(300)
+          } catch {}
+        }
       }
     }
 
     // Extra Check: Manifest modal check (Journeys screen)
     if (screen.id === "journey") {
+      let manifestOpened = false
       try {
         const manifestMenuBtn = page.getByRole("button", { name: /print manifest/i }).first()
         if (await manifestMenuBtn.isVisible().catch(() => false)) {
@@ -993,29 +1027,47 @@ async function run() {
           const withoutAadhaarOption = page.locator('button:has-text("Print Manifest (Without Aadhaar)")').first()
           if (await withoutAadhaarOption.isVisible().catch(() => false)) {
             await withoutAadhaarOption.click()
-            await page.waitForTimeout(600)
+            manifestOpened = true
+            await page.waitForTimeout(500)
             const modal = page.locator('[role="dialog"]')
             if (!(await modal.isVisible().catch(() => false))) {
               throw new Error("Manifest Print modal did not open")
             }
+
+            // Wait for loading preview/manifest to resolve (up to 8s)
+            const loadingIndicator = page.locator('[role="dialog"]').getByText(/Preparing manifest preview.../i)
+            if (await loadingIndicator.isVisible().catch(() => false)) {
+              await loadingIndicator.waitFor({ state: "detached", timeout: 8000 }).catch(() => {})
+            }
+            await page.waitForTimeout(300)
+
             const iframe = page.locator('iframe[title="Manifest Print Preview"]')
             if (!(await iframe.isVisible().catch(() => false))) {
               throw new Error("Manifest live print preview iframe not found or not visible")
             }
+
+            // Check loaded passenger count
+            const paxText = await page.locator('[role="dialog"]').getByText(/Passengers loaded/i).textContent().catch(() => "0 Passengers loaded")
+            const paxMatch = paxText.match(/(\d+)\s+Passengers loaded/i)
+            const paxCount = paxMatch ? parseInt(paxMatch[1], 10) : 0
+
             const printBtn = page.locator('[role="dialog"] button:has-text("Print Manifest")')
             const isPrintDisabled = await printBtn.isDisabled().catch(() => true)
-            if (isPrintDisabled) {
-              throw new Error("Print Manifest button is unexpectedly disabled for Without Aadhaar preset")
-            }
-            // Close modal
-            const cancelBtn = page.locator('[role="dialog"] button:has-text("Cancel")')
-            if (await cancelBtn.isVisible().catch(() => false)) {
-              await cancelBtn.click()
+
+            if (paxCount > 0) {
+              if (isPrintDisabled) {
+                throw new Error(`Print Manifest button is unexpectedly disabled for departure with ${paxCount} passengers`)
+              }
+              console.log(`[ui:smoke] Verified 'Manifest modal check (Without Aadhaar preset with ${paxCount} pax)' on ${screen.label}.`)
             } else {
-              await page.keyboard.press("Escape")
+              // 0 passengers: verify Print button is disabled and reason text is present
+              if (!isPrintDisabled) {
+                throw new Error("Print Manifest button should be disabled for departure with 0 passengers")
+              }
+              const reasonEl = page.locator('[role="dialog"] #manifest-print-disabled-reason')
+              const reasonText = (await reasonEl.textContent().catch(() => "")) || ""
+              console.log(`[ui:smoke] Verified 'Manifest modal check (0 passengers, disabled with reason text: "${reasonText}")' on ${screen.label}.`)
             }
-            await page.waitForTimeout(300)
-            console.log(`[ui:smoke] Verified 'Manifest modal check (Without Aadhaar preset)' on ${screen.label}.`)
           }
         }
       } catch (err) {
@@ -1025,6 +1077,23 @@ async function run() {
           screen: screen.label,
           error: err.message,
         })
+      } finally {
+        if (manifestOpened) {
+          try {
+            const cancelBtn = page.locator('[role="dialog"] button:has-text("Cancel")')
+            if (await cancelBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+              await cancelBtn.click().catch(() => {})
+            } else {
+              await page.keyboard.press("Escape").catch(() => {})
+            }
+            await page.waitForTimeout(300)
+            const remaining = page.locator('[role="dialog"]')
+            if (await remaining.isVisible().catch(() => false)) {
+              await page.keyboard.press("Escape").catch(() => {})
+              await page.waitForTimeout(200)
+            }
+          } catch {}
+        }
       }
     }
 

@@ -613,6 +613,25 @@ npm run ui:smoke -- --quick
   - Verify correct grammar: "1 booking needs attention" vs "N bookings need attention".
   - Click "Link now" or link all unlinked bookings; verify banner completely disappears once actionable count reaches 0.
 
+## 3.18 Manual Verification Checklist — Part 6g UI Smoke Resilience & Manifest Modal Polish
+
+> [!NOTE]
+> Per explicit owner decision, no new automated tests were added in Part 6g. All verifications are conducted manually using the checklist below and verified via `npm run ui:smoke`.
+
+- [ ] **Manifest Print Disabled Reason & Screen-Reader Communication**:
+  - Open Journeys screen (`#journey`), click "Print Manifest" -> "Print Manifest (Without Aadhaar)".
+  - While manifest data is loading, verify helper indicator displays "Loading passengers..." with a small spinner and the Print button is disabled.
+  - If a departure has 0 booked passengers, verify helper indicator displays "No passengers on this departure" and the Print button is disabled.
+  - Inspect the disabled Print button in DevTools; verify `aria-describedby="manifest-print-disabled-reason"` points directly to the helper text element with `role="status"`.
+  - For a departure with booked passengers, once loading completes, verify the Print button becomes enabled.
+  - Select "Print Manifest (With Aadhaar)"; verify the amber warning "Safety acknowledgment required to print Aadhaar" appears and Print is disabled until the safety acknowledgment checkbox is checked.
+- [ ] **Smoke Test Resilience & Zero-Hang Guarantee**:
+  - Run `npm run ui:smoke -- --quick`.
+  - Verify that if an assertion or check throws inside a modal, the `finally` block guarantees dialog dismissal (Cancel/Escape) and does not leak backdrop overlays.
+  - Verify that before navigating to subsequent screens (e.g. Destinations), `dismissAnyOpenModals()` ensures no lingering modal overlays intercept pointer clicks.
+  - Verify navigation clicks use fast intercept detection and recovery (5000ms timeout cap, Escape fallback) to prevent hanging for 37 retries.
+  - Verify terminal output prints clean status lines and exits cleanly without requiring manual Ctrl+C.
+
 ---
 
 ## 4. Current Testing Gaps & Roadmap
