@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, lazy, Suspense } from "react"
 import {
   Printer,
   Share2,
@@ -12,6 +12,7 @@ import {
   Download,
   Languages,
   Ticket,
+  History,
 } from "lucide-react"
 import { DOCUMENT_LANGUAGES, getDocumentTranslation } from "../i18n/documents"
 import { escapeHtml, sanitizeHexColor, sanitizeImageUrl } from "../utils/escapeHtml.js"
@@ -19,9 +20,12 @@ import { getType } from "../../shared/documentTypes.js"
 import { renderDocumentHtml } from "../utils/documentRenderer.js"
 import BoardingPassModal from "./common/BoardingPassModal"
 
+const HistoryDrawer = lazy(() => import("./history/HistoryDrawer"))
+
 export default function InvoiceView({ booking: bookingInput, document: docProp, onBack, user }) {
   const [selectedLang, setSelectedLang] = useState(user?.documentLanguage || "en")
   const [showBoardingPassModal, setShowBoardingPassModal] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
 
   const booking = bookingInput?.booking || bookingInput
   const doc = docProp || (bookingInput?.document ? bookingInput.document : null)
@@ -492,6 +496,15 @@ export default function InvoiceView({ booking: bookingInput, document: docProp, 
           </button>
 
           <button
+            type="button"
+            onClick={() => setShowHistoryModal(true)}
+            aria-label={`View change history for booking ${booking?.invoiceNo || ""}`}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all min-h-11 sm:min-h-9 cursor-pointer"
+          >
+            <History size={16} />
+            <span className="hidden sm:inline">History</span>
+          </button>
+          <button
             onClick={handleShare}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-xl font-black text-xs hover:bg-emerald-100 transition-all"
           >
@@ -940,6 +953,18 @@ export default function InvoiceView({ booking: bookingInput, document: docProp, 
           user={user}
           onClose={() => setShowBoardingPassModal(false)}
         />
+      )}
+
+      {showHistoryModal && booking && (
+        <Suspense fallback={null}>
+          <HistoryDrawer
+            isOpen={showHistoryModal}
+            onClose={() => setShowHistoryModal(false)}
+            entityType="booking"
+            entityId={booking._id || booking.id}
+            title={`Booking #${booking.invoiceNo || ""} History`}
+          />
+        </Suspense>
       )}
     </div>
   )

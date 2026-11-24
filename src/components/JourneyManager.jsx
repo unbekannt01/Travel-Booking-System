@@ -786,7 +786,7 @@ export default function JourneyManager({ bookings = [], onUpdateBooking, user, e
                           </div>
                           <div className="grid grid-cols-3 gap-1 text-[11px] text-ink-muted tabular-nums">
                             <div>Rev: <strong className="text-ink">{formatINR(fin.bookedRevenue, 0)}</strong></div>
-                            <div>Exp: <strong className="text-(--yh-color-danger)">{formatINR(fin.expensesTotal, 0)}</strong></div>
+                            <div>Exp: <strong className="text-danger-text">{formatINR(fin.expensesTotal, 0)}</strong></div>
                             <div>BE: <strong className="text-ink">{fin.breakEvenSeats !== null ? `${fin.breakEvenSeats}p` : "—"}</strong></div>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-border-subtle text-[10px]">

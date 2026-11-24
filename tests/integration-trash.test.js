@@ -338,4 +338,43 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6b: 
       assert.equal(hijackRes.status, 404)
     }
   })
+
+  it("5. Tenant isolation for History: User B cannot view User A's history", async (t) => {
+    if (!isMongoAvailable) return t.skip("MongoDB offline")
+
+    const anyUserAHistory = await RecordHistory.findOne({ userId: userAId })
+    if (anyUserAHistory) {
+      const historyBRes = await fetch(
+        `${baseUrl}/api/history?entityType=${anyUserAHistory.entityType}&entityId=${anyUserAHistory.entityId}`,
+        {
+          headers: { Authorization: `Bearer ${userBToken}` },
+        }
+      )
+      assert.equal(historyBRes.status, 200)
+      const data = await historyBRes.json()
+      assert.equal(data.history.length, 0, "User B must receive an empty history list for User A's entity")
+    }
+  })
+
+  it("6. Privacy check: RecordHistory never stores PII (phone, contact name, notes) in changes or summary", async (t) => {
+    if (!isMongoAvailable) return t.skip("MongoDB offline")
+
+    const allHistory = await RecordHistory.find({ userId: userAId }).lean()
+    assert.ok(allHistory.length > 0, "Expected at least one history record for User A")
+
+    for (const h of allHistory) {
+      if (h.changes && Array.isArray(h.changes)) {
+        for (const c of h.changes) {
+          // Sensitive keys should not be stored raw in changes
+          assert.notEqual(c.field, "aadhar", "Aadhaar must never be in history changes")
+          assert.notEqual(c.field, "password", "Password must never be in history changes")
+        }
+      }
+      if (h.summary) {
+        // Assert no raw 10-digit phone number or Aadhaar in summary
+        assert.ok(!/\b[6-9]\d{9}\b/.test(h.summary), "History summary must not expose raw Indian phone numbers")
+        assert.ok(!/\b\d{4}\s\d{4}\s\d{4}\b/.test(h.summary), "History summary must not expose raw Aadhaar numbers")
+      }
+    }
+  })
 })

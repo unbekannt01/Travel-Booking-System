@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react"
 import {
   Card,
   Button,
@@ -23,6 +23,8 @@ import CloseDayModal from "./CloseDayModal"
 import ReopenCloseModal from "./ReopenCloseModal"
 import SetupModal from "./SetupModal"
 import PrintDayBookModal from "./PrintDayBookModal"
+
+const HistoryDrawer = lazy(() => import("../history/HistoryDrawer"))
 import {
   Plus,
   Lock,
@@ -64,6 +66,7 @@ export default function CashBook({ user = null }) {
   const [isReopenModalOpen, setIsReopenModalOpen] = useState(false)
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false)
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
+  const [historyEntry, setHistoryEntry] = useState(null)
 
   // Fetch Cash Book data
   const loadCashBook = useCallback(async () => {
@@ -553,6 +556,7 @@ export default function CashBook({ user = null }) {
             setIsEntryModalOpen(true)
           }}
           onDeleteEntry={handleDeleteEntry}
+          onViewHistory={setHistoryEntry}
         />
       )}
 
@@ -610,6 +614,21 @@ export default function CashBook({ user = null }) {
           companyPhone: user?.companyPhone || "",
         }}
       />
+
+      {/* History Drawer */}
+      <Suspense fallback={null}>
+        <HistoryDrawer
+          isOpen={Boolean(historyEntry)}
+          onClose={() => setHistoryEntry(null)}
+          entityType="cashEntry"
+          entityId={historyEntry?.id || historyEntry?._id}
+          entityLabel={
+            historyEntry
+              ? `${historyEntry.partyName || historyEntry.type} (${formatINR(historyEntry.amount || 0)})`
+              : ""
+          }
+        />
+      </Suspense>
     </div>
   )
 }

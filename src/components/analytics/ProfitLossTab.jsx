@@ -564,8 +564,8 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                       />
                       <Legend />
                       <Bar dataKey="revenue" fill="var(--yh-brand, #4f46e5)" name="Revenue" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expenses" fill="var(--yh-color-danger, #ef4444)" name="Expenses" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="profit" fill="var(--yh-color-success, #10b981)" name="Profit" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" fill="var(--yh-danger)" name="Expenses" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="profit" fill="var(--yh-success)" name="Profit" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -593,12 +593,12 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                       <TableRow key={idx}>
                         <TableCell className="font-medium text-ink">{row.name}</TableCell>
                         <TableCell className="text-right">{formatINR(row.revenue, 2)}</TableCell>
-                        <TableCell className="text-right text-(--yh-color-danger)">
+                        <TableCell className="text-right text-danger-text">
                           {formatINR(row.expenses, 2)}
                         </TableCell>
                         <TableCell
                           className={`text-right font-bold ${
-                            row.profit >= 0 ? "text-(--yh-color-success)" : "text-(--yh-color-danger)"
+                            row.profit >= 0 ? "text-success-text" : "text-danger-text"
                           }`}
                         >
                           {formatINR(row.profit, 2)}
@@ -725,7 +725,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                       </TableCell>
 
                       <TableCell className="text-right tabular-nums text-xs">
-                        <div className="font-semibold text-(--yh-color-danger)">
+                        <div className="font-semibold text-danger-text">
                           {formatINR(item.expensesTotal, 2)}
                         </div>
                         <div className="text-[10px] text-(--yh-text-muted)">
@@ -849,7 +849,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                       <span className="text-[10px] uppercase font-bold text-(--yh-text-muted) block">
                         Expenses
                       </span>
-                      <span className="font-semibold text-(--yh-color-danger)">
+                      <span className="font-semibold text-danger-text">
                         {formatINR(item.expensesTotal, 0)}
                       </span>
                     </div>
@@ -894,7 +894,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
               <div className="flex items-center gap-3 text-xs">
                 <span>
                   Total General Expenses:{" "}
-                  <strong className="text-(--yh-color-danger) tabular-nums">
+                  <strong className="text-danger-text tabular-nums">
                     {formatINR(summary.generalExpensesTotal || 0, 2)}
                   </strong>
                 </span>
@@ -952,7 +952,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                   <span className="text-[10px] uppercase font-bold text-(--yh-text-muted) block">
                     Expenses Incurred
                   </span>
-                  <span className="text-base font-bold text-(--yh-color-danger)">
+                  <span className="text-base font-bold text-danger-text">
                     {formatINR(selectedItem.expensesTotal, 2)}
                   </span>
                 </div>
@@ -1031,7 +1031,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
               <div className="space-y-2">
                 <h4 className="font-bold text-sm text-ink flex items-center justify-between">
                   <span>Expense Lines ({selectedItem.expenses?.length || 0})</span>
-                  <span className="text-xs text-(--yh-color-danger) font-semibold">
+                  <span className="text-xs text-danger-text font-semibold">
                     {formatINR(selectedItem.expensesTotal, 2)}
                   </span>
                 </h4>
@@ -1056,7 +1056,7 @@ export default function ProfitLossTab({ bookings = [], tours = [] }) {
                             <TableCell>
                               <StatusPill status={e.status === "paid" ? "Paid" : "Pending"} />
                             </TableCell>
-                            <TableCell className="text-right font-bold text-xs text-(--yh-color-danger)">
+                            <TableCell className="text-right font-bold text-xs text-danger-text">
                               {formatINR(e.amount, 2)}
                             </TableCell>
                           </TableRow>

@@ -13,10 +13,16 @@ import { classifyRestore, HISTORY_ENTITIES } from "../../shared/history.js"
 
 const router = express.Router()
 
-const trashLimiter = rateLimit({
+const trashReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120,
   message: { message: "Too many trash requests. Please try again later." },
+})
+
+const trashWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { message: "Too many restore requests. Please try again later." },
 })
 
 const getModelForType = (type) => {
@@ -38,7 +44,7 @@ const getModelForType = (type) => {
  * GET /api/trash
  * Lists soft-deleted items across entities with restore eligibility evaluation.
  */
-router.get("/", verifyToken, trashLimiter, async (req, res) => {
+router.get("/", verifyToken, trashReadLimiter, async (req, res) => {
   try {
     const { type = "all", q = "", page = 1, limit = 25 } = req.query
     const pageNum = Math.max(1, parseInt(page, 10) || 1)
@@ -193,7 +199,7 @@ router.get("/", verifyToken, trashLimiter, async (req, res) => {
  * POST /api/trash/:type/:id/restore
  * Restores a soft-deleted item with books lock and collision checks.
  */
-router.post("/:type/:id/restore", verifyToken, trashLimiter, async (req, res) => {
+router.post("/:type/:id/restore", verifyToken, trashWriteLimiter, async (req, res) => {
   try {
     const { type, id } = req.params
     const userId = req.user.id

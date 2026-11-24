@@ -333,6 +333,32 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
     })
     assert.equal(updateMoneyRes.status, 423)
 
+    // Booking with advance > 0 on closed date: updating total amount or date -> 423
+    const advanceBooking = await Booking.create({
+      userId: userAId,
+      contactName: "Advance Traveler",
+      contactPhone: "9876543210",
+      tourName: "Locked Test Tour",
+      journeyDate: new Date("2026-11-20"),
+      date: new Date("2026-11-08"),
+      totalAmount: 5000,
+      advanceReceived: 1000,
+      invoiceNo: "CB-ADV-LOCK-TEST",
+      passengers: [{ name: "Advance Traveler", age: 30, gender: "Male", city: "Surat" }],
+    })
+
+    const updateAdvanceClosedRes = await fetch(`${baseUrl}/api/bookings/${advanceBooking._id}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        totalAmount: 6000,
+      }),
+    })
+    assert.equal(updateAdvanceClosedRes.status, 423)
+
     // Recording payment on closed date (2026-11-09) -> 423
     const paymentClosedRes = await fetch(`${baseUrl}/api/bookings/${zeroBooking._id}/payments`, {
       method: "POST",
@@ -435,6 +461,20 @@ describe("Integration Harness: Real Express App against yatrahub_test (Part 6a: 
 
   it("6. Reopen Day Flow: POST /api/cashbook/reopen reopens the last close with password and audit", async (t) => {
     if (!isMongoAvailable) return t.skip("MongoDB offline")
+
+    // Wrong password -> 401
+    const badPasswordRes = await fetch(`${baseUrl}/api/cashbook/reopen`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${userAToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        password: "IncorrectPassword123!",
+        reason: "Testing incorrect password verification",
+      }),
+    })
+    assert.equal(badPasswordRes.status, 401)
 
     // Missing reason -> 400
     const noReasonRes = await fetch(`${baseUrl}/api/cashbook/reopen`, {

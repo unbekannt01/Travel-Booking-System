@@ -8,6 +8,7 @@ import {
   Lock,
   Edit2,
   Trash2,
+  History,
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
@@ -35,6 +36,7 @@ export default function DayBookTable({
   lockDate = null,
   onEditEntry = null,
   onDeleteEntry = null,
+  onViewHistory = null,
 }) {
   const showCash = accountFilter === "all" || accountFilter === "cash"
   const showBank = accountFilter === "all" || accountFilter === "bank"
@@ -215,28 +217,45 @@ export default function DayBookTable({
                     </td>
                   )}
                   <td className="p-3 text-center">
-                    {isManual && !isLocked && !entry.isAutoAdjustment ? (
+                    {isManual && !entry.isAutoAdjustment ? (
                       <div className="flex items-center justify-center gap-1">
-                        <Tooltip content="Edit entry">
+                        {!isLocked && (
+                          <Tooltip content="Edit entry">
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onEditEntry && onEditEntry(entry)}
+                              aria-label="Edit entry"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-ink-muted" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip content="View history">
                           <IconButton
                             size="sm"
                             variant="ghost"
-                            onClick={() => onEditEntry && onEditEntry(entry)}
-                            aria-label="Edit entry"
+                            onClick={() => onViewHistory && onViewHistory(entry)}
+                            aria-label="View history"
                           >
-                            <Edit2 className="w-3.5 h-3.5 text-ink-muted" />
+                            <History className="w-3.5 h-3.5 text-ink-muted" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip content="Delete entry">
-                          <IconButton
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onDeleteEntry && onDeleteEntry(entry)}
-                            aria-label="Delete entry"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-danger" />
-                          </IconButton>
-                        </Tooltip>
+                        {!isLocked && (
+                          <Tooltip content="Delete entry">
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteEntry && onDeleteEntry(entry)}
+                              aria-label="Delete entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-danger" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {isLocked && (
+                          <span className="text-ink-muted text-[10px] ml-1">Locked</span>
+                        )}
                       </div>
                     ) : isLocked ? (
                       <span className="text-ink-muted text-[10px]">Locked</span>

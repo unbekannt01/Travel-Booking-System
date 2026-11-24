@@ -5,6 +5,7 @@ import {
   Badge,
   Input,
   Spinner,
+  Tabs,
   FOCUS_RING_CLASS,
 } from "../ui"
 import { PanelErrorBoundary } from "../common/PanelErrorBoundary"
@@ -181,7 +182,7 @@ export default function Trash() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-[var(--yh-text-primary)] flex items-center gap-2">
-              <Trash2 className="h-6 w-6 text-[var(--yh-color-danger)]" aria-hidden="true" />
+              <Trash2 className="h-6 w-6 text-danger" aria-hidden="true" />
               <span>Trash & Recycle Bin</span>
             </h1>
             <p className="text-sm text-[var(--yh-text-secondary)] mt-1">
@@ -208,37 +209,21 @@ export default function Trash() {
 
         {/* Tabs & Search Filter */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Tabs */}
-          <div className="flex overflow-x-auto gap-2 pb-1 sm:pb-0" role="tablist" aria-label="Trash entity tabs">
-            {TABS.map((tab) => {
-              const count = data.counts[tab.id] || 0
-              const isActive = activeTab === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => {
-                    setActiveTab(tab.id)
-                    setPage(1)
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-[var(--yh-radius-md)] text-sm font-medium transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "bg-[var(--yh-color-primary)] text-white shadow-sm"
-                      : "bg-[var(--yh-bg-surface)] text-[var(--yh-text-secondary)] hover:text-[var(--yh-text-primary)] border border-[var(--yh-border-default)]"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`px-1.5 py-0.5 text-xs rounded-full font-bold ${
-                      isActive ? "bg-white/20 text-white" : "bg-[var(--yh-bg-muted)] text-[var(--yh-text-muted)]"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
+          {/* Tabs using shared accessible primitive */}
+          <div className="flex-1 min-w-0">
+            <Tabs
+              ariaLabel="Trash entity tabs"
+              value={activeTab}
+              onChange={(nextTab) => {
+                setActiveTab(nextTab)
+                setPage(1)
+              }}
+              items={TABS.map((tab) => ({
+                id: tab.id,
+                label: tab.label,
+                badge: data.counts[tab.id] || 0,
+              }))}
+            />
           </div>
 
           {/* Search box */}
@@ -284,7 +269,7 @@ export default function Trash() {
               >
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="border-b border-[var(--yh-border-default)] bg-[var(--yh-bg-muted)] text-[var(--yh-text-secondary)] text-xs uppercase font-semibold">
+                    <tr className="border-b border-[var(--yh-border-default)] bg-surface-muted text-[var(--yh-text-secondary)] text-xs uppercase font-semibold">
                       <th className="py-3 px-4">Type</th>
                       <th className="py-3 px-4">Record Details</th>
                       <th className="py-3 px-4">Amount</th>
@@ -328,12 +313,12 @@ export default function Trash() {
                           </td>
                           <td className="py-3 px-4">
                             {isRestoreAllowed ? (
-                              <span className="inline-flex items-center text-xs text-[var(--yh-color-success)] font-medium">
+                              <span className="inline-flex items-center text-xs text-success font-medium">
                                 Ready to restore
                               </span>
                             ) : (
                               <span
-                                className="inline-flex items-center gap-1 text-xs text-[var(--yh-color-danger)] font-medium"
+                                className="inline-flex items-center gap-1 text-xs text-danger font-medium"
                                 title={disabledReason}
                               >
                                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -368,7 +353,7 @@ export default function Trash() {
                                 onClick={() => handleRestore(item)}
                                 title={!isRestoreAllowed ? disabledReason : "Restore record to active database"}
                                 aria-label={`Restore ${item.title}`}
-                                className={isRestoreAllowed ? "text-[var(--yh-color-primary)] border-[var(--yh-color-primary)] hover:bg-[var(--yh-color-primary)] hover:text-white" : ""}
+                                className={isRestoreAllowed ? "text-brand border-brand hover:bg-brand hover:text-brand-fg" : ""}
                               >
                                 <RotateCcw className={`h-3.5 w-3.5 mr-1.5 ${restoringId === item._id ? "animate-spin" : ""}`} aria-hidden="true" />
                                 Restore
@@ -419,7 +404,7 @@ export default function Trash() {
                         })}
                       </span>
                       {!isRestoreAllowed && (
-                        <span className="text-[var(--yh-color-danger)] font-medium flex items-center gap-1">
+                        <span className="text-danger font-medium flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" aria-hidden="true" />
                           Locked
                         </span>
@@ -427,7 +412,7 @@ export default function Trash() {
                     </div>
 
                     {!isRestoreAllowed && disabledReason && (
-                      <p className="text-xs text-[var(--yh-color-danger)] bg-[var(--yh-bg-muted)] p-2 rounded">
+                      <p className="text-xs text-danger bg-surface-muted p-2 rounded">
                         {disabledReason}
                       </p>
                     )}
@@ -454,7 +439,7 @@ export default function Trash() {
                         disabled={!isRestoreAllowed || restoringId === item._id}
                         onClick={() => handleRestore(item)}
                         className={`flex-1 text-xs ${
-                          isRestoreAllowed ? "text-[var(--yh-color-primary)] border-[var(--yh-color-primary)]" : ""
+                          isRestoreAllowed ? "text-brand border-brand" : ""
                         }`}
                       >
                         <RotateCcw className={`h-3.5 w-3.5 mr-1 ${restoringId === item._id ? "animate-spin" : ""}`} aria-hidden="true" />

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 import {
   Plus,
   Trash2,
@@ -27,6 +27,7 @@ import {
   HelpCircle,
   Clock,
   CheckCircle2,
+  History,
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts"
 import { useToast } from "./common/useToast"
@@ -179,6 +180,8 @@ function normalizeIncomingExpense(exp) {
 
 const EMPTY_FALLBACK_ARRAY = Object.freeze([])
 
+const HistoryDrawer = lazy(() => import("./history/HistoryDrawer"))
+
 export default function ExpenseTracker({
   bookings = EMPTY_FALLBACK_ARRAY,
   tours = EMPTY_FALLBACK_ARRAY,
@@ -221,6 +224,7 @@ export default function ExpenseTracker({
   // Modal & Form state
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingExpenseId, setEditingExpenseId] = useState(null)
+  const [historyExpense, setHistoryExpense] = useState(null)
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     category: "fuel",
@@ -1039,7 +1043,7 @@ export default function ExpenseTracker({
                     <RechartsTooltip
                       formatter={(val) => [formatINR(val, 2), "Amount"]}
                       contentStyle={{
-                        backgroundColor: "var(--yh-surface-raised)",
+                        backgroundColor: "var(--yh-surface-elevated)",
                         borderColor: "var(--yh-border-subtle)",
                         borderRadius: "var(--yh-radius-md)",
                         color: "var(--yh-ink)",
@@ -1197,9 +1201,18 @@ export default function ExpenseTracker({
                             <IconButton
                               variant="ghost"
                               size="sm"
+                              aria-label={`View history for expense ${getCategoryLabel(exp.category)}`}
+                              onClick={() => setHistoryExpense(exp)}
+                              className="min-h-11 sm:min-h-9"
+                            >
+                              <History className="h-3.5 w-3.5" aria-hidden="true" />
+                            </IconButton>
+                            <IconButton
+                              variant="ghost"
+                              size="sm"
                               aria-label={`Delete expense ${getCategoryLabel(exp.category)}`}
                               onClick={() => setDeletingExpense(exp)}
-                              className="text-status-danger hover:bg-status-danger/10"
+                              className="text-status-danger hover:bg-status-danger/10 min-h-11 sm:min-h-9"
                             >
                               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             </IconButton>
@@ -1270,6 +1283,14 @@ export default function ExpenseTracker({
                           onClick={() => handleEditExpense(exp)}
                         >
                           <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </IconButton>
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
+                          aria-label="View history"
+                          onClick={() => setHistoryExpense(exp)}
+                        >
+                          <History className="h-3.5 w-3.5" aria-hidden="true" />
                         </IconButton>
                         <IconButton
                           variant="ghost"
@@ -1540,6 +1561,21 @@ export default function ExpenseTracker({
           cancelText="Cancel"
           isDestructive={true}
         />
+
+        {/* History Drawer */}
+        <Suspense fallback={null}>
+          <HistoryDrawer
+            isOpen={Boolean(historyExpense)}
+            onClose={() => setHistoryExpense(null)}
+            entityType="expense"
+            entityId={historyExpense?._id || historyExpense?.id}
+            entityLabel={
+              historyExpense
+                ? `${getCategoryLabel(historyExpense.category)} - ${formatINR(historyExpense.amount || 0)}`
+                : ""
+            }
+          />
+        </Suspense>
       </div>
     </PanelErrorBoundary>
   )

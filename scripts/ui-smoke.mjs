@@ -2,6 +2,9 @@ import { chromium } from "playwright"
 import AxeBuilder from "@axe-core/playwright"
 import fs from "node:fs"
 import path from "node:path"
+import { formatTabLabel, formatScreenSummary } from "./smokeFormatter.mjs"
+
+export { formatTabLabel, formatScreenSummary }
 
 // --- CLI ARGUMENTS & CONFIGURATION ---
 const args = process.argv.slice(2)
@@ -695,13 +698,7 @@ async function run() {
           if (!isVisible) continue
           tabsFound++
           const raw = (await tabLoc.innerText().catch(() => "")) || ""
-          const singleLineLabel =
-            raw
-              .split(/\r?\n+/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .join(" ")
-              .replace(/\s+/g, " ") || `Tab ${i + 1}`
+          const singleLineLabel = formatTabLabel(raw) || `Tab ${i + 1}`
           const clean =
             singleLineLabel
               .toLowerCase()
@@ -930,19 +927,19 @@ async function run() {
 
     const tabLabel = discoveredTabCount === 1 ? "1 tab" : `${discoveredTabCount} tabs`
 
-    // Task C.4 Terminal Summary: 1 summary line per screen
-    if (totalScreenErrors === 0 && screenBreaches === 0 && !screenBudgetExceeded) {
-      console.log(
-        `[ui:smoke] ✓ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${tabLabel}): ${totalStatesEvaluated} states, 0 errors, ${(screenDuration / 1000).toFixed(1)}s`,
-      )
-    } else {
-      const parts = []
-      if (totalScreenErrors > 0) parts.push(`${totalScreenErrors} error${totalScreenErrors > 1 ? "s" : ""}`)
-      if (screenBreaches > 0) parts.push(`${screenBreaches} budget breach`)
-      console.log(
-        `[ui:smoke] ✗ ${screen.label} (${activeViewports.length} viewports, ${activeThemes.length} themes, ${tabLabel}): ${totalStatesEvaluated} states, ${parts.join(", ")}, ${(screenDuration / 1000).toFixed(1)}s`,
-      )
-    }
+    // Task C.4 Terminal Summary: 1 summary line per screen, single write
+    const summaryLine = formatScreenSummary({
+      screenLabel: screen.label,
+      viewportCount: activeViewports.length,
+      themeCount: activeThemes.length,
+      tabLabel,
+      statesCount: totalStatesEvaluated,
+      errorCount: totalScreenErrors,
+      breachCount: screenBreaches,
+      durationMs: screenDuration,
+      budgetExceeded: screenBudgetExceeded,
+    })
+    process.stdout.write(summaryLine + "\n")
 
     // Write report incrementally after each screen!
     writeReport(false)

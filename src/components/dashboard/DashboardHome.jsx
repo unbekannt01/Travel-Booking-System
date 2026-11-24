@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, lazy, Suspense } from "react"
 import {
   IndianRupee,
   Ticket,
@@ -15,6 +15,7 @@ import {
   ArrowRight,
   AlertTriangle,
   Plus,
+  History,
 } from "lucide-react"
 import PaymentTracker from "../PaymentTracker"
 import { formatDisplayDate } from "../../utils/date"
@@ -56,6 +57,8 @@ const STATUS_FILTER_CHIPS = [
   { id: "cancelled", label: "Cancelled" },
 ]
 
+const HistoryDrawer = lazy(() => import("../history/HistoryDrawer"))
+
 export default function DashboardHome({
   bookings = [],
   tours = [],
@@ -73,6 +76,7 @@ export default function DashboardHome({
 }) {
   const [recentSearch, setRecentSearch] = useState("")
   const [recentStatus, setRecentStatus] = useState("all") // all | paid | pending | cancelled
+  const [historyBooking, setHistoryBooking] = useState(null)
 
   const now = useMemo(() => new Date(), [])
 
@@ -701,6 +705,18 @@ export default function DashboardHome({
                                 </IconButton>
                               </Tooltip>
 
+                              <Tooltip content="Change History">
+                                <IconButton
+                                  aria-label={`View history for booking ${b.invoiceNo}`}
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setHistoryBooking(b)}
+                                  className="min-h-11 sm:min-h-9"
+                                >
+                                  <History size={16} />
+                                </IconButton>
+                              </Tooltip>
+
                               {!isCancelled ? (
                                 <Tooltip content="Edit Booking">
                                   <IconButton
@@ -861,11 +877,20 @@ export default function DashboardHome({
                           </IconButton>
                         ) : null}
                         <IconButton
+                          aria-label={`View history for booking ${b.invoiceNo}`}
+                          variant="outline"
+                          size="md"
+                          onClick={() => setHistoryBooking(b)}
+                          className="min-h-11 sm:min-h-9"
+                        >
+                          <History size={16} />
+                        </IconButton>
+                        <IconButton
                           aria-label={`Delete booking ${b.invoiceNo}`}
                           variant="outline"
                           size="md"
                           onClick={() => handleDeleteBooking(bookingId)}
-                          className="text-danger-text hover:bg-danger-soft"
+                          className="text-danger-text hover:bg-danger-soft min-h-11 sm:min-h-9"
                         >
                           <Trash2 size={16} />
                         </IconButton>
@@ -886,6 +911,18 @@ export default function DashboardHome({
         onVoidPayment={handleVoidPayment}
         user={user}
       />
+
+      {historyBooking && (
+        <Suspense fallback={null}>
+          <HistoryDrawer
+            isOpen={!!historyBooking}
+            onClose={() => setHistoryBooking(null)}
+            entityType="booking"
+            entityId={historyBooking._id || historyBooking.id}
+            title={`Booking #${historyBooking.invoiceNo || ""} History`}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

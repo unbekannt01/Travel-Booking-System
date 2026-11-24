@@ -72,7 +72,7 @@ export default function HistoryDrawer({
       onClose={onClose}
       title={
         <div className="flex items-center gap-2">
-          <History className="h-5 w-5 text-[var(--yh-color-primary)]" aria-hidden="true" />
+          <History className="h-5 w-5 text-brand" aria-hidden="true" />
           <span>{title}</span>
         </div>
       }
@@ -92,8 +92,8 @@ export default function HistoryDrawer({
                 onClick={() => setLanguage(lang)}
                 className={`px-2 py-0.5 text-xs rounded transition-colors ${
                   language === lang
-                    ? "bg-[var(--yh-color-primary)] text-white font-medium"
-                    : "bg-[var(--yh-bg-muted)] text-[var(--yh-text-secondary)] hover:text-[var(--yh-text-primary)]"
+                    ? "bg-brand text-brand-fg font-medium"
+                    : "bg-surface-muted text-[var(--yh-text-secondary)] hover:text-[var(--yh-text-primary)]"
                 }`}
               >
                 {lang === "en" ? "EN" : lang === "hi" ? "हिन्दी" : "ગુજરાતી"}
@@ -127,7 +127,7 @@ export default function HistoryDrawer({
               return (
                 <div key={item._id || idx} className="relative group">
                   {/* Timeline dot */}
-                  <div className="absolute -left-6 top-1.5 w-3 h-3 rounded-full border-2 border-[var(--yh-bg-surface)] bg-[var(--yh-color-primary)] shadow-sm" />
+                  <div className="absolute -left-6 top-1.5 w-3 h-3 rounded-full border-2 border-[var(--yh-bg-surface)] bg-brand shadow-sm" />
 
                   <div className="bg-[var(--yh-bg-subtle)] border border-[var(--yh-border-default)] rounded-[var(--yh-radius-md)] p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -162,7 +162,7 @@ export default function HistoryDrawer({
                         <ul className="space-y-1 text-xs text-[var(--yh-text-primary)]">
                           {changeSummaries.map((summary, sIdx) => (
                             <li key={sIdx} className="flex items-start gap-1.5">
-                              <ArrowRight className="h-3 w-3 mt-0.5 text-[var(--yh-color-primary)] shrink-0" aria-hidden="true" />
+                              <ArrowRight className="h-3 w-3 mt-0.5 text-brand shrink-0" aria-hidden="true" />
                               <span>{summary}</span>
                             </li>
                           ))}

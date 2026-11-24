@@ -389,7 +389,7 @@ export default function TourAnalytics({ bookings = [], tours = [], user = null }
                     />
                     <Bar dataKey="bookings" fill="var(--yh-brand)" name="Bookings" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="passengers" fill="var(--yh-success)" name="Passengers" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="revenue" fill="var(--yh-accent-warm)" name="Revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="revenue" fill="var(--yh-accent)" name="Revenue" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

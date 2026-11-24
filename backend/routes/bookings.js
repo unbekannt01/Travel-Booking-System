@@ -589,7 +589,25 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     const before = booking.toObject()
 
-    // Check books lock ONLY if money-affecting fields are being updated
+    // Check books lock if money-affecting fields or advance/date are being updated
+    const isDateChanging =
+      req.body.date !== undefined &&
+      new Date(req.body.date).toISOString().slice(0, 10) !== new Date(booking.date).toISOString().slice(0, 10)
+
+    const isAdvanceOrTotalChanging =
+      req.body.advanceReceived !== undefined ||
+      req.body.totalAmount !== undefined ||
+      req.body.discount !== undefined ||
+      req.body.passengers !== undefined ||
+      isDateChanging
+
+    if (((booking.advanceReceived || 0) > 0 || req.body.advanceReceived !== undefined) && isAdvanceOrTotalChanging) {
+      await assertBooksOpen(req.user.id, booking.date)
+      if (isDateChanging) {
+        await assertBooksOpen(req.user.id, req.body.date)
+      }
+    }
+
     const isMoneyFieldChanging =
       req.body.cancellationCharge !== undefined ||
       req.body.refundAmount !== undefined ||
@@ -778,6 +796,10 @@ router.put("/:id", verifyToken, async (req, res) => {
     if (req.body.journeyDate !== undefined) {
       const { start } = getDayBounds(req.body.journeyDate)
       booking.journeyDate = start
+    }
+
+    if (req.body.date !== undefined) {
+      booking.date = new Date(req.body.date)
     }
 
     booking.totalAmount = pricing.finalTotal
