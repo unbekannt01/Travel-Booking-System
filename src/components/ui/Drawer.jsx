@@ -65,7 +65,7 @@ export function Drawer({
     >
       {/* Backdrop overlay */}
       <div
-        className="fixed inset-0 bg-ink/50 backdrop-blur-[2px]"
+        className="fixed inset-0 z-0 bg-ink/50 backdrop-blur-[2px]"
         aria-hidden="true"
         onMouseDown={closeOnBackdrop && onClose ? onClose : undefined}
       />
@@ -77,7 +77,7 @@ export function Drawer({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={cn(
-          "bg-surface-elevated text-ink border-border-subtle shadow-[var(--yh-shadow-overlay)] flex flex-col overflow-hidden focus:outline-none",
+          "relative z-10 bg-surface-elevated text-ink border-border-subtle shadow-[var(--yh-shadow-overlay)] flex flex-col overflow-hidden focus:outline-none",
           layout.panel,
           className,
         )}

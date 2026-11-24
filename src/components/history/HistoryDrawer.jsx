@@ -13,6 +13,12 @@ const ACTION_BADGES = {
   cancelled: { variant: "danger", labelKey: "cancelled" },
 }
 
+const EMPTY_MESSAGES = {
+  en: "No changes recorded for this item yet. Change history is recorded from the version that introduced it, so older edits are not available.",
+  hi: "इस आइटम के लिए अभी तक कोई बदलाव दर्ज नहीं किया गया है। परिवर्तन इतिहास उस संस्करण से दर्ज किया गया है जिसमें इसे पेश किया गया था, इसलिए पुराने संपादन उपलब्ध नहीं हैं।",
+  gu: "આ આઇટમ માટે હજુ સુધી કોઈ ફેરફારો નોંધાયા નથી. ફેરફાર ઇતિહાસ તે સંસ્કરણથી રેકોર્ડ કરવામાં આવ્યો છે જેમાં તે રજૂ કરવામાં આવ્યો હતો, તેથી જૂના ફેરફારો ઉપલબ્ધ નથી.",
+}
+
 /**
  * Accessible history timeline slide-over drawer.
  * Displays audit log and change diffs without personal data.
@@ -82,18 +88,18 @@ export default function HistoryDrawer({
     >
       <div className="space-y-4">
         {/* Language selector toggle */}
-        <div className="flex items-center justify-between border-b border-[var(--yh-border-default)] pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--yh-border-default)] pb-3">
           <span className="text-xs font-medium text-[var(--yh-text-secondary)]">Language / भाषा / ભાષા:</span>
-          <div className="flex gap-1" role="group" aria-label="Summary language selection">
+          <div className="flex gap-1.5" role="group" aria-label="Summary language selection">
             {["en", "hi", "gu"].map((lang) => (
               <button
                 key={lang}
                 type="button"
                 onClick={() => setLanguage(lang)}
-                className={`px-2 py-0.5 text-xs rounded transition-colors ${
+                className={`min-h-[44px] min-w-[44px] px-3 py-2 text-xs font-semibold rounded-[var(--yh-radius-md)] flex items-center justify-center transition-colors cursor-pointer ${
                   language === lang
-                    ? "bg-brand text-brand-fg font-medium"
-                    : "bg-surface-muted text-[var(--yh-text-secondary)] hover:text-[var(--yh-text-primary)]"
+                    ? "bg-brand text-brand-fg shadow-xs"
+                    : "bg-surface-muted text-[var(--yh-text-secondary)] hover:text-[var(--yh-text-primary)] hover:bg-surface-hover"
                 }`}
               >
                 {lang === "en" ? "EN" : lang === "hi" ? "हिन्दी" : "ગુજરાતી"}
@@ -112,9 +118,9 @@ export default function HistoryDrawer({
             <p className="text-xs text-[var(--yh-text-secondary)]">Loading change timeline...</p>
           </div>
         ) : history.length === 0 ? (
-          <div className="text-center py-12 text-[var(--yh-text-secondary)] text-sm">
+          <div className="text-center py-12 text-[var(--yh-text-secondary)] text-sm px-4">
             <History className="h-8 w-8 mx-auto mb-2 opacity-40" aria-hidden="true" />
-            <p>No change events recorded for this item yet.</p>
+            <p className="leading-relaxed">{EMPTY_MESSAGES[language] || EMPTY_MESSAGES.en}</p>
           </div>
         ) : (
           <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[var(--yh-border-default)]">

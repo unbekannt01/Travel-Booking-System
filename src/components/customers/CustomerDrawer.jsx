@@ -157,7 +157,7 @@ export default function CustomerDrawer({
       onClose={onClose}
       title={customer?.name || "Customer Details"}
       description={customer ? `Customer ID: ${customer.id || customer._id}` : "Loading traveler details..."}
-      size="lg"
+      className="w-full max-w-[min(100vw,40rem)]"
     >
       {loading && (
         <div className="flex flex-col items-center justify-center py-20 space-y-3">
@@ -188,10 +188,10 @@ export default function CustomerDrawer({
       )}
 
       {!loading && customer && (
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
           {/* Header Action Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-[var(--yh-radius-lg)] bg-surface-muted border border-border-subtle">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-[var(--yh-radius-lg)] bg-surface-muted border border-border-subtle min-w-0">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <Badge variant="outline" size="md">
                 Language: {LANGUAGE_LABELS[customer.language] || customer.language}
               </Badge>
@@ -206,10 +206,11 @@ export default function CustomerDrawer({
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <Button
                 variant="accent"
                 size="sm"
+                className="min-h-11"
                 leftIcon={<PlusCircle className="w-4 h-4" />}
                 onClick={() => {
                   if (onNewBooking) onNewBooking(customer)
@@ -221,6 +222,7 @@ export default function CustomerDrawer({
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 leftIcon={<FileText className="w-4 h-4" />}
                 onClick={() => setShowStatementModal(true)}
               >
@@ -229,6 +231,7 @@ export default function CustomerDrawer({
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 leftIcon={<MessageSquare className="w-4 h-4" />}
                 onClick={() => setShowReminderModal(true)}
                 disabled={customer.whatsappOptOut || (summary && summary.totalOutstanding <= 0)}
@@ -238,6 +241,7 @@ export default function CustomerDrawer({
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 leftIcon={<History className="w-4 h-4" />}
                 onClick={() => setShowHistoryModal(true)}
               >
@@ -246,6 +250,7 @@ export default function CustomerDrawer({
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 leftIcon={<Edit2 className="w-4 h-4" />}
                 onClick={() => {
                   if (onEdit) onEdit(customer)
@@ -256,7 +261,7 @@ export default function CustomerDrawer({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-danger hover:bg-danger-soft"
+                className="text-danger hover:bg-danger-soft min-h-11"
                 leftIcon={<Trash2 className="w-4 h-4" />}
                 onClick={handleDelete}
                 aria-label={`Delete customer ${customer.name}`}
@@ -384,40 +389,44 @@ export default function CustomerDrawer({
 
           {/* Authoritative Financial & Booking Metrics */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 min-w-0">
               <StatCard
+                className="min-w-0"
                 icon={<IndianRupee className="w-4 h-4" />}
                 label="Booked Revenue"
                 value={formatINR(summary.totalBookedRevenue)}
-                description={`${summary.totalBookings} active trips`}
-                variant="primary"
+                hint={`${summary.totalBookings} active trips`}
+                tone="brand"
               />
               <StatCard
+                className="min-w-0"
                 icon={<Calendar className="w-4 h-4" />}
                 label="Outstanding"
                 value={formatINR(summary.totalOutstanding)}
-                description={summary.totalOutstanding > 0 ? "Payment due" : "Paid in full"}
-                variant={summary.totalOutstanding > 0 ? "warning" : "success"}
+                hint={summary.totalOutstanding > 0 ? "Payment due" : "Paid in full"}
+                tone={summary.totalOutstanding > 0 ? "warning" : "success"}
               />
               <StatCard
+                className="min-w-0"
                 icon={<IndianRupee className="w-4 h-4" />}
                 label="Collected"
                 value={formatINR(summary.totalCollected)}
-                description="Cash / UPI received"
-                variant="neutral"
+                hint="Cash / UPI received"
+                tone="info"
               />
               <StatCard
+                className="min-w-0"
                 icon={<Calendar className="w-4 h-4" />}
                 label="Passengers"
                 value={summary.totalPassengers}
-                description="Berths booked"
-                variant="neutral"
+                hint="Berths booked"
+                tone="neutral"
               />
             </div>
           )}
 
           {/* Booking History Table */}
-          <Card elevation="sm" padding="md" className="space-y-3">
+          <Card elevation="sm" padding="md" className="space-y-3 min-w-0">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted">
                 Booking History ({bookings.length})
@@ -434,59 +443,100 @@ export default function CustomerDrawer({
                 No bookings recorded for this customer yet.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table ariaLabel="Customer booking history">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice #</TableHead>
-                      <TableHead>Tour Name</TableHead>
-                      <TableHead>Journey Date</TableHead>
-                      <TableHead align="right">Amount</TableHead>
-                      <TableHead align="right">Paid</TableHead>
-                      <TableHead align="right">Balance</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bookings.map((b) => {
-                      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
-                      const isCancelled = b.status === "Cancelled"
-                      return (
-                        <TableRow key={b.id || b._id}>
-                          <TableCell className="font-semibold text-ink font-tabular">
-                            #{b.invoiceNo}
-                          </TableCell>
-                          <TableCell className="text-ink font-medium">
-                            {b.tourName}
-                          </TableCell>
-                          <TableCell className="text-xs text-ink-muted font-tabular">
-                            {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}
-                          </TableCell>
-                          <TableCell align="right" className="font-tabular">
-                            {formatINR(b.totalAmount)}
-                          </TableCell>
-                          <TableCell align="right" className="font-tabular text-success">
-                            {formatINR(b.advanceReceived)}
-                          </TableCell>
-                          <TableCell
-                            align="right"
-                            className={`font-tabular font-bold ${
-                              !isCancelled && balance > 0 ? "text-warning" : "text-ink-muted"
-                            }`}
-                          >
-                            {isCancelled ? "₹0.00" : formatINR(balance)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
-                              {b.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+              <>
+                {/* Desktop/Tablet Table View (>=sm) */}
+                <div className="hidden sm:block">
+                  <Table ariaLabel="Customer booking history">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Invoice #</TableHead>
+                        <TableHead>Tour Name</TableHead>
+                        <TableHead>Journey Date</TableHead>
+                        <TableHead align="right">Amount</TableHead>
+                        <TableHead align="right">Paid</TableHead>
+                        <TableHead align="right">Balance</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bookings.map((b) => {
+                        const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+                        const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+                        return (
+                          <TableRow key={b.id || b._id}>
+                            <TableCell className="font-semibold text-ink font-tabular whitespace-nowrap">
+                              #{b.invoiceNo}
+                            </TableCell>
+                            <TableCell className="text-ink font-medium">
+                              {b.tourName}
+                            </TableCell>
+                            <TableCell className="text-xs text-ink-muted font-tabular whitespace-nowrap">
+                              {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}
+                            </TableCell>
+                            <TableCell align="right" className="font-tabular">
+                              {formatINR(b.totalAmount)}
+                            </TableCell>
+                            <TableCell align="right" className="font-tabular text-success">
+                              {formatINR(b.advanceReceived)}
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              className={`font-tabular font-bold ${
+                                !isCancelled && balance > 0 ? "text-warning" : "text-ink-muted"
+                              }`}
+                            >
+                              {isCancelled ? "₹0.00" : formatINR(balance)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
+                                {b.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile Stacked Card List (<sm, zero horizontal scroll at 360px) */}
+                <div
+                  role="region"
+                  aria-label="Customer booking history list"
+                  /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be focusable for keyboard arrow scrolling */
+                  tabIndex={0}
+                  className="sm:hidden space-y-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-[var(--yh-radius-md)]"
+                >
+                  {bookings.map((b) => {
+                    const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+                    const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
+                    return (
+                      <div
+                        key={b.id || b._id}
+                        className="p-3 bg-surface-muted/50 border border-border-subtle rounded-[var(--yh-radius-md)] space-y-2 text-xs"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-ink font-tabular whitespace-nowrap">#{b.invoiceNo}</span>
+                          <Badge variant={isCancelled ? "danger" : b.isPaid ? "success" : "warning"} size="sm">
+                            {b.status}
+                          </Badge>
+                        </div>
+                        <div className="text-ink font-medium">{b.tourName}</div>
+                        <div className="flex items-center justify-between text-ink-muted font-tabular">
+                          <span>Date: {b.journeyDate ? new Date(b.journeyDate).toLocaleDateString("en-IN") : "-"}</span>
+                          <span>Total: <strong className="text-ink">{formatINR(b.totalAmount)}</strong></span>
+                        </div>
+                        <div className="flex items-center justify-between font-tabular pt-1 border-t border-border-subtle">
+                          <span className="text-success font-medium">Paid: {formatINR(b.advanceReceived)}</span>
+                          <span className={!isCancelled && balance > 0 ? "text-warning font-bold" : "text-ink-muted"}>
+                            Due: {isCancelled ? "₹0.00" : formatINR(balance)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
           </Card>
 

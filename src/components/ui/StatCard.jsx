@@ -58,7 +58,7 @@ export function StatCard({
         <p className="text-xs font-semibold text-ink-muted uppercase tracking-wider truncate">
           {resolvedLabel}
         </p>
-        <p className="mt-1.5 text-2xl font-bold text-ink tabular-nums tracking-tight leading-none">
+        <p className="mt-1.5 text-lg sm:text-2xl font-bold text-ink tabular-nums tracking-tight leading-snug break-words">
           {value}
         </p>
         {resolvedHint ? <p className="mt-2 text-xs text-ink-secondary leading-snug">{resolvedHint}</p> : null}
