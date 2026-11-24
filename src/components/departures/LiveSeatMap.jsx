@@ -20,6 +20,7 @@ import SeatActionDrawer from "./SeatActionDrawer"
 import HoldModal from "./HoldModal"
 import MoveSeatModal from "./MoveSeatModal"
 import { formatDisplayDate } from "../../utils/date"
+import { formatSeatLabel } from "../../utils/formatters"
 import { getAuthToken } from "../../data/adapters/rest"
 
 export default function LiveSeatMap({
@@ -399,7 +400,7 @@ export default function LiveSeatMap({
                     {selectedSeatIds.length} seat(s) selected
                   </Badge>
                   <span className="text-xs font-semibold text-ink">
-                    ({selectedSeatIds.join(", ")})
+                    ({selectedSeatIds.map((s) => formatSeatLabel(s)).join(", ")})
                   </span>
                 </div>
 

@@ -3,6 +3,7 @@ import { Clock, ShieldAlert, AlertCircle, Check } from "lucide-react"
 import { Modal, Button, Input, Select, Textarea, Field } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { getAuthToken } from "../../data/adapters/rest"
+import { formatSeatLabel } from "../../utils/formatters"
 
 const PRESET_DURATIONS = [
   { label: "15 min", value: 15 },
@@ -152,7 +153,7 @@ export default function HoldModal({
                 key={s}
                 className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-brand-soft text-brand border border-border-subtle"
               >
-                {s}
+                {formatSeatLabel(s)}
               </span>
             ))}
           </div>

@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { Drawer, Button, ConfirmDialog, Field, Select, Input } from "../ui"
-import { formatINR } from "../../utils/formatters"
+import { formatINR, formatSeatLabel } from "../../utils/formatters"
 import { getAuthToken } from "../../data/adapters/rest"
 import { useToast } from "../common/ToastContext"
 
@@ -58,7 +58,7 @@ export default function SeatActionDrawer({
         const data = await res.json()
         throw new Error(data.message || "Failed to release seat hold")
       }
-      toast.success(`Successfully released ${seat.kind || "hold"} on seat ${seat.seatNumber}`)
+      toast.success(`Successfully released ${seat.kind || "hold"} on seat ${formatSeatLabel(seat.seatId || seat.seatName || seat.seatNumber)}`)
       setReleaseConfirmOpen(false)
       onClose()
       if (onRefresh) onRefresh()
@@ -134,7 +134,7 @@ export default function SeatActionDrawer({
         title={
           <div className="flex items-center gap-2">
             <span className="font-bold text-ink">
-              Seat {seat.seatNumber} — {seat.seatName || seat.seatId}
+              Seat #{seat.seatNumber} — {formatSeatLabel(seat.seatId || seat.seatName)}
             </span>
           </div>
         }
@@ -461,7 +461,7 @@ export default function SeatActionDrawer({
         onCancel={() => setReleaseConfirmOpen(false)}
         onConfirm={handleRelease}
         title={seat.kind === "block" ? "Release Seat Block?" : "Release Customer Hold?"}
-        message={`Are you sure you want to release seat ${seat.seatNumber}? The seat will immediately become free and bookable for any customer.`}
+        message={`Are you sure you want to release seat ${formatSeatLabel(seat.seatId || seat.seatName || seat.seatNumber)}? The seat will immediately become free and bookable for any customer.`}
         confirmText="Release Seat"
         isDestructive
         loading={actionLoading}

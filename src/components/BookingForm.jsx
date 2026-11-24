@@ -421,7 +421,11 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       if (tour.pricingType === "fixed" || (tour.fixedPrice && !tour.pricingType)) {
         return sum + (Number(tour.fixedPrice) || 0)
       }
-      const isUpper = p.seatId?.startsWith("upper")
+      const isUpper = p.seatId
+        ? p.seatId.toLowerCase().startsWith("upper") ||
+          /-[Uu]\d+-/.test(p.seatId) ||
+          p.seatId.toLowerCase() === "rear-b2"
+        : false
       const price = isUpper ? Number(tour.upperPrice) || 0 : Number(tour.lowerPrice) || 0
       return sum + price
     }, 0)

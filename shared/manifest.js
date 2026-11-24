@@ -6,6 +6,7 @@
  */
 
 import { escapeHtml } from "./escapeHtml.js"
+import { getSeatLayout, layoutKeyForBusType, resolveSeatId, formatSeatDisplayName } from "./seatLayouts.js"
 
 export const MANIFEST_COLUMNS = Object.freeze([
   Object.freeze({
@@ -224,21 +225,69 @@ export function formatAadhaar(value, mode = "last4") {
 }
 
 /**
- * Natural comparator for seat labels (e.g. lower-L1, lower-L2, lower-L10, upper-R1).
+ * Natural comparator for seat labels, sorting by seat NUMBER from the layout,
+ * with unknown IDs sorted last.
+ *
+ * @param {string} seatA
+ * @param {string} seatB
+ * @param {string} [layoutKeyOrBusType]
+ * @returns {number}
  */
-export function compareSeats(seatA = "", seatB = "") {
+export function compareSeats(seatA = "", seatB = "", layoutKeyOrBusType) {
   if (!seatA && !seatB) return 0
   if (!seatA) return 1
   if (!seatB) return -1
-  return seatA.localeCompare(seatB, undefined, { numeric: true, sensitivity: "base" })
+
+  const lKey = layoutKeyOrBusType
+    ? (getSeatLayout(layoutKeyOrBusType) ? layoutKeyOrBusType : layoutKeyForBusType(layoutKeyOrBusType))
+    : null
+
+  const layout = lKey ? getSeatLayout(lKey) : null
+
+  if (layout) {
+    const canA = resolveSeatId(layout.key, seatA)
+    const canB = resolveSeatId(layout.key, seatB)
+    const sA = layout.seats.find((s) => s.id.toLowerCase() === canA.toLowerCase())
+    const sB = layout.seats.find((s) => s.id.toLowerCase() === canB.toLowerCase())
+
+    const numA = sA ? sA.number : 999999
+    const numB = sB ? sB.number : 999999
+
+    if (numA !== numB) {
+      return numA - numB
+    }
+  }
+
+  return String(seatA).localeCompare(String(seatB), undefined, { numeric: true, sensitivity: "base" })
 }
 
 /**
  * Formats seatId for display in manifest tables.
  */
-function displaySeat(seatId) {
+function displaySeat(seatId, layoutKeyOrBusType) {
   if (!seatId || typeof seatId !== "string" || !seatId.trim()) return "—"
   const clean = seatId.trim()
+  const lKey = layoutKeyOrBusType
+    ? (getSeatLayout(layoutKeyOrBusType) ? layoutKeyOrBusType : layoutKeyForBusType(layoutKeyOrBusType))
+    : null
+
+  const formatted = formatSeatDisplayName(lKey, clean)
+  if (formatted && formatted !== clean) {
+    return formatted
+  }
+
+  const canonMatch = clean.match(/^(left|right)-([LU]\d+)-([12])$/i)
+  if (canonMatch) {
+    const side = canonMatch[1].charAt(0).toUpperCase() + canonMatch[1].slice(1).toLowerCase()
+    return `${side} ${canonMatch[2].toUpperCase()}-${canonMatch[3]}`
+  }
+  if (/^rear-B[12]$/i.test(clean)) {
+    return `Rear ${clean.slice(-2).toUpperCase()}`
+  }
+  if (/^seat-\d+$/i.test(clean)) {
+    return `Seat ${clean.slice(5)}`
+  }
+
   const match = clean.match(/^(lower|upper)-([A-Za-z0-9-]+)$/i)
   if (match) {
     const deck = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()
@@ -255,6 +304,8 @@ function displaySeat(seatId) {
  *   columns: string[],
  *   sort?: "seat" | "name" | "booking",
  *   aadhaarMode?: "full" | "last4",
+ *   layoutKey?: string,
+ *   busType?: string,
  * }} options
  * @returns {Array<Record<string, any>>}
  */
@@ -263,13 +314,16 @@ export function buildManifestRows({
   columns = [],
   sort = "seat",
   aadhaarMode = "last4",
+  layoutKey,
+  busType,
 } = {}) {
   const normColumns = normalizeColumnSelection(columns)
   const list = [...(Array.isArray(passengers) ? passengers : [])]
+  const effectiveLayout = layoutKey || busType
 
   // Sort
   if (sort === "seat") {
-    list.sort((a, b) => compareSeats(a?.seat || a?.seatId, b?.seat || b?.seatId))
+    list.sort((a, b) => compareSeats(a?.seat || a?.seatId, b?.seat || b?.seatId, effectiveLayout))
   } else if (sort === "name") {
     list.sort((a, b) => (a?.name || "").localeCompare(b?.name || "", undefined, { sensitivity: "base" }))
   } else if (sort === "booking") {
@@ -293,7 +347,7 @@ export function buildManifestRows({
           row.name = p.name ? String(p.name).trim() : "—"
           break
         case "seat":
-          row.seat = displaySeat(p.seat || p.seatId)
+          row.seat = displaySeat(p.seat || p.seatId, effectiveLayout)
           break
         case "gender":
           row.gender = p.gender ? String(p.gender).trim().toUpperCase().charAt(0) : "—"
@@ -416,7 +470,14 @@ export function renderManifestHtml({
 } = {}) {
   const activeLang = I18N[language] || I18N.en
   const normColumns = normalizeColumnSelection(columns)
-  const rows = buildManifestRows({ passengers, columns: normColumns, sort, aadhaarMode })
+  const rows = buildManifestRows({
+    passengers,
+    columns: normColumns,
+    sort,
+    aadhaarMode,
+    layoutKey: departure?.layoutKey,
+    busType: departure?.busType,
+  })
 
   // Auto orientation: if columns count > 7 or orientation is explicit landscape
   const effectiveOrientation =

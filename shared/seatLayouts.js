@@ -1,434 +1,343 @@
 /**
- * Pure ESM Bus Seat Layouts and Definitions
+ * Pure ESM Bus Seat Layouts and Definitions (Part 6S-2b)
  *
- * Configurable bus seat layouts for YatraHub.
+ * Configurable bus seat layouts for YatraHub based on owner reference design.
  * Zero external dependencies, pure ESM, safe for backend and frontend.
  *
- * Supported Bus Layouts:
- * 1. sleeper-2x1-38: 2x1 sleeper, 38 seats (6 full rows of 3 + 2 extra berths in Row 7)
- * 2. sleeper-2x2-48: 2x2 sleeper, 48 seats (6 rows x 4 berths per deck: L1..L12, R1..R12)
- * 3. sleeper-2x2-40: 2x2 sleeper, 40 seats (5 rows x 4 berths per deck: L1..L10, R1..R10)
+ * Final Supported Bus Layouts:
+ * 1. sleeper-2x1-38: 2x1 sleeper, 38 berths (6 main rows + 2 rear seats B1, B2)
+ * 2. sleeper-2x2-48: 2x2 sleeper, 48 berths (6 rows x 4 berth boxes x 2 seats)
+ * 3. sleeper-2x2-40: 2x2 sleeper, 40 berths (5 rows x 4 berth boxes x 2 seats)
  * 4. seater-2x3-60: 2+3 seater, 60 seats (12 rows x 5 seats, numbered 1..60)
+ *
+ * Final Canonical Seat ID Convention:
+ * - Sleeper Main:
+ *   Left Lower:  left-L{row}-{slot}   (e.g. left-L1-1, left-L1-2)
+ *   Left Upper:  left-U{row}-{slot}   (e.g. left-U1-1, left-U1-2)
+ *   Right Lower: right-L{row}-{slot}  (e.g. right-L1-1, right-L1-2)
+ *   Right Upper: right-U{row}-{slot}  (e.g. right-U1-1, right-U1-2)
+ * - Sleeper Rear (2x1 only):
+ *   rear-B1 (Rear B1)
+ *   rear-B2 (Rear B2)
+ * - Seater:
+ *   seat-1 .. seat-60 (Display: "Seat 1" .. "Seat 60")
+ *
+ * Seat Numbering Rule (1..N):
+ * - Generated row-by-row from front to back:
+ *   1. Left Lower seats (1, 2)
+ *   2. Left Upper seats (1, 2)
+ *   3. Right Lower seats (1, 2)
+ *   4. Right Upper seats (1, 2)
+ * - Followed by Rear seats: Rear B1, Rear B2.
+ */
+
+/*
+ * ---------------------------------------------------------------------------------------------------------------------
+ * LEGACY TO CANONICAL SEAT ID MAPPING TABLE (resolveSeatId)
+ * ---------------------------------------------------------------------------------------------------------------------
+ * Raw Format Example             | Layout Context        | Meaning / Logic                          | Canonical ID Target
+ * ---------------------------------------------------------------------------------------------------------------------
+ * left-L1-1, right-U3-2, rear-B1 | Any Sleeper           | Already canonical new format             | Match verbatim
+ * seat-12, 12                    | Seater 60             | Canonical seat ID or numeric seat index  | seat-12
+ * lower-L2-1, upper-R3-2 (OLD)   | 2x2 Sleeper (40/48)   | Direct deck+side+row+slot notation       | left-L2-1, right-U3-2
+ * lower-L1, upper-R3 (6S-1)      | 2x2 Sleeper (40/48)   | Cabin index n without -slot:             | n=1 -> left-L1-1
+ *                                |                       | row=ceil(n/2), slot=((n-1)%2)+1          | n=3 -> left-L2-1
+ * lower-L1, upper-L3 (OLD/6S-1)  | 2x1 Sleeper (38)      | Single left berth                        | left-L1-1, left-U3-1
+ * lower-R1-1, upper-R2-2 (OLD)   | 2x1 Sleeper (38)      | Right double berths                      | right-L1-1, right-U2-2
+ * lower-L7, upper-L7 (6S-1 guess)| 2x1 Sleeper (38)      | 6S-1 guessed rear cabin                  | rear-B1, rear-B2
+ * lower-L1-1, upper-L1-1 (OLD)   | 2x1 Sleeper (38)      | Single left berth with redundant -1      | left-L1-1, left-U1-1
+ * L2-1, U3-1                     | 2x1 Sleeper (38)      | Shorthand side-box-slot (e.g. from scan) | left-L2-1, left-U3-1
+ * R2-1, R2-2                     | 2x1 Sleeper (38)      | Shorthand right double berth             | right-L2-1, right-L2-2
+ * 1L, 2L, 1U                     | 2x1 Sleeper (38)      | Old desktop shorthand                    | left-L1-1, left-L2-1, left-U1-1
+ * 1..N (numeric)                 | Any Layout            | Matches seat.number                      | seat with seat.number == N
+ * ---------------------------------------------------------------------------------------------------------------------
  */
 
 function buildSleeper2x1_38() {
   const seats = []
   let seatNumber = 1
 
-  // Lower Deck: 19 seats (Rows 1-6: Left 1 + Right 2; Row 7: Left 1)
-  // Row 1-6: L1..L6 (col 1), R1-1 (col 3), R1-2 (col 4)
+  // 6 main rows: Left boxes hold 1 seat; Right boxes hold 2 seats
   for (let r = 1; r <= 6; r++) {
-    // Left cabin L{r} (single berth)
+    // 1. Left Lower (1 seat)
     seats.push({
-      id: `lower-L${r}`,
-      name: `Left L${r} Lower`,
+      id: `left-L${r}-1`,
+      name: `Left L${r}-1`,
       number: seatNumber++,
       side: "left",
       deck: "lower",
       row: r,
       col: 1,
-      cabin: `L${r}`,
+      box: `L${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
       pairId: null,
     })
-    // Right cabin R{r} aisle
+
+    // 2. Left Upper (1 seat)
     seats.push({
-      id: `lower-R${r}-1`,
-      name: `Right R${r} Lower Aisle`,
+      id: `left-U${r}-1`,
+      name: `Left U${r}-1`,
+      number: seatNumber++,
+      side: "left",
+      deck: "upper",
+      row: r,
+      col: 2,
+      box: `U${r}`,
+      slot: 1,
+      section: "main",
+      kind: null,
+      pairId: null,
+    })
+
+    // 3. Right Lower (2 seats: slot 1, slot 2)
+    seats.push({
+      id: `right-L${r}-1`,
+      name: `Right L${r}-1`,
       number: seatNumber++,
       side: "right",
       deck: "lower",
       row: r,
       col: 3,
-      cabin: `R${r}`,
+      box: `L${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
-      pairId: `lower-R${r}-2`,
+      pairId: `right-L${r}-2`,
     })
-    // Right cabin R{r} window
     seats.push({
-      id: `lower-R${r}-2`,
-      name: `Right R${r} Lower Window`,
+      id: `right-L${r}-2`,
+      name: `Right L${r}-2`,
       number: seatNumber++,
       side: "right",
       deck: "lower",
       row: r,
-      col: 4,
-      cabin: `R${r}`,
+      col: 3,
+      box: `L${r}`,
+      slot: 2,
+      section: "main",
       kind: null,
-      pairId: `lower-R${r}-1`,
+      pairId: `right-L${r}-1`,
+    })
+
+    // 4. Right Upper (2 seats: slot 1, slot 2)
+    seats.push({
+      id: `right-U${r}-1`,
+      name: `Right U${r}-1`,
+      number: seatNumber++,
+      side: "right",
+      deck: "upper",
+      row: r,
+      col: 4,
+      box: `U${r}`,
+      slot: 1,
+      section: "main",
+      kind: null,
+      pairId: `right-U${r}-2`,
+    })
+    seats.push({
+      id: `right-U${r}-2`,
+      name: `Right U${r}-2`,
+      number: seatNumber++,
+      side: "right",
+      deck: "upper",
+      row: r,
+      col: 4,
+      box: `U${r}`,
+      slot: 2,
+      section: "main",
+      kind: null,
+      pairId: `right-U${r}-1`,
     })
   }
 
-  // Row 7 Lower: extra berth Left L7 (back row)
+  // Rear section: two wide boxes B1 and B2, each with one seat
   seats.push({
-    id: `lower-L7`,
-    name: `Left L7 Lower`,
+    id: `rear-B1`,
+    name: `Rear B1`,
     number: seatNumber++,
-    side: "left",
+    side: "rear",
     deck: "lower",
     row: 7,
     col: 1,
-    cabin: `L7`,
+    box: `B1`,
+    slot: 1,
+    section: "rear",
     kind: null,
     pairId: null,
   })
-
-  // Upper Deck: 19 seats (Rows 1-6: Left 1 + Right 2; Row 7: Left 1)
-  for (let r = 1; r <= 6; r++) {
-    // Left cabin L{r} (single berth)
-    seats.push({
-      id: `upper-L${r}`,
-      name: `Left L${r} Upper`,
-      number: seatNumber++,
-      side: "left",
-      deck: "upper",
-      row: r,
-      col: 1,
-      cabin: `L${r}`,
-      kind: null,
-      pairId: null,
-    })
-    // Right cabin R{r} aisle
-    seats.push({
-      id: `upper-R${r}-1`,
-      name: `Right R${r} Upper Aisle`,
-      number: seatNumber++,
-      side: "right",
-      deck: "upper",
-      row: r,
-      col: 3,
-      cabin: `R${r}`,
-      kind: null,
-      pairId: `upper-R${r}-2`,
-    })
-    // Right cabin R{r} window
-    seats.push({
-      id: `upper-R${r}-2`,
-      name: `Right R${r} Upper Window`,
-      number: seatNumber++,
-      side: "right",
-      deck: "upper",
-      row: r,
-      col: 4,
-      cabin: `R${r}`,
-      kind: null,
-      pairId: `upper-R${r}-1`,
-    })
-  }
-
-  // Row 7 Upper: extra berth Left L7 (back row)
   seats.push({
-    id: `upper-L7`,
-    name: `Left L7 Upper`,
+    id: `rear-B2`,
+    name: `Rear B2`,
     number: seatNumber++,
-    side: "left",
+    side: "rear",
     deck: "upper",
     row: 7,
-    col: 1,
-    cabin: `L7`,
+    col: 2,
+    box: `B2`,
+    slot: 1,
+    section: "rear",
     kind: null,
     pairId: null,
   })
 
   return {
     key: "sleeper-2x1-38",
-    label: "2x1 Sleeper (38 Berths)",
+    label: "2x1 Sleeper Luxury (38 berths)",
     shortLabel: "2x1 Sleeper 38",
     category: "sleeper",
     totalSeats: 38,
     grid: {
       decks: ["lower", "upper"],
-      rows: 7,
-      cols: 4, // col 1: Left window, col 2: Aisle, col 3: Right aisle, col 4: Right window
-      aisleCol: 2,
-    },
-    seats: Object.freeze(seats),
-  }
-}
-
-function buildSleeper2x2_48() {
-  const seats = []
-  let seatNumber = 1
-
-  // 6 rows, 4 berths per row per deck (2 Left + 2 Right)
-  // Left cabins L1..L12 (2 per row), Right cabins R1..R12 (2 per row)
-  // Lower deck: 24 berths (seats 1..24)
-  for (let r = 1; r <= 6; r++) {
-    const leftCabin1 = (r - 1) * 2 + 1
-    const leftCabin2 = (r - 1) * 2 + 2
-    const rightCabin1 = (r - 1) * 2 + 1
-    const rightCabin2 = (r - 1) * 2 + 2
-
-    // Col 1: Left Window
-    seats.push({
-      id: `lower-L${leftCabin1}`,
-      name: `Left L${leftCabin1} Lower`,
-      number: seatNumber++,
-      side: "left",
-      deck: "lower",
-      row: r,
-      col: 1,
-      cabin: `L${leftCabin1}`,
-      kind: null,
-      pairId: `lower-L${leftCabin2}`,
-    })
-    // Col 2: Left Aisle
-    seats.push({
-      id: `lower-L${leftCabin2}`,
-      name: `Left L${leftCabin2} Lower`,
-      number: seatNumber++,
-      side: "left",
-      deck: "lower",
-      row: r,
-      col: 2,
-      cabin: `L${leftCabin2}`,
-      kind: null,
-      pairId: `lower-L${leftCabin1}`,
-    })
-    // Col 4: Right Aisle
-    seats.push({
-      id: `lower-R${rightCabin1}`,
-      name: `Right R${rightCabin1} Lower`,
-      number: seatNumber++,
-      side: "right",
-      deck: "lower",
-      row: r,
-      col: 4,
-      cabin: `R${rightCabin1}`,
-      kind: null,
-      pairId: `lower-R${rightCabin2}`,
-    })
-    // Col 5: Right Window
-    seats.push({
-      id: `lower-R${rightCabin2}`,
-      name: `Right R${rightCabin2} Lower`,
-      number: seatNumber++,
-      side: "right",
-      deck: "lower",
-      row: r,
-      col: 5,
-      cabin: `R${rightCabin2}`,
-      kind: null,
-      pairId: `lower-R${rightCabin1}`,
-    })
-  }
-
-  // Upper deck: 24 berths (seats 25..48)
-  for (let r = 1; r <= 6; r++) {
-    const leftCabin1 = (r - 1) * 2 + 1
-    const leftCabin2 = (r - 1) * 2 + 2
-    const rightCabin1 = (r - 1) * 2 + 1
-    const rightCabin2 = (r - 1) * 2 + 2
-
-    // Col 1: Left Window
-    seats.push({
-      id: `upper-L${leftCabin1}`,
-      name: `Left L${leftCabin1} Upper`,
-      number: seatNumber++,
-      side: "left",
-      deck: "upper",
-      row: r,
-      col: 1,
-      cabin: `L${leftCabin1}`,
-      kind: null,
-      pairId: `upper-L${leftCabin2}`,
-    })
-    // Col 2: Left Aisle
-    seats.push({
-      id: `upper-L${leftCabin2}`,
-      name: `Left L${leftCabin2} Upper`,
-      number: seatNumber++,
-      side: "left",
-      deck: "upper",
-      row: r,
-      col: 2,
-      cabin: `L${leftCabin2}`,
-      kind: null,
-      pairId: `upper-L${leftCabin1}`,
-    })
-    // Col 4: Right Aisle
-    seats.push({
-      id: `upper-R${rightCabin1}`,
-      name: `Right R${rightCabin1} Upper`,
-      number: seatNumber++,
-      side: "right",
-      deck: "upper",
-      row: r,
-      col: 4,
-      cabin: `R${rightCabin1}`,
-      kind: null,
-      pairId: `upper-R${rightCabin2}`,
-    })
-    // Col 5: Right Window
-    seats.push({
-      id: `upper-R${rightCabin2}`,
-      name: `Right R${rightCabin2} Upper`,
-      number: seatNumber++,
-      side: "right",
-      deck: "upper",
-      row: r,
-      col: 5,
-      cabin: `R${rightCabin2}`,
-      kind: null,
-      pairId: `upper-R${rightCabin1}`,
-    })
-  }
-
-  return {
-    key: "sleeper-2x2-48",
-    label: "2x2 Sleeper (48 Berths)",
-    shortLabel: "2x2 Sleeper 48",
-    category: "sleeper",
-    totalSeats: 48,
-    grid: {
-      decks: ["lower", "upper"],
       rows: 6,
-      cols: 5, // col 1: Left window, col 2: Left aisle, col 3: Gangway, col 4: Right aisle, col 5: Right window
-      aisleCol: 3,
+      cols: 4,
+      aisleCol: 2,
+      hasRear: true,
     },
     seats: Object.freeze(seats),
   }
 }
 
-function buildSleeper2x2_40() {
+function buildSleeper2x2(rows, key, label, shortLabel) {
   const seats = []
   let seatNumber = 1
 
-  // 5 rows, 4 berths per row per deck (2 Left + 2 Right)
-  // Left cabins L1..L10 (2 per row), Right cabins R1..R10 (2 per row)
-  // Lower deck: 20 berths (seats 1..20)
-  for (let r = 1; r <= 5; r++) {
-    const leftCabin1 = (r - 1) * 2 + 1
-    const leftCabin2 = (r - 1) * 2 + 2
-    const rightCabin1 = (r - 1) * 2 + 1
-    const rightCabin2 = (r - 1) * 2 + 2
-
-    // Col 1: Left Window
+  // Rows from front to back
+  for (let r = 1; r <= rows; r++) {
+    // 1. Left Lower (2 seats: slot 1, slot 2)
     seats.push({
-      id: `lower-L${leftCabin1}`,
-      name: `Left L${leftCabin1} Lower`,
+      id: `left-L${r}-1`,
+      name: `Left L${r}-1`,
       number: seatNumber++,
       side: "left",
       deck: "lower",
       row: r,
       col: 1,
-      cabin: `L${leftCabin1}`,
+      box: `L${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
-      pairId: `lower-L${leftCabin2}`,
+      pairId: `left-L${r}-2`,
     })
-    // Col 2: Left Aisle
     seats.push({
-      id: `lower-L${leftCabin2}`,
-      name: `Left L${leftCabin2} Lower`,
+      id: `left-L${r}-2`,
+      name: `Left L${r}-2`,
       number: seatNumber++,
       side: "left",
       deck: "lower",
-      row: r,
-      col: 2,
-      cabin: `L${leftCabin2}`,
-      kind: null,
-      pairId: `lower-L${leftCabin1}`,
-    })
-    // Col 4: Right Aisle
-    seats.push({
-      id: `lower-R${rightCabin1}`,
-      name: `Right R${rightCabin1} Lower`,
-      number: seatNumber++,
-      side: "right",
-      deck: "lower",
-      row: r,
-      col: 4,
-      cabin: `R${rightCabin1}`,
-      kind: null,
-      pairId: `lower-R${rightCabin2}`,
-    })
-    // Col 5: Right Window
-    seats.push({
-      id: `lower-R${rightCabin2}`,
-      name: `Right R${rightCabin2} Lower`,
-      number: seatNumber++,
-      side: "right",
-      deck: "lower",
-      row: r,
-      col: 5,
-      cabin: `R${rightCabin2}`,
-      kind: null,
-      pairId: `lower-R${rightCabin1}`,
-    })
-  }
-
-  // Upper deck: 20 berths (seats 21..40)
-  for (let r = 1; r <= 5; r++) {
-    const leftCabin1 = (r - 1) * 2 + 1
-    const leftCabin2 = (r - 1) * 2 + 2
-    const rightCabin1 = (r - 1) * 2 + 1
-    const rightCabin2 = (r - 1) * 2 + 2
-
-    // Col 1: Left Window
-    seats.push({
-      id: `upper-L${leftCabin1}`,
-      name: `Left L${leftCabin1} Upper`,
-      number: seatNumber++,
-      side: "left",
-      deck: "upper",
       row: r,
       col: 1,
-      cabin: `L${leftCabin1}`,
+      box: `L${r}`,
+      slot: 2,
+      section: "main",
       kind: null,
-      pairId: `upper-L${leftCabin2}`,
+      pairId: `left-L${r}-1`,
     })
-    // Col 2: Left Aisle
+
+    // 2. Left Upper (2 seats: slot 1, slot 2)
     seats.push({
-      id: `upper-L${leftCabin2}`,
-      name: `Left L${leftCabin2} Upper`,
+      id: `left-U${r}-1`,
+      name: `Left U${r}-1`,
       number: seatNumber++,
       side: "left",
       deck: "upper",
       row: r,
       col: 2,
-      cabin: `L${leftCabin2}`,
+      box: `U${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
-      pairId: `upper-L${leftCabin1}`,
+      pairId: `left-U${r}-2`,
     })
-    // Col 4: Right Aisle
     seats.push({
-      id: `upper-R${rightCabin1}`,
-      name: `Right R${rightCabin1} Upper`,
+      id: `left-U${r}-2`,
+      name: `Left U${r}-2`,
+      number: seatNumber++,
+      side: "left",
+      deck: "upper",
+      row: r,
+      col: 2,
+      box: `U${r}`,
+      slot: 2,
+      section: "main",
+      kind: null,
+      pairId: `left-U${r}-1`,
+    })
+
+    // 3. Right Lower (2 seats: slot 1, slot 2)
+    seats.push({
+      id: `right-L${r}-1`,
+      name: `Right L${r}-1`,
+      number: seatNumber++,
+      side: "right",
+      deck: "lower",
+      row: r,
+      col: 3,
+      box: `L${r}`,
+      slot: 1,
+      section: "main",
+      kind: null,
+      pairId: `right-L${r}-2`,
+    })
+    seats.push({
+      id: `right-L${r}-2`,
+      name: `Right L${r}-2`,
+      number: seatNumber++,
+      side: "right",
+      deck: "lower",
+      row: r,
+      col: 3,
+      box: `L${r}`,
+      slot: 2,
+      section: "main",
+      kind: null,
+      pairId: `right-L${r}-1`,
+    })
+
+    // 4. Right Upper (2 seats: slot 1, slot 2)
+    seats.push({
+      id: `right-U${r}-1`,
+      name: `Right U${r}-1`,
       number: seatNumber++,
       side: "right",
       deck: "upper",
       row: r,
       col: 4,
-      cabin: `R${rightCabin1}`,
+      box: `U${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
-      pairId: `upper-R${rightCabin2}`,
+      pairId: `right-U${r}-2`,
     })
-    // Col 5: Right Window
     seats.push({
-      id: `upper-R${rightCabin2}`,
-      name: `Right R${rightCabin2} Upper`,
+      id: `right-U${r}-2`,
+      name: `Right U${r}-2`,
       number: seatNumber++,
       side: "right",
       deck: "upper",
       row: r,
-      col: 5,
-      cabin: `R${rightCabin2}`,
+      col: 4,
+      box: `U${r}`,
+      slot: 2,
+      section: "main",
       kind: null,
-      pairId: `upper-R${rightCabin1}`,
+      pairId: `right-U${r}-1`,
     })
   }
 
   return {
-    key: "sleeper-2x2-40",
-    label: "2x2 Sleeper (40 Berths)",
-    shortLabel: "2x2 Sleeper 40",
+    key,
+    label,
+    shortLabel,
     category: "sleeper",
-    totalSeats: 40,
+    totalSeats: rows * 8,
     grid: {
       decks: ["lower", "upper"],
-      rows: 5,
-      cols: 5,
-      aisleCol: 3,
+      rows,
+      cols: 4,
+      aisleCol: 2,
+      hasRear: false,
     },
     seats: Object.freeze(seats),
   }
@@ -444,70 +353,80 @@ function buildSeater2x3_60() {
     // Col 1: Left Window
     const s1 = seatNumber++
     seats.push({
-      id: `${s1}`,
-      name: `${s1}`,
+      id: `seat-${s1}`,
+      name: `Seat ${s1}`,
       number: s1,
       side: "left",
-      deck: null,
+      deck: "main",
       row: r,
       col: 1,
-      cabin: `Row ${r}`,
+      box: `Row ${r}`,
+      slot: 1,
+      section: "main",
       kind: null,
-      pairId: `${s1 + 1}`,
+      pairId: `seat-${s1 + 1}`,
     })
     // Col 2: Left Aisle
     const s2 = seatNumber++
     seats.push({
-      id: `${s2}`,
-      name: `${s2}`,
+      id: `seat-${s2}`,
+      name: `Seat ${s2}`,
       number: s2,
       side: "left",
-      deck: null,
+      deck: "main",
       row: r,
       col: 2,
-      cabin: `Row ${r}`,
+      box: `Row ${r}`,
+      slot: 2,
+      section: "main",
       kind: null,
-      pairId: `${s1}`,
+      pairId: `seat-${s1}`,
     })
     // Col 4: Right Aisle
     const s3 = seatNumber++
     seats.push({
-      id: `${s3}`,
-      name: `${s3}`,
+      id: `seat-${s3}`,
+      name: `Seat ${s3}`,
       number: s3,
       side: "right",
-      deck: null,
+      deck: "main",
       row: r,
       col: 4,
-      cabin: `Row ${r}`,
+      box: `Row ${r}`,
+      slot: 3,
+      section: "main",
       kind: null,
       pairId: null,
     })
     // Col 5: Right Middle
     const s4 = seatNumber++
     seats.push({
-      id: `${s4}`,
-      name: `${s4}`,
+      id: `seat-${s4}`,
+      name: `Seat ${s4}`,
       number: s4,
       side: "right",
-      deck: null,
+      deck: "main",
       row: r,
       col: 5,
-      cabin: `Row ${r}`,
+      box: `Row ${r}`,
+      slot: 4,
+      section: "main",
       kind: null,
       pairId: null,
     })
     // Col 6: Right Window
     const s5 = seatNumber++
     seats.push({
-      id: `${s5}`,
-      name: `${s5}`,
+      id: `seat-${s5}`,
+      name: `Seat ${s5}`,
       number: s5,
       side: "right",
-      deck: null,
+      deck: "main",
       row: r,
       col: 6,
-      cabin: `Row ${r}`,
+      box: `Row ${r}`,
+      slot: 5,
+      section: "main",
       kind: null,
       pairId: null,
     })
@@ -522,8 +441,9 @@ function buildSeater2x3_60() {
     grid: {
       decks: ["main"],
       rows: 12,
-      cols: 6, // col 1: Left Window, col 2: Left Aisle, col 3: Gangway, col 4: Right Aisle, col 5: Right Middle, col 6: Right Window
+      cols: 6,
       aisleCol: 3,
+      hasRear: false,
     },
     seats: Object.freeze(seats),
   }
@@ -562,8 +482,8 @@ export function validateSeatLayoutDefinition(layout) {
 }
 
 const layoutSleeper2x1_38 = buildSleeper2x1_38()
-const layoutSleeper2x2_48 = buildSleeper2x2_48()
-const layoutSleeper2x2_40 = buildSleeper2x2_40()
+const layoutSleeper2x2_48 = buildSleeper2x2(6, "sleeper-2x2-48", "2x2 Sleeper Luxury (48 berths)", "2x2 Sleeper 48")
+const layoutSleeper2x2_40 = buildSleeper2x2(5, "sleeper-2x2-40", "2x2 Sleeper Standard (40 berths)", "2x2 Sleeper 40")
 const layoutSeater2x3_60 = buildSeater2x3_60()
 
 validateSeatLayoutDefinition(layoutSleeper2x1_38)
@@ -681,14 +601,6 @@ export function layoutKeyForBusType(busType) {
  * Normalizes and resolves any raw/historical seat ID into the canonical ID
  * of the target layout.
  *
- * Supported historical formats:
- * - Direct canonical IDs: "lower-L1", "lower-R1-1", "upper-L3", "lower-L2"
- * - 2x1 mismatch IDs: "lower-L1-1" -> "lower-L1" (single Left berth)
- * - 2x2 legacy IDs: "lower-L1-1" -> "lower-L1", "lower-L1-2" -> "lower-L2"
- * - Short tags: "1L" -> "lower-L1", "2L" -> "lower-L2", "1R1" -> "lower-R1-1"
- * - Plain number strings: "1", "12", "38" -> mapped via seat.number
- * - Plain uppercase tags: "L1" -> "lower-L1", "U1" -> "upper-L1"
- *
  * @param {string} layoutKey
  * @param {string|number} rawId
  * @returns {string} canonical seatId or trimmed rawId if unrecognized
@@ -701,63 +613,118 @@ export function resolveSeatId(layoutKey, rawId) {
   const layout = getSeatLayout(layoutKey) || SEAT_LAYOUTS[DEFAULT_LAYOUT_KEY]
   if (!layout) return str
 
-  // 1. Direct match with canonical id (case-insensitive)
+  // 1. Direct match with canonical id in layout (case-insensitive)
   const canonicalMatch = layout.seats.find(
     (s) => s.id.toLowerCase() === str.toLowerCase(),
   )
   if (canonicalMatch) return canonicalMatch.id
 
-  // 2. Numeric match (e.g. 1..N)
+  const is2x1 = layout.key === "sleeper-2x1-38"
+  const is2x2 = layout.key === "sleeper-2x2-48" || layout.key === "sleeper-2x2-40"
+  const isSeater = layout.key === "seater-2x3-60"
+
+  // 2. Seater format: numbers or "Seat N" or "seat-N"
+  if (isSeater) {
+    const numMatch = str.match(/(?:seat\s*|s)?(\d+)/i)
+    if (numMatch) {
+      const n = parseInt(numMatch[1], 10)
+      const cand = `seat-${n}`
+      if (layout.seats.some((s) => s.id === cand)) return cand
+    }
+  }
+
+  // 3. Numeric match (e.g. 1..N index matching seat.number)
   if (/^\d+$/.test(str)) {
     const num = parseInt(str, 10)
     const numMatch = layout.seats.find((s) => s.number === num)
     if (numMatch) return numMatch.id
   }
 
-  // 3. Layout-specific legacy transformations
-  if (layout.key === "sleeper-2x1-38") {
-    // 2x1 Left single berth mismatch: "lower-L1-1" -> "lower-L1"
-    const leftMismatch = str.match(/^(lower|upper)-L(\d+)-1$/i)
-    if (leftMismatch) {
-      const candidate = `${leftMismatch[1].toLowerCase()}-L${leftMismatch[2]}`
+  // 4. OLD 2x2 format WITH slot suffix: lower-L{row}-{slot} / upper-R{row}-{slot}
+  // Maps directly: lower-L2-1 -> left-L2-1, upper-R3-2 -> right-U3-2
+  const oldSlotMatch = str.match(/^(lower|upper)-([LR])(\d+)-([12])$/i)
+  if (oldSlotMatch) {
+    const deckLetter = oldSlotMatch[1].toUpperCase() === "LOWER" ? "L" : "U"
+    const side = oldSlotMatch[2].toUpperCase() === "L" ? "left" : "right"
+    const row = oldSlotMatch[3]
+    const slot = oldSlotMatch[4]
+    const candidate = `${side}-${deckLetter}${row}-${slot}`
+    if (layout.seats.some((s) => s.id === candidate)) return candidate
+  }
+
+  // 5. 6S-1 2x2 format WITHOUT slot suffix: lower-L{n} / upper-R{n} (n = cabin 1..12)
+  // Rule: cabin n -> row ceil(n/2), slot ((n-1)%2)+1
+  const s1_2x2Match = str.match(/^(lower|upper)-([LR])(\d+)$/i)
+  if (s1_2x2Match && is2x2) {
+    const deckLetter = s1_2x2Match[1].toUpperCase() === "LOWER" ? "L" : "U"
+    const side = s1_2x2Match[2].toUpperCase() === "L" ? "left" : "right"
+    const n = parseInt(s1_2x2Match[3], 10)
+    const row = Math.ceil(n / 2)
+    const slot = ((n - 1) % 2) + 1
+    const candidate = `${side}-${deckLetter}${row}-${slot}`
+    if (layout.seats.some((s) => s.id === candidate)) return candidate
+  }
+
+  // 6. 2x1 formats
+  if (is2x1) {
+    // 6S-1 guessed rear cabin: lower-L7 -> rear-B1, upper-L7 -> rear-B2
+    if (/^lower-L7$/i.test(str)) return "rear-B1"
+    if (/^upper-L7$/i.test(str)) return "rear-B2"
+
+    // Single Left berth: lower-L{r} -> left-L{r}-1, upper-L{r} -> left-U{r}-1
+    const leftSingle = str.match(/^(lower|upper)-L(\d+)$/i)
+    if (leftSingle) {
+      const deckLetter = leftSingle[1].toUpperCase() === "LOWER" ? "L" : "U"
+      const row = leftSingle[2]
+      const candidate = `left-${deckLetter}${row}-1`
       if (layout.seats.some((s) => s.id === candidate)) return candidate
     }
 
-    // Short forms like "1L" -> "lower-L1", "2L" -> "lower-L2"
-    const shortLeft = str.match(/^(\d+)L$/i)
-    if (shortLeft) {
-      const candidate = `lower-L${shortLeft[1]}`
+    // Right double berths: lower-R{r}-{slot} -> right-L{r}-{slot}, upper-R{r}-{slot} -> right-U{r}-{slot}
+    const rightDouble = str.match(/^(lower|upper)-R(\d+)-([12])$/i)
+    if (rightDouble) {
+      const deckLetter = rightDouble[1].toUpperCase() === "LOWER" ? "L" : "U"
+      const row = rightDouble[2]
+      const slot = rightDouble[3]
+      const candidate = `right-${deckLetter}${row}-${slot}`
       if (layout.seats.some((s) => s.id === candidate)) return candidate
     }
 
-    // Short forms like "L1" -> "lower-L1", "U1" -> "upper-L1"
-    const cabinLeft = str.match(/^([LU])(\d+)$/i)
-    if (cabinLeft) {
-      const deck = cabinLeft[1].toUpperCase() === "L" ? "lower" : "upper"
-      const candidate = `${deck}-L${cabinLeft[2]}`
+    // Redundant slot on left: lower-L{r}-1 -> left-L{r}-1, upper-L{r}-1 -> left-U{r}-1
+    const leftRedundant = str.match(/^(lower|upper)-L(\d+)-1$/i)
+    if (leftRedundant) {
+      const deckLetter = leftRedundant[1].toUpperCase() === "LOWER" ? "L" : "U"
+      const row = leftRedundant[2]
+      const candidate = `left-${deckLetter}${row}-1`
       if (layout.seats.some((s) => s.id === candidate)) return candidate
     }
-  } else if (layout.key === "sleeper-2x2-40" || layout.key === "sleeper-2x2-48") {
-    // 2x2 legacy row notation:
-    // lower-L{row}-1 -> lower-L{(row-1)*2 + 1}
-    // lower-L{row}-2 -> lower-L{(row-1)*2 + 2}
-    // lower-R{row}-1 -> lower-R{(row-1)*2 + 1}
-    // lower-R{row}-2 -> lower-R{(row-1)*2 + 2}
-    const legacy2x2 = str.match(/^(lower|upper)-([LR])(\d+)-([12])$/i)
-    if (legacy2x2) {
-      const deck = legacy2x2[1].toLowerCase()
-      const side = legacy2x2[2].toUpperCase()
-      const row = parseInt(legacy2x2[3], 10)
-      const sub = parseInt(legacy2x2[4], 10)
-      const cabinNum = (row - 1) * 2 + sub
-      const candidate = `${deck}-${side}${cabinNum}`
+
+    // Shorthand from DB scan: "L2-1" or "U3-1" (without lower/upper deck prefix)
+    const shortSlot = str.match(/^([LU])(\d+)-([12])$/i)
+    if (shortSlot) {
+      const deckLetter = shortSlot[1].toUpperCase()
+      const row = shortSlot[2]
+      const slot = shortSlot[3]
+      const candidate = `left-${deckLetter}${row}-${slot}`
       if (layout.seats.some((s) => s.id === candidate)) return candidate
     }
-  } else if (layout.key === "seater-2x3-60") {
-    // For seater, "Seat 1" or "S1" -> "1"
-    const cleanNum = str.replace(/[^0-9]/g, "")
-    if (cleanNum && layout.seats.some((s) => s.id === cleanNum)) {
-      return cleanNum
+
+    // Shorthand: "1L", "2L", "1U"
+    const numDeck = str.match(/^(\d+)([LU])$/i)
+    if (numDeck) {
+      const row = numDeck[1]
+      const deckLetter = numDeck[2].toUpperCase()
+      const candidate = `left-${deckLetter}${row}-1`
+      if (layout.seats.some((s) => s.id === candidate)) return candidate
+    }
+
+    // Shorthand: "L1", "U2"
+    const deckNum = str.match(/^([LU])(\d+)$/i)
+    if (deckNum) {
+      const deckLetter = deckNum[1].toUpperCase()
+      const row = deckNum[2]
+      const candidate = `left-${deckLetter}${row}-1`
+      if (layout.seats.some((s) => s.id === candidate)) return candidate
     }
   }
 
@@ -767,7 +734,7 @@ export function resolveSeatId(layoutKey, rawId) {
 
 /**
  * Returns human-friendly display label for a seat in a layout.
- * e.g. "Left L1 Lower (#1)" or "Seat 12"
+ * e.g. "Left L1-1", "Right U3-2", "Rear B1", or "Seat 12"
  *
  * @param {string} layoutKey
  * @param {string|number} rawId
@@ -779,9 +746,23 @@ export function formatSeatDisplayName(layoutKey, rawId) {
   const layout = getSeatLayout(layoutKey) || SEAT_LAYOUTS[DEFAULT_LAYOUT_KEY]
   if (!layout) return String(rawId)
 
-  const seat = layout.seats.find((s) => s.id === canonicalId)
+  const seat = layout.seats.find((s) => s.id.toLowerCase() === canonicalId.toLowerCase())
   if (seat) {
-    return layout.category === "seater" ? `Seat ${seat.number}` : `${seat.name} (#${seat.number})`
+    return seat.name
   }
+
+  // Graceful fallback for canonical-like shapes if layout lookup didn't match
+  const match = canonicalId.match(/^(left|right)-([LU]\d+)-([12])$/i)
+  if (match) {
+    const side = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()
+    return `${side} ${match[2].toUpperCase()}-${match[3]}`
+  }
+  if (/^rear-B[12]$/i.test(canonicalId)) {
+    return `Rear ${canonicalId.slice(-2).toUpperCase()}`
+  }
+  if (/^seat-\d+$/i.test(canonicalId)) {
+    return `Seat ${canonicalId.slice(5)}`
+  }
+
   return String(rawId)
 }

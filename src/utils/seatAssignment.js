@@ -34,7 +34,7 @@ export function autoAssignSeats({
 
   // Order candidate seats based on layout and deckPreference
   let seatList = [...layoutDef.seats]
-  if (layoutDef.decks && layoutDef.decks.length > 1) {
+  if (layoutDef.category === "sleeper" || (layoutDef.grid?.decks && layoutDef.grid.decks.length > 1)) {
     if (deckPreference === "lower") {
       seatList = [
         ...layoutDef.seats.filter((s) => s.deck === "lower"),

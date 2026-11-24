@@ -3,6 +3,7 @@ import { AlertCircle, ArrowRight } from "lucide-react"
 import { Modal, Button, Select, Field } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { getAuthToken } from "../../data/adapters/rest"
+import { formatSeatLabel } from "../../utils/formatters"
 
 export default function MoveSeatModal({
   isOpen,
@@ -45,7 +46,7 @@ export default function MoveSeatModal({
         throw new Error(data.message || "Failed to move seat")
       }
 
-      toast.success(`Successfully moved ${passenger.name || "passenger"} to seat ${targetSeat}`)
+      toast.success(`Successfully moved ${passenger.name || "passenger"} to seat ${formatSeatLabel(targetSeat)}`)
       if (onSuccess) onSuccess()
       onClose()
     } catch (err) {
@@ -78,11 +79,11 @@ export default function MoveSeatModal({
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-700 font-bold text-ink">
-              {passenger?.seatNumber ? `#${passenger.seatNumber}` : passenger?.seatId || "Current"}
+              {formatSeatLabel(passenger?.seatId || passenger?.seatNumber)}
             </span>
             <ArrowRight size={14} className="text-ink-muted" />
             <span className="px-2 py-1 rounded bg-brand-soft text-brand font-bold border border-brand/20">
-              {targetSeat || "New Seat"}
+              {targetSeat ? formatSeatLabel(targetSeat) : "New Seat"}
             </span>
           </div>
         </div>
@@ -99,7 +100,7 @@ export default function MoveSeatModal({
             <option value="">Select a free seat...</option>
             {availableSeats.map((seat) => (
               <option key={seat.seatId} value={seat.seatId}>
-                Seat {seat.seatNumber} — {seat.seatName || seat.seatId}
+                #{seat.seatNumber} — {formatSeatLabel(seat.seatId || seat.seatName)}
               </option>
             ))}
           </Select>
