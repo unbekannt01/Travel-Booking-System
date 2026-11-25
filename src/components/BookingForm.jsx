@@ -807,11 +807,13 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    if (e?.preventDefault) {
+      e.preventDefault()
+    }
 
-    // On steps 0–2, submitting (e.g. pressing Enter) advances through step validation cleanly
-    if (currentStep < BOOKING_STEPS.length - 1) {
-      handleNextStep()
+    // Owner requirement (Problem 1): Submitting can ONLY happen on Step 3 (Review step).
+    // Pressing Enter in an input field never advances or creates a booking.
+    if (currentStep !== BOOKING_STEPS.length - 1) {
       return
     }
 
@@ -886,9 +888,16 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       : ""
 
   return (
+    /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */
     <form
       ref={formTopRef}
       onSubmit={handleSubmit}
+      onKeyDown={(e) => {
+        // Prevent Enter in text/numeric inputs from submitting or jumping steps
+        if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+          e.preventDefault()
+        }
+      }}
       noValidate
       className="space-y-6 pb-28 lg:pb-8"
     >
@@ -1971,7 +1980,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         </p>
                       </div>
                       <Badge variant={p.seatId ? "success" : "neutral"} size="sm" className="self-start sm:self-center">
-                        {p.seatId ? `Seat ${p.seatId}` : "Unassigned"}
+                        {p.seatId ? `Seat ${formatSeatLabel(p.seatId, { busType: formData.busType })}` : "Unassigned"}
                       </Badge>
                     </li>
                   ))}
@@ -2055,7 +2064,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
               leftIcon={<ArrowLeft size={16} />}
               onClick={handleBackStep}
             >
-              {currentStep === 0 ? "Cancel" : "Back"}
+              {currentStep === BOOKING_STEPS.length - 1 ? "Back to edit" : currentStep === 0 ? "Cancel" : "Back"}
             </Button>
 
             <span className="text-xs font-medium text-ink-muted tabular-nums">
@@ -2064,6 +2073,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
 
             {currentStep < BOOKING_STEPS.length - 1 ? (
               <Button
+                key="step-btn-next"
                 type="button"
                 variant="primary"
                 size="md"
@@ -2074,11 +2084,14 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
               </Button>
             ) : (
               <Button
-                type="submit"
+                key="step-btn-confirm"
+                type="button"
                 variant="accent"
                 size="md"
                 loading={isSubmitting}
+                disabled={isSubmitting}
                 leftIcon={<Save size={16} />}
+                onClick={handleSubmit}
               >
                 {isEditMode ? "Update Booking" : "Confirm Booking"}
               </Button>
@@ -2138,11 +2151,12 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
             onClick={handleBackStep}
             className="shrink-0"
           >
-            {currentStep === 0 ? "Cancel" : "Back"}
+            {currentStep === BOOKING_STEPS.length - 1 ? "Back to edit" : currentStep === 0 ? "Cancel" : "Back"}
           </Button>
 
           {currentStep < BOOKING_STEPS.length - 1 ? (
             <Button
+              key="mobile-step-btn-next"
               type="button"
               variant="primary"
               size="md"
@@ -2154,12 +2168,15 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
             </Button>
           ) : (
             <Button
-              type="submit"
+              key="mobile-step-btn-confirm"
+              type="button"
               variant="accent"
               size="md"
               fullWidth
               loading={isSubmitting}
+              disabled={isSubmitting}
               leftIcon={<Save size={15} />}
+              onClick={handleSubmit}
             >
               {isEditMode ? "Update Booking" : "Confirm Booking"}
             </Button>
