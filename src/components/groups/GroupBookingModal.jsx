@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { Modal, Button, Input, Select, Field, Badge, Card } from "../ui"
 import { useToast } from "../common/ToastContext"
-import { formatINR } from "../../utils/formatters"
+import { formatINR, formatSeatLabel } from "../../utils/formatters"
 import { toDateInputValue } from "../../utils/date"
 import {
   getSeatLayout,
@@ -723,9 +723,9 @@ export default function GroupBookingModal({
                   aria-label="Coach Seat Grid"
                   className="max-h-[380px] overflow-y-auto space-y-1.5 text-xs p-1"
                 >
-                  {layoutDef?.berths?.length > 0 ? (
+                  {layoutDef?.seats?.length > 0 ? (
                     <div className="grid grid-cols-4 gap-1.5">
-                      {layoutDef.berths.map((b) => {
+                      {layoutDef.seats.map((b) => {
                         const canonical = resolveSeatId(layoutKey, b.id)
                         const isTakenDeparture = occupiedDepartureSeats.has(canonical)
                         const memberAssigned = memberAssignedSeats.get(canonical)
@@ -734,7 +734,7 @@ export default function GroupBookingModal({
                           memberAssigned?.paxIdx === activeSeatPaxIdx
 
                         let btnClass = "border-border-subtle bg-surface hover:bg-surface-hover text-ink"
-                        let label = b.label || canonical
+                        let label = b.name || formatSeatLabel(canonical)
 
                         if (isCurrentPax) {
                           btnClass = "border-brand bg-brand text-brand-fg font-bold"
@@ -749,6 +749,7 @@ export default function GroupBookingModal({
                           <button
                             key={b.id}
                             type="button"
+                            data-seat-id={canonical}
                             disabled={isTakenDeparture || (memberAssigned && !isCurrentPax)}
                             onClick={() => handleSelectSeat(b.id)}
                             className={`p-1.5 rounded text-[11px] text-center border transition-colors cursor-pointer truncate ${btnClass}`}

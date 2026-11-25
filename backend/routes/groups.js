@@ -6,14 +6,12 @@ import Booking from "../models/Booking.js"
 import Payment from "../models/Payment.js"
 import GroupPayment from "../models/GroupPayment.js"
 import User from "../models/User.js"
-import { verifyToken } from "../middleware/auth.js"
+import verifyToken from "../middleware/auth.js"
 import { assertBooksOpen } from "../utils/booksLock.js"
-import { getNextReceiptNo } from "../utils/counter.js"
-import { syncBookingPayments } from "../utils/paymentSync.js"
-import { maskBookingPaxAadhaar } from "../utils/maskAadhaar.js"
-import { parseDepartureKey } from "../utils/departureKey.js"
-import { createBookingCore, checkSeatConflicts, validateSeatLayout } from "./bookings.js"
-import { logAudit } from "../utils/audit.js"
+import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
+import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
+import { createBookingCore, checkSeatConflicts, validateSeatLayout, maskBookingPaxAadhaar } from "./bookings.js"
+import { logAudit } from "../models/AuditLog.js"
 import {
   toPaise,
   fromPaise,
@@ -22,8 +20,7 @@ import {
   validateManualAllocation,
 } from "../../shared/groupPayments.js"
 import { getSeatLayout, layoutKeyForBusType, isValidBusType, normalizeBusType } from "../../shared/seatLayouts.js"
-import { validateIndianPhone } from "../../shared/businessLogic.js"
-import { getDayBounds } from "../utils/dateBounds.js"
+import { validateIndianPhone, getDayBounds } from "../../shared/businessLogic.js"
 
 const router = express.Router()
 
@@ -175,6 +172,7 @@ router.post("/", verifyToken, groupWriteLimiter, async (req, res) => {
           tourName,
           journeyDate,
           busType: canonicalBusType,
+          totalAmount: Number(members[i].totalAmount || members[i].fare || 0),
           groupId: group._id,
         }
         const { booking } = await createBookingCore({
@@ -188,6 +186,7 @@ router.post("/", verifyToken, groupWriteLimiter, async (req, res) => {
         createdBookings.push(booking)
       }
     } catch (createErr) {
+      console.error("[POST /api/groups member create error]:", createErr)
       // Mid-creation failure: rollback compensation
       if (createdBookings.length > 0) {
         const ids = createdBookings.map((b) => b._id)
@@ -252,15 +251,18 @@ router.post("/", verifyToken, groupWriteLimiter, async (req, res) => {
 // GET /api/departures/:key/groups - List groups for a specific departure with authoritative totals
 router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) => {
   try {
-    const { tourName, journeyDate, busType } = parseDepartureKey(req.params.key)
-    const { start: normalizedJourneyDate } = getDayBounds(journeyDate)
-    const canonicalBus = busType ? normalizeBusType(busType) : ""
+    const parsed = parseDepartureKey(req.params.key)
+    if (!parsed) {
+      return res.status(400).json({ message: "Invalid departure key format." })
+    }
+    const { tourName, busType, start, end } = parsed
+    const busCondition = getBusCondition(busType)
 
     const groups = await BookingGroup.find({
       userId: req.user.id,
       tourName,
-      journeyDate: normalizedJourneyDate,
-      busType: canonicalBus,
+      journeyDate: { $gte: start, $lte: end },
+      ...busCondition,
       status: "active",
     }).sort({ createdAt: -1 })
 

@@ -681,6 +681,7 @@ export default function Dashboard({ user, onLogout, onUserUpdate }) {
             {activeTab === "journey" && (
               <JourneyManager
                 bookings={bookings}
+                tours={tours}
                 onUpdateBooking={handleUpdateBookingState}
                 user={user}
                 onNavigate={handleNavigate}

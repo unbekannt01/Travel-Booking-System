@@ -68,6 +68,7 @@ const generateAllSeats = (busType) => {
 
 export default function JourneyManager({
   bookings = [],
+  tours = [],
   onUpdateBooking,
   user,
   expenses: initialExpenses = [],
@@ -119,7 +120,7 @@ export default function JourneyManager({
           setTripExpenses(res.expenses)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
     return () => {
       mounted = false
     }
@@ -150,6 +151,7 @@ export default function JourneyManager({
   const [activeGroupId, setActiveGroupId] = useState(null)
 
   const uniqueTours = useMemo(() => [...new Set(bookings.map((b) => b.tourName))].filter(Boolean), [bookings])
+  const availableTours = useMemo(() => (tours && tours.length > 0 ? tours : uniqueTours.map((t) => ({ name: t }))), [tours, uniqueTours])
 
   // Group bookings into coach Departures
   const departures = useMemo(() => {
@@ -584,71 +586,71 @@ export default function JourneyManager({
             >
               <span>Print Manifest</span>
             </Button>
+
             {showExportOptions && (
-            <div className="absolute right-0 top-full mt-1.5 w-60 rounded-[var(--yh-radius-lg)] bg-surface-elevated border border-border-subtle shadow-[var(--yh-shadow-overlay)] z-[var(--yh-z-dropdown)] overflow-hidden py-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowExportOptions(false)
-                  setActiveLayoutDeparture(activeDepartureObj || (departures.length > 0 ? departures[0] : null))
-                  setShowSeatLayoutModal(true)
-                }}
-                className="w-full px-4 py-2.5 text-left text-xs font-semibold text-brand hover:bg-brand-soft/50 flex items-center gap-2 border-b border-border-subtle transition-colors cursor-pointer"
-              >
-                <Layers size={14} />
-                <span>Seat Layout Chart (PDF)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowExportOptions(false)
-                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
-                  setManifestModalConfig({
-                    isOpen: true,
-                    preset: "with-aadhaar",
-                    departureKey: depKey,
-                  })
-                }}
-                className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
-              >
-                Print Manifest (With Aadhaar)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowExportOptions(false)
-                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
-                  setManifestModalConfig({
-                    isOpen: true,
-                    preset: "without-aadhaar",
-                    departureKey: depKey,
-                  })
-                }}
-                className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
-              >
-                Print Manifest (Without Aadhaar)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowExportOptions(false)
-                  const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
-                  setManifestModalConfig({
-                    isOpen: true,
-                    preset: "pickup-wise",
-                    departureKey: depKey,
-                  })
-                }}
-                className="w-full px-4 py-2 text-left text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle flex items-center gap-1.5"
-              >
-                <span>📍 Pickup-Wise Passenger List</span>
-              </button>
-            </div>
-          )}
+              <div className="absolute right-0 top-full mt-1.5 w-60 rounded-[var(--yh-radius-lg)] bg-surface-elevated border border-border-subtle shadow-[var(--yh-shadow-overlay)] z-[var(--yh-z-dropdown)] overflow-hidden py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportOptions(false)
+                    setActiveLayoutDeparture(activeDepartureObj || (departures.length > 0 ? departures[0] : null))
+                    setShowSeatLayoutModal(true)
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-xs font-semibold text-brand hover:bg-brand-soft/50 flex items-center gap-2 border-b border-border-subtle transition-colors cursor-pointer"
+                >
+                  <Layers size={14} />
+                  <span>Seat Layout Chart (PDF)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportOptions(false)
+                    const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                    setManifestModalConfig({
+                      isOpen: true,
+                      preset: "with-aadhaar",
+                      departureKey: depKey,
+                    })
+                  }}
+                  className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  Print Manifest (With Aadhaar)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportOptions(false)
+                    const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                    setManifestModalConfig({
+                      isOpen: true,
+                      preset: "without-aadhaar",
+                      departureKey: depKey,
+                    })
+                  }}
+                  className="w-full px-4 py-2 text-left text-xs font-medium text-ink hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  Print Manifest (Without Aadhaar)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportOptions(false)
+                    const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                    setManifestModalConfig({
+                      isOpen: true,
+                      preset: "pickup-wise",
+                      departureKey: depKey,
+                    })
+                  }}
+                  className="w-full px-4 py-2 text-left text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle flex items-center gap-1.5"
+                >
+                  <span>📍 Pickup-Wise Passenger List</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
       {/* Filter Bar (no-print) */}
       <Card elevation="sm" padding="md" className="space-y-4 no-print">
         {/* Time Horizon Chips */}
@@ -731,218 +733,218 @@ export default function JourneyManager({
             tabIndex={0}
             className="space-y-6 focus:outline-none"
           >
-          {filteredDepartures.length === 0 ? (
-            <Card elevation="sm" padding="lg" className="text-center py-12">
-              <Bus size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
-              <h3 className="text-base font-bold text-ink mb-1">No Departures Found</h3>
-              <p className="text-xs text-ink-muted">
-                No active bus departures match the selected filters.
-              </p>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredDepartures.map((dep) => (
-                <Card
-                  key={dep.key}
-                  elevation="sm"
-                  padding="md"
-                  className="flex flex-col justify-between hover:border-border-strong transition-colors"
-                >
-                  <div className="space-y-4">
-                    {/* Top status & date */}
-                    <div className="flex justify-between items-start gap-2">
-                      <Badge variant={dep.statusBadgeVariant} size="sm">
-                        {dep.statusTag}
-                      </Badge>
-                      <span className="text-xs font-semibold text-ink-muted flex items-center gap-1 shrink-0">
-                        <Clock size={12} className="opacity-70" />
-                        {formatDisplayDate(dep.journeyDate)}
-                      </span>
-                    </div>
-
-                    {/* Tour title & Coach badge */}
-                    <div>
-                      <h3 className="text-base sm:text-lg font-bold text-ink leading-snug">
-                        {dep.tourName}
-                      </h3>
-                      <div className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-ink-secondary">
-                        <Bus size={13} className="text-brand shrink-0" />
-                        <span>{dep.busType} ({dep.capacity} Berths)</span>
-                      </div>
-                    </div>
-
-                    {/* Coach Capacity Meter with role="progressbar" */}
-                    <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-ink-muted">Bus Capacity</span>
-                        <span className="text-ink tabular-nums">
-                          {dep.bookedCount} / {dep.capacity} Seats ({dep.occupancyPct}%)
+            {filteredDepartures.length === 0 ? (
+              <Card elevation="sm" padding="lg" className="text-center py-12">
+                <Bus size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
+                <h3 className="text-base font-bold text-ink mb-1">No Departures Found</h3>
+                <p className="text-xs text-ink-muted">
+                  No active bus departures match the selected filters.
+                </p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredDepartures.map((dep) => (
+                  <Card
+                    key={dep.key}
+                    elevation="sm"
+                    padding="md"
+                    className="flex flex-col justify-between hover:border-border-strong transition-colors"
+                  >
+                    <div className="space-y-4">
+                      {/* Top status & date */}
+                      <div className="flex justify-between items-start gap-2">
+                        <Badge variant={dep.statusBadgeVariant} size="sm">
+                          {dep.statusTag}
+                        </Badge>
+                        <span className="text-xs font-semibold text-ink-muted flex items-center gap-1 shrink-0">
+                          <Clock size={12} className="opacity-70" />
+                          {formatDisplayDate(dep.journeyDate)}
                         </span>
                       </div>
-                      <div
-                        role="progressbar"
-                        aria-valuenow={dep.bookedCount}
-                        aria-valuemin={0}
-                        aria-valuemax={dep.capacity}
-                        aria-label={`Coach capacity: ${dep.bookedCount} of ${dep.capacity} berths booked, ${dep.occupancyPct}%`}
-                        className="w-full h-2.5 bg-surface-muted rounded-full overflow-hidden border border-border-subtle"
-                      >
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all duration-300",
-                            dep.occupancyPct >= 80
-                              ? "bg-success"
-                              : dep.occupancyPct >= 50
-                                ? "bg-accent-warm"
-                                : "bg-brand",
-                          )}
-                          style={{ width: `${dep.occupancyPct}%` }}
-                        />
-                      </div>
-                    </div>
 
-                    {/* Boarding Progress & Financials */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-success-soft text-success-text">
-                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Boarded Pax</p>
-                        <p className="text-sm font-bold tabular-nums mt-0.5">
-                          {dep.checkedInPax} / {dep.totalPax}
-                        </p>
-                      </div>
-                      <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-warning-soft text-warning-text">
-                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Pending Due</p>
-                        <p className="text-sm font-bold tabular-nums mt-0.5">
-                          {formatINR(dep.balanceDue, 0)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Compact Trip Financials & P&L Section */}
-                    {(() => {
-                      const fin = departureFinancialsMap.get(dep.key) || {
-                        bookedRevenue: dep.totalAmount || 0,
-                        collected: dep.advanceReceived || 0,
-                        expensesTotal: 0,
-                        profitBooked: dep.totalAmount || 0,
-                        marginPercent: null,
-                        breakEvenSeats: null,
-                        seatsToBreakEvenRemaining: null,
-                      }
-                      const isLoss = (fin.profitBooked || 0) < 0
-                      return (
-                        <div className="p-2.5 bg-surface-muted/50 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5 text-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase font-bold text-ink-muted">Trip Financials</span>
-                            <span className={`font-bold tabular-nums text-xs ${isLoss ? "text-danger-text" : "text-success-text"}`}>
-                              {isLoss ? `Loss ${formatINR(Math.abs(fin.profitBooked), 0)}` : `Profit ${formatINR(fin.profitBooked, 0)}`}
-                              {fin.marginPercent !== null ? ` (${fin.marginPercent}%)` : ""}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-1 text-[11px] text-ink-muted tabular-nums">
-                            <div>Rev: <strong className="text-ink">{formatINR(fin.bookedRevenue, 0)}</strong></div>
-                            <div>Exp: <strong className="text-danger-text">{formatINR(fin.expensesTotal, 0)}</strong></div>
-                            <div>BE: <strong className="text-ink">{fin.breakEvenSeats !== null ? `${fin.breakEvenSeats}p` : "—"}</strong></div>
-                          </div>
-                          <div className="flex items-center justify-between pt-1 border-t border-border-subtle text-[10px]">
-                            <span className="text-ink-muted truncate">
-                              {fin.seatsToBreakEvenRemaining !== null && fin.seatsToBreakEvenRemaining > 0
-                                ? `${fin.seatsToBreakEvenRemaining} seats to break even`
-                                : fin.breakEvenSeats !== null
-                                  ? "Target achieved"
-                                  : "No trip expenses recorded"}
-                            </span>
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="ghost"
-                              className="text-brand hover:text-brand-dark p-0 h-auto font-semibold shrink-0"
-                              onClick={() => handleOpenAddTripExpense(dep)}
-                              icon={<Plus size={11} />}
-                            >
-                              Add trip expense
-                            </Button>
-                          </div>
+                      {/* Tour title & Coach badge */}
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold text-ink leading-snug">
+                          {dep.tourName}
+                        </h3>
+                        <div className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-ink-secondary">
+                          <Bus size={13} className="text-brand shrink-0" />
+                          <span>{dep.busType} ({dep.capacity} Berths)</span>
                         </div>
-                      )
-                    })()}
-                  </div>
+                      </div>
 
-                  {/* Card Actions */}
-                  <div className="pt-4 mt-4 border-t border-border-subtle flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedDepartureKey(dep.key)
-                        setViewMode("seatmap")
-                      }}
-                      title="Live Seat Map & Berth Holds"
-                    >
-                      <Bus size={13} className="mr-1 text-brand" />
-                      <span>Seat Map</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedGroupDeparture(dep)
-                        setShowDepartureGroupsModal(true)
-                      }}
-                      title="Manage Tour Groups & Group Payments"
-                    >
-                      <Users size={13} className="mr-1 text-brand" />
-                      <span>Groups</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setActiveLayoutDeparture(dep)
-                        setShowSeatLayoutModal(true)
-                      }}
-                      title="Download / Print Passenger Seat Layout"
-                    >
-                      <Layers size={13} className="mr-1 text-brand" />
-                      <span>Layout</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setManifestModalConfig({
-                          isOpen: true,
-                          preset: "without-aadhaar",
-                          departureKey: dep.key,
-                        })
-                      }}
-                      title="Configure and Print Passenger Manifest"
-                    >
-                      <Printer size={13} className="mr-1 text-brand" />
-                      <span>Manifest</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setSelectedDepartureKey(dep.key)
-                        setViewMode("manifest")
-                      }}
-                    >
-                      <span>Open Boarding</span>
-                      <ChevronRight size={14} className="ml-1" />
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                      {/* Coach Capacity Meter with role="progressbar" */}
+                      <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-ink-muted">Bus Capacity</span>
+                          <span className="text-ink tabular-nums">
+                            {dep.bookedCount} / {dep.capacity} Seats ({dep.occupancyPct}%)
+                          </span>
+                        </div>
+                        <div
+                          role="progressbar"
+                          aria-valuenow={dep.bookedCount}
+                          aria-valuemin={0}
+                          aria-valuemax={dep.capacity}
+                          aria-label={`Coach capacity: ${dep.bookedCount} of ${dep.capacity} berths booked, ${dep.occupancyPct}%`}
+                          className="w-full h-2.5 bg-surface-muted rounded-full overflow-hidden border border-border-subtle"
+                        >
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              dep.occupancyPct >= 80
+                                ? "bg-success"
+                                : dep.occupancyPct >= 50
+                                  ? "bg-accent-warm"
+                                  : "bg-brand",
+                            )}
+                            style={{ width: `${dep.occupancyPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Boarding Progress & Financials */}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-success-soft text-success-text">
+                          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Boarded Pax</p>
+                          <p className="text-sm font-bold tabular-nums mt-0.5">
+                            {dep.checkedInPax} / {dep.totalPax}
+                          </p>
+                        </div>
+                        <div className="p-2.5 rounded-[var(--yh-radius-md)] bg-warning-soft text-warning-text">
+                          <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Pending Due</p>
+                          <p className="text-sm font-bold tabular-nums mt-0.5">
+                            {formatINR(dep.balanceDue, 0)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Compact Trip Financials & P&L Section */}
+                      {(() => {
+                        const fin = departureFinancialsMap.get(dep.key) || {
+                          bookedRevenue: dep.totalAmount || 0,
+                          collected: dep.advanceReceived || 0,
+                          expensesTotal: 0,
+                          profitBooked: dep.totalAmount || 0,
+                          marginPercent: null,
+                          breakEvenSeats: null,
+                          seatsToBreakEvenRemaining: null,
+                        }
+                        const isLoss = (fin.profitBooked || 0) < 0
+                        return (
+                          <div className="p-2.5 bg-surface-muted/50 rounded-[var(--yh-radius-md)] border border-border-subtle space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-bold text-ink-muted">Trip Financials</span>
+                              <span className={`font-bold tabular-nums text-xs ${isLoss ? "text-danger-text" : "text-success-text"}`}>
+                                {isLoss ? `Loss ${formatINR(Math.abs(fin.profitBooked), 0)}` : `Profit ${formatINR(fin.profitBooked, 0)}`}
+                                {fin.marginPercent !== null ? ` (${fin.marginPercent}%)` : ""}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 text-[11px] text-ink-muted tabular-nums">
+                              <div>Rev: <strong className="text-ink">{formatINR(fin.bookedRevenue, 0)}</strong></div>
+                              <div>Exp: <strong className="text-danger-text">{formatINR(fin.expensesTotal, 0)}</strong></div>
+                              <div>BE: <strong className="text-ink">{fin.breakEvenSeats !== null ? `${fin.breakEvenSeats}p` : "—"}</strong></div>
+                            </div>
+                            <div className="flex items-center justify-between pt-1 border-t border-border-subtle text-[10px]">
+                              <span className="text-ink-muted truncate">
+                                {fin.seatsToBreakEvenRemaining !== null && fin.seatsToBreakEvenRemaining > 0
+                                  ? `${fin.seatsToBreakEvenRemaining} seats to break even`
+                                  : fin.breakEvenSeats !== null
+                                    ? "Target achieved"
+                                    : "No trip expenses recorded"}
+                              </span>
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="ghost"
+                                className="text-brand hover:text-brand-dark p-0 h-auto font-semibold shrink-0"
+                                onClick={() => handleOpenAddTripExpense(dep)}
+                                icon={<Plus size={11} />}
+                              >
+                                Add trip expense
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Card Actions */}
+                    <div className="pt-4 mt-4 border-t border-border-subtle flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedDepartureKey(dep.key)
+                          setViewMode("seatmap")
+                        }}
+                        title="Live Seat Map & Berth Holds"
+                      >
+                        <Bus size={13} className="mr-1 text-brand" />
+                        <span>Seat Map</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedGroupDeparture(dep)
+                          setShowDepartureGroupsModal(true)
+                        }}
+                        title="Manage Tour Groups & Group Payments"
+                      >
+                        <Users size={13} className="mr-1 text-brand" />
+                        <span>Groups</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setActiveLayoutDeparture(dep)
+                          setShowSeatLayoutModal(true)
+                        }}
+                        title="Download / Print Passenger Seat Layout"
+                      >
+                        <Layers size={13} className="mr-1 text-brand" />
+                        <span>Layout</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setManifestModalConfig({
+                            isOpen: true,
+                            preset: "without-aadhaar",
+                            departureKey: dep.key,
+                          })
+                        }}
+                        title="Configure and Print Passenger Manifest"
+                      >
+                        <Printer size={13} className="mr-1 text-brand" />
+                        <span>Manifest</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          setSelectedDepartureKey(dep.key)
+                          setViewMode("manifest")
+                        }}
+                      >
+                        <span>Open Boarding</span>
+                        <ChevronRight size={14} className="ml-1" />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </PanelErrorBoundary>
       )}
 
@@ -958,251 +960,346 @@ export default function JourneyManager({
             tabIndex={0}
             className="space-y-6 focus:outline-none"
           >
-          {/* Active Departure Banner (if scoped) */}
-          {activeDepartureObj && (
-            <Card elevation="sm" padding="md" className="bg-brand-soft/50 border border-brand/20">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedDepartureKey(null)}
-                    className="mb-2 -ml-2 text-brand hover:text-brand-hover"
-                  >
-                    <ArrowLeft size={14} className="mr-1" /> Back to All Departures
-                  </Button>
-                  <h3 className="text-xl sm:text-2xl font-bold text-ink">{activeDepartureObj.tourName}</h3>
-                  <p className="text-xs text-ink-muted mt-1">
-                    📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
-                    <p className="text-[10px] font-semibold text-ink-muted uppercase">Boarded</p>
-                    <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
-                  </div>
-                  <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
-                    <p className="text-[10px] font-semibold text-ink-muted uppercase">Occupancy</p>
-                    <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.occupancyPct}%</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setActiveLayoutDeparture(activeDepartureObj)
-                      setShowSeatLayoutModal(true)
-                    }}
-                  >
-                    <Layers size={14} className="mr-1.5 text-brand" />
-                    <span>Seat Layout PDF</span>
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Manifest Statistics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard
-              label="Bookings Count"
-              value={journeyBookings.length}
-              icon={<Bus size={18} />}
-              tone="brand"
-            />
-            <StatCard
-              label="Total Passengers"
-              value={totalPassengers}
-              icon={<Users size={18} />}
-              tone="accent"
-            />
-            <StatCard
-              label="Checked In / Boarded"
-              value={`${totalCheckedIn}/${totalPassengers}`}
-              hint={`${totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete`}
-              icon={<Check size={18} />}
-              tone="success"
-            />
-          </div>
-
-          {/* Bookings & Passenger List */}
-          {journeyBookings.length === 0 ? (
-            <Card elevation="sm" padding="lg" className="text-center py-12">
-              <MapPin size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
-              <h3 className="text-base font-bold text-ink mb-1">No Passengers Found</h3>
-              <p className="text-xs text-ink-muted">
-                No active bookings match this departure selection.
-              </p>
-            </Card>
-          ) : (
-            journeyBookings.map((booking) => {
-              const paxList = Array.isArray(booking.passengers) ? booking.passengers : []
-              const checkedInCount = paxList.filter((p) => p.checkedIn).length
-              const allCheckedIn = paxList.length > 0 && paxList.every((p) => p.checkedIn)
-              const noneCheckedIn = paxList.every((p) => !p.checkedIn)
-              const isBatchProcessing = batchLoading === (booking._id || booking.id)
-              const balanceDue = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
-              const isFullyPaid = balanceDue === 0
-
-              return (
-                <Card
-                  key={booking.id || booking._id}
-                  elevation="sm"
-                  padding="none"
-                  className="overflow-hidden"
-                >
-                  {/* Booking Header Banner */}
-                  <div className="bg-surface-muted/60 p-4 sm:p-5 border-b border-border-subtle">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
-                      <div>
-                        <h4 className="text-base font-bold text-ink">{booking.tourName}</h4>
-                        <p className="text-xs text-ink-muted font-medium">Invoice #{booking.invoiceNo}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-ink-muted">Check-in:</span>
-                        <div
-                          role="progressbar"
-                          aria-valuenow={checkedInCount}
-                          aria-valuemin={0}
-                          aria-valuemax={paxList.length}
-                          aria-label={`Boarding progress: ${checkedInCount} of ${paxList.length} passengers boarded`}
-                          className="w-20 sm:w-24 h-2 bg-border-subtle rounded-full overflow-hidden"
-                        >
-                          <div
-                            className="h-full bg-success transition-all"
-                            style={{
-                              width: `${paxList.length > 0 ? (checkedInCount / paxList.length) * 100 : 0}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-ink tabular-nums">
-                          {checkedInCount}/{paxList.length}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <span className="text-ink-muted block">Date</span>
-                        <span className="font-semibold text-ink">{formatDisplayDate(booking.journeyDate)}</span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted block">Primary Customer</span>
-                        <span className="font-semibold text-ink">{booking.contactName}</span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted block">Passengers</span>
-                        <span className="font-semibold text-ink tabular-nums">{paxList.length} PAX</span>
-                      </div>
-                      <div>
-                        <span className="text-ink-muted block">Payment</span>
-                        <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Batch Actions & Quick Balance Bar (no-print) */}
-                  <div className="px-4 sm:px-5 py-2.5 bg-surface border-b border-border-subtle flex flex-wrap items-center gap-2 no-print">
-                    {!allCheckedIn && (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        disabled={isBatchProcessing}
-                        onClick={() => handleBatchCheckin(booking, true)}
-                        className="min-h-11 sm:min-h-9"
-                      >
-                        <CheckCheck size={14} className="mr-1.5" />
-                        {isBatchProcessing ? "Boarding..." : `Board All (${paxList.length})`}
-                      </Button>
-                    )}
-                    {!noneCheckedIn && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isBatchProcessing}
-                        onClick={() => handleBatchCheckin(booking, false)}
-                        className="min-h-11 sm:min-h-9"
-                      >
-                        <XCircle size={14} className="mr-1.5" />
-                        Unboard All
-                      </Button>
-                    )}
-
+            {/* Active Departure Banner (if scoped) */}
+            {activeDepartureObj && (
+              <Card elevation="sm" padding="md" className="bg-brand-soft/50 border border-brand/20">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setBoardingPassTarget({ booking, paxIndex: "all" })}
-                      title="View & Print Boarding Passes with QR"
-                      className="min-h-11 sm:min-h-9"
+                      onClick={() => setSelectedDepartureKey(null)}
+                      className="mb-2 -ml-2 text-brand hover:text-brand-hover"
                     >
-                      <Ticket size={14} className="mr-1.5 text-brand" />
-                      <span>Boarding Passes ({paxList.length})</span>
+                      <ArrowLeft size={14} className="mr-1" /> Back to All Departures
                     </Button>
+                    <h3 className="text-xl sm:text-2xl font-bold text-ink">{activeDepartureObj.tourName}</h3>
+                    <p className="text-xs text-ink-muted mt-1">
+                      📅 {formatDisplayDate(activeDepartureObj.journeyDate)} • 🚌 {activeDepartureObj.busType}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
+                      <p className="text-[10px] font-semibold text-ink-muted uppercase">Boarded</p>
+                      <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.checkedInPax} / {activeDepartureObj.totalPax}</p>
+                    </div>
+                    <div className="bg-surface px-3 py-2 rounded-[var(--yh-radius-md)] border border-border-subtle text-center">
+                      <p className="text-[10px] font-semibold text-ink-muted uppercase">Occupancy</p>
+                      <p className="text-base font-bold text-ink tabular-nums">{activeDepartureObj.occupancyPct}%</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setActiveLayoutDeparture(activeDepartureObj)
+                        setShowSeatLayoutModal(true)
+                      }}
+                    >
+                      <Layers size={14} className="mr-1.5 text-brand" />
+                      <span>Seat Layout PDF</span>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
 
-                    <div className="flex-1" />
+            {/* Manifest Statistics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <StatCard
+                label="Bookings Count"
+                value={journeyBookings.length}
+                icon={<Bus size={18} />}
+                tone="brand"
+              />
+              <StatCard
+                label="Total Passengers"
+                value={totalPassengers}
+                icon={<Users size={18} />}
+                tone="accent"
+              />
+              <StatCard
+                label="Checked In / Boarded"
+                value={`${totalCheckedIn}/${totalPassengers}`}
+                hint={`${totalPassengers > 0 ? Math.round((totalCheckedIn / totalPassengers) * 100) : 0}% Complete`}
+                icon={<Check size={18} />}
+                tone="success"
+              />
+            </div>
 
-                    {balanceDue > 0 && (
+            {/* Bookings & Passenger List */}
+            {journeyBookings.length === 0 ? (
+              <Card elevation="sm" padding="lg" className="text-center py-12">
+                <MapPin size={40} className="text-ink-muted mx-auto mb-3 opacity-60" />
+                <h3 className="text-base font-bold text-ink mb-1">No Passengers Found</h3>
+                <p className="text-xs text-ink-muted">
+                  No active bookings match this departure selection.
+                </p>
+              </Card>
+            ) : (
+              journeyBookings.map((booking) => {
+                const paxList = Array.isArray(booking.passengers) ? booking.passengers : []
+                const checkedInCount = paxList.filter((p) => p.checkedIn).length
+                const allCheckedIn = paxList.length > 0 && paxList.every((p) => p.checkedIn)
+                const noneCheckedIn = paxList.every((p) => !p.checkedIn)
+                const isBatchProcessing = batchLoading === (booking._id || booking.id)
+                const balanceDue = Math.max(0, (booking.totalAmount || 0) - (booking.advanceReceived || 0))
+                const isFullyPaid = balanceDue === 0
+
+                return (
+                  <Card
+                    key={booking.id || booking._id}
+                    elevation="sm"
+                    padding="none"
+                    className="overflow-hidden"
+                  >
+                    {/* Booking Header Banner */}
+                    <div className="bg-surface-muted/60 p-4 sm:p-5 border-b border-border-subtle">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                        <div>
+                          <h4 className="text-base font-bold text-ink">{booking.tourName}</h4>
+                          <p className="text-xs text-ink-muted font-medium">Invoice #{booking.invoiceNo}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-ink-muted">Check-in:</span>
+                          <div
+                            role="progressbar"
+                            aria-valuenow={checkedInCount}
+                            aria-valuemin={0}
+                            aria-valuemax={paxList.length}
+                            aria-label={`Boarding progress: ${checkedInCount} of ${paxList.length} passengers boarded`}
+                            className="w-20 sm:w-24 h-2 bg-border-subtle rounded-full overflow-hidden"
+                          >
+                            <div
+                              className="h-full bg-success transition-all"
+                              style={{
+                                width: `${paxList.length > 0 ? (checkedInCount / paxList.length) * 100 : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-ink tabular-nums">
+                            {checkedInCount}/{paxList.length}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="text-ink-muted block">Date</span>
+                          <span className="font-semibold text-ink">{formatDisplayDate(booking.journeyDate)}</span>
+                        </div>
+                        <div>
+                          <span className="text-ink-muted block">Primary Customer</span>
+                          <span className="font-semibold text-ink">{booking.contactName}</span>
+                        </div>
+                        <div>
+                          <span className="text-ink-muted block">Passengers</span>
+                          <span className="font-semibold text-ink tabular-nums">{paxList.length} PAX</span>
+                        </div>
+                        <div>
+                          <span className="text-ink-muted block">Payment</span>
+                          <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Batch Actions & Quick Balance Bar (no-print) */}
+                    <div className="px-4 sm:px-5 py-2.5 bg-surface border-b border-border-subtle flex flex-wrap items-center gap-2 no-print">
+                      {!allCheckedIn && (
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          disabled={isBatchProcessing}
+                          onClick={() => handleBatchCheckin(booking, true)}
+                          className="min-h-11 sm:min-h-9"
+                        >
+                          <CheckCheck size={14} className="mr-1.5" />
+                          {isBatchProcessing ? "Boarding..." : `Board All (${paxList.length})`}
+                        </Button>
+                      )}
+                      {!noneCheckedIn && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isBatchProcessing}
+                          onClick={() => handleBatchCheckin(booking, false)}
+                          className="min-h-11 sm:min-h-9"
+                        >
+                          <XCircle size={14} className="mr-1.5" />
+                          Unboard All
+                        </Button>
+                      )}
+
                       <Button
                         type="button"
-                        variant="accent"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setQuickPayBooking(booking)
-                          setQuickPayAmount(balanceDue.toString())
-                          setQuickPayMode(booking.paymentMode || "Cash")
-                        }}
+                        onClick={() => setBoardingPassTarget({ booking, paxIndex: "all" })}
+                        title="View & Print Boarding Passes with QR"
                         className="min-h-11 sm:min-h-9"
                       >
-                        <Banknote size={14} className="mr-1.5" />
-                        Collect {formatINR(balanceDue, 0)}
+                        <Ticket size={14} className="mr-1.5 text-brand" />
+                        <span>Boarding Passes ({paxList.length})</span>
                       </Button>
-                    )}
-                  </div>
 
-                  {/* Passenger Roster: Desktop Table (hidden on mobile) */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">#</TableHead>
-                          <TableHead>Passenger Name</TableHead>
-                          <TableHead>Age / Gender</TableHead>
-                          <TableHead>City</TableHead>
-                          <TableHead>Seat</TableHead>
-                          <TableHead>Payment</TableHead>
-                          <TableHead align="right">Boarding Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paxList.length === 0 ? (
+                      <div className="flex-1" />
+
+                      {balanceDue > 0 && (
+                        <Button
+                          type="button"
+                          variant="accent"
+                          size="sm"
+                          onClick={() => {
+                            setQuickPayBooking(booking)
+                            setQuickPayAmount(balanceDue.toString())
+                            setQuickPayMode(booking.paymentMode || "Cash")
+                          }}
+                          className="min-h-11 sm:min-h-9"
+                        >
+                          <Banknote size={14} className="mr-1.5" />
+                          Collect {formatINR(balanceDue, 0)}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Passenger Roster: Desktop Table (hidden on mobile) */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center py-6 text-xs text-ink-muted">
-                              No passenger details recorded for this booking.
-                            </TableCell>
+                            <TableHead className="w-12">#</TableHead>
+                            <TableHead>Passenger Name</TableHead>
+                            <TableHead>Age / Gender</TableHead>
+                            <TableHead>City</TableHead>
+                            <TableHead>Seat</TableHead>
+                            <TableHead>Payment</TableHead>
+                            <TableHead align="right">Boarding Action</TableHead>
                           </TableRow>
-                        ) : (
-                          paxList.map((passenger, idx) => {
+                        </TableHeader>
+                        <TableBody>
+                          {paxList.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center py-6 text-xs text-ink-muted">
+                                No passenger details recorded for this booking.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            paxList.map((passenger, idx) => {
+                              const isCheckedIn = Boolean(passenger.checkedIn)
+                              const pId = passenger._id || idx
+                              return (
+                                <TableRow key={pId} className={isCheckedIn ? "bg-success-soft/20" : undefined}>
+                                  <TableCell tabular className="font-semibold text-ink-muted">
+                                    {idx + 1}
+                                  </TableCell>
+                                  <TableCell className="font-semibold text-ink">
+                                    {passenger.name}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-ink-secondary">
+                                    {passenger.age} / {passenger.gender}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-ink-secondary">
+                                    {passenger.city}
+                                  </TableCell>
+                                  <TableCell>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        activeDepartureObj &&
+                                        setSwappingSeat({
+                                          bookingId: booking._id || booking.id,
+                                          passengerId: pId,
+                                          passengerName: passenger.name,
+                                          currentSeatId: passenger.seatId,
+                                        })
+                                      }
+                                      className={cn(
+                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors cursor-pointer",
+                                        passenger.seatId
+                                          ? "bg-brand-soft text-brand border-brand/20 hover:border-brand/50"
+                                          : "bg-surface-muted text-ink-muted border-border-subtle hover:bg-surface-hover",
+                                        FOCUS_RING_CLASS,
+                                      )}
+                                      title="Click to reassign seat"
+                                    >
+                                      <span>{formatSeatLabel(passenger.seatId)}</span>
+                                      <ArrowLeftRight size={11} className="opacity-70" />
+                                    </button>
+                                  </TableCell>
+                                  <TableCell>
+                                    <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
+                                          isCheckedIn
+                                            ? "bg-success text-success-fg shadow-xs"
+                                            : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
+                                          FOCUS_RING_CLASS,
+                                        )}
+                                      >
+                                        <Check size={13} />
+                                        {isCheckedIn ? "Boarded" : "Check In"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
+                                        className={cn(
+                                          "p-2 rounded-[var(--yh-radius-md)] text-ink-muted hover:text-brand hover:bg-brand-soft/60 transition-colors",
+                                          FOCUS_RING_CLASS,
+                                        )}
+                                        title="View & Print Passenger Boarding Pass"
+                                        aria-label={`Print Boarding Pass for ${passenger.name}`}
+                                      >
+                                        <Ticket size={16} />
+                                      </button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Passenger Roster: Mobile-first Stacked Checklist (<md) */}
+                    <div className="md:hidden divide-y divide-border-subtle">
+                      {paxList.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-ink-muted">
+                          No passenger details recorded for this booking.
+                        </div>
+                      ) : (
+                        paxList.map((passenger, idx) => {
                           const isCheckedIn = Boolean(passenger.checkedIn)
                           const pId = passenger._id || idx
                           return (
-                            <TableRow key={pId} className={isCheckedIn ? "bg-success-soft/20" : undefined}>
-                              <TableCell tabular className="font-semibold text-ink-muted">
-                                {idx + 1}
-                              </TableCell>
-                              <TableCell className="font-semibold text-ink">
-                                {passenger.name}
-                              </TableCell>
-                              <TableCell className="text-xs text-ink-secondary">
-                                {passenger.age} / {passenger.gender}
-                              </TableCell>
-                              <TableCell className="text-xs text-ink-secondary">
-                                {passenger.city}
-                              </TableCell>
-                              <TableCell>
+                            <div
+                              key={pId}
+                              className={cn(
+                                "p-4 space-y-3",
+                                isCheckedIn ? "bg-success-soft/20" : "bg-surface",
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <span className="text-xs font-semibold text-ink-muted tabular-nums mr-1.5">
+                                    #{idx + 1}
+                                  </span>
+                                  <span className="font-semibold text-ink text-sm">
+                                    {passenger.name}
+                                  </span>
+                                  <p className="text-xs text-ink-muted mt-0.5">
+                                    {passenger.gender} • {passenger.age} yrs • {passenger.city}
+                                  </p>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1215,170 +1312,75 @@ export default function JourneyManager({
                                     })
                                   }
                                   className={cn(
-                                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors cursor-pointer",
+                                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors shrink-0",
                                     passenger.seatId
-                                      ? "bg-brand-soft text-brand border-brand/20 hover:border-brand/50"
-                                      : "bg-surface-muted text-ink-muted border-border-subtle hover:bg-surface-hover",
-                                    FOCUS_RING_CLASS,
+                                      ? "bg-brand-soft text-brand border-brand/20"
+                                      : "bg-surface-muted text-ink-muted border-border-subtle",
                                   )}
-                                  title="Click to reassign seat"
                                 >
                                   <span>{formatSeatLabel(passenger.seatId)}</span>
-                                  <ArrowLeftRight size={11} className="opacity-70" />
+                                  <ArrowLeftRight size={10} />
                                 </button>
-                              </TableCell>
-                              <TableCell>
-                                <StatusPill status={isFullyPaid ? "Paid" : "Pending"} size="sm" />
-                              </TableCell>
-                              <TableCell align="right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleCheckIn(booking, passenger, idx)}
-                                    className={cn(
-                                      "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-md)] text-xs font-semibold transition-colors cursor-pointer min-h-9",
-                                      isCheckedIn
-                                        ? "bg-success text-success-fg shadow-xs"
-                                        : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
-                                      FOCUS_RING_CLASS,
-                                    )}
-                                  >
-                                    <Check size={13} />
-                                    {isCheckedIn ? "Boarded" : "Check In"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
-                                    className={cn(
-                                      "p-2 rounded-[var(--yh-radius-md)] text-ink-muted hover:text-brand hover:bg-brand-soft/60 transition-colors",
-                                      FOCUS_RING_CLASS,
-                                    )}
-                                    title="View & Print Passenger Boarding Pass"
-                                    aria-label={`Print Boarding Pass for ${passenger.name}`}
-                                  >
-                                    <Ticket size={16} />
-                                  </button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
+                                  className="text-xs font-medium text-brand flex items-center gap-1 py-1"
+                                >
+                                  <Ticket size={13} />
+                                  Boarding Pass
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCheckIn(booking, passenger, idx)}
+                                  className={cn(
+                                    "flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[var(--yh-radius-md)] text-xs font-semibold min-h-11 transition-colors cursor-pointer",
+                                    isCheckedIn
+                                      ? "bg-success text-success-fg shadow-xs"
+                                      : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
+                                    FOCUS_RING_CLASS,
+                                  )}
+                                >
+                                  <Check size={14} />
+                                  {isCheckedIn ? "Boarded" : "Check In"}
+                                </button>
+                              </div>
+                            </div>
                           )
                         })
                       )}
-                    </TableBody>
-                    </Table>
-                  </div>
+                    </div>
 
-                  {/* Passenger Roster: Mobile-first Stacked Checklist (<md) */}
-                  <div className="md:hidden divide-y divide-border-subtle">
-                    {paxList.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-ink-muted">
-                        No passenger details recorded for this booking.
-                      </div>
-                    ) : (
-                      paxList.map((passenger, idx) => {
-                      const isCheckedIn = Boolean(passenger.checkedIn)
-                      const pId = passenger._id || idx
-                      return (
-                        <div
-                          key={pId}
-                          className={cn(
-                            "p-4 space-y-3",
-                            isCheckedIn ? "bg-success-soft/20" : "bg-surface",
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <span className="text-xs font-semibold text-ink-muted tabular-nums mr-1.5">
-                                #{idx + 1}
-                              </span>
-                              <span className="font-semibold text-ink text-sm">
-                                {passenger.name}
-                              </span>
-                              <p className="text-xs text-ink-muted mt-0.5">
-                                {passenger.gender} • {passenger.age} yrs • {passenger.city}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                activeDepartureObj &&
-                                setSwappingSeat({
-                                  bookingId: booking._id || booking.id,
-                                  passengerId: pId,
-                                  passengerName: passenger.name,
-                                  currentSeatId: passenger.seatId,
-                                })
-                              }
-                              className={cn(
-                                "inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold border transition-colors shrink-0",
-                                passenger.seatId
-                                  ? "bg-brand-soft text-brand border-brand/20"
-                                  : "bg-surface-muted text-ink-muted border-border-subtle",
-                              )}
-                            >
-                              <span>{formatSeatLabel(passenger.seatId)}</span>
-                              <ArrowLeftRight size={10} />
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setBoardingPassTarget({ booking, paxIndex: idx })}
-                              className="text-xs font-medium text-brand flex items-center gap-1 py-1"
-                            >
-                              <Ticket size={13} />
-                              Boarding Pass
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleCheckIn(booking, passenger, idx)}
-                              className={cn(
-                                "flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[var(--yh-radius-md)] text-xs font-semibold min-h-11 transition-colors cursor-pointer",
-                                isCheckedIn
-                                  ? "bg-success text-success-fg shadow-xs"
-                                  : "bg-surface-muted text-ink-secondary border border-border-strong hover:bg-surface-hover",
-                                FOCUS_RING_CLASS,
-                              )}
-                            >
-                              <Check size={14} />
-                              {isCheckedIn ? "Boarded" : "Check In"}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-
-                  {/* Customer Communication Footer (no-print) */}
-                  <div className="p-3 sm:px-5 bg-surface-muted/40 border-t border-border-subtle flex flex-wrap items-center justify-end gap-2 no-print">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleSendWhatsApp(booking)}
-                    >
-                      <MessageCircle size={14} className="mr-1.5 text-emerald-600" />
-                      WhatsApp Trip Info
-                    </Button>
-                    {booking.contactEmail && (
+                    {/* Customer Communication Footer (no-print) */}
+                    <div className="p-3 sm:px-5 bg-surface-muted/40 border-t border-border-subtle flex flex-wrap items-center justify-end gap-2 no-print">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => handleSendEmail(booking)}
+                        onClick={() => handleSendWhatsApp(booking)}
                       >
-                        <Mail size={14} className="mr-1.5 text-blue-600" />
-                        Email Info
+                        <MessageCircle size={14} className="mr-1.5 text-emerald-600" />
+                        WhatsApp Trip Info
                       </Button>
-                    )}
-                  </div>
-                </Card>
-              )
-            })
-          )}
-        </div>
+                      {booking.contactEmail && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSendEmail(booking)}
+                        >
+                          <Mail size={14} className="mr-1.5 text-blue-600" />
+                          Email Info
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                )
+              })
+            )}
+          </div>
         </PanelErrorBoundary>
       )}
 
@@ -1754,7 +1756,7 @@ export default function JourneyManager({
           isOpen={showGroupBookingModal}
           onClose={() => setShowGroupBookingModal(false)}
           initialDeparture={selectedGroupDeparture}
-          tours={uniqueTours.map((t) => ({ id: t, name: t }))}
+          tours={availableTours}
           bookings={bookings}
           onGroupCreated={(group) => {
             setActiveGroupId(group._id)

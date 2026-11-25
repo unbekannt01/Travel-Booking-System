@@ -671,7 +671,9 @@ export async function createBookingCore({
     baseAmount: body.baseAmount || totalAmount,
   })
 
-  const finalServerTotal = pricing.finalTotal
+  const finalServerTotal = groupId && totalAmount !== undefined
+    ? Math.round(Number(totalAmount) * 100) / 100
+    : pricing.finalTotal
   const numAdvance = Number(advanceReceived || 0)
 
   if (isNaN(numAdvance) || numAdvance < 0) {
@@ -680,7 +682,7 @@ export async function createBookingCore({
     throw err
   }
 
-  if (totalAmount !== undefined && totalAmount !== null) {
+  if (!groupId && totalAmount !== undefined && totalAmount !== null) {
     const clientTotal = Math.round(Number(totalAmount) * 100) / 100
     if (Math.abs(clientTotal - finalServerTotal) > 0.05) {
       const err = new Error(`Total amount mismatch: client provided ₹${clientTotal}, but server calculated ₹${finalServerTotal}.`)
