@@ -73,6 +73,25 @@ export default function PassengerManagement({
   const [boardingPassTarget, setBoardingPassTarget] = useState(null)
   const [shareSeatTarget, setShareSeatTarget] = useState(null)
 
+  const shareDepartureInfo = useMemo(() => {
+    if (!shareSeatTarget) return null
+    return {
+      tourName: shareSeatTarget.booking?.tourName,
+      journeyDate: shareSeatTarget.booking?.journeyDate,
+      busType: shareSeatTarget.booking?.busType,
+      layoutKey: shareSeatTarget.booking?.seatLayoutKey,
+      companyName: user?.companyName,
+      companyPhone: user?.phone,
+    }
+  }, [shareSeatTarget, user?.companyName, user?.phone])
+
+  const shareOperatorInfo = useMemo(() => {
+    return {
+      companyName: user?.companyName,
+      phone: user?.phone,
+    }
+  }, [user?.companyName, user?.phone])
+
   const uniqueTours = useMemo(() => {
     return [...new Set(bookings.map((b) => b.tourName))].filter(Boolean)
   }, [bookings])
@@ -720,18 +739,8 @@ export default function PassengerManagement({
           onClose={() => setShareSeatTarget(null)}
           booking={shareSeatTarget.booking}
           initialSeatId={shareSeatTarget.initialSeatId}
-          departureInfo={{
-            tourName: shareSeatTarget.booking?.tourName,
-            journeyDate: shareSeatTarget.booking?.journeyDate,
-            busType: shareSeatTarget.booking?.busType,
-            layoutKey: shareSeatTarget.booking?.seatLayoutKey,
-            companyName: user?.companyName,
-            companyPhone: user?.phone,
-          }}
-          operatorInfo={{
-            companyName: user?.companyName,
-            phone: user?.phone,
-          }}
+          departureInfo={shareDepartureInfo || undefined}
+          operatorInfo={shareOperatorInfo}
         />
       )}
     </div>

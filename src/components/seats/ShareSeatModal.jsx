@@ -24,6 +24,8 @@ import { formatSeatLabel } from "../../utils/seatFormatting"
 import { useToast } from "../common/ToastContext"
 import { Button, Badge, FOCUS_RING_CLASS } from "../ui"
 
+const EMPTY_OBJECT = Object.freeze({})
+
 /**
  * ShareSeatModal (Part 6S-3a)
  *
@@ -39,17 +41,32 @@ import { Button, Badge, FOCUS_RING_CLASS } from "../ui"
 export default function ShareSeatModal({
   isOpen,
   onClose,
-  booking = {},
-  departureInfo = {},
+  booking = EMPTY_OBJECT,
+  departureInfo = EMPTY_OBJECT,
   initialSeatId = null,
-  occupiedSeatsMap = {},
-  operatorInfo = {},
+  occupiedSeatsMap = EMPTY_OBJECT,
+  operatorInfo = EMPTY_OBJECT,
 }) {
   const { toast } = useToast()
   const modalRef = useRef(null)
+  const prevModalStateRef = useRef("")
 
   // Selected passengers for this share card
-  const [selectedPaxKeys, setSelectedPaxKeys] = useState(new Set())
+  const [selectedPaxKeys, setSelectedPaxKeys] = useState(() => {
+    const list = booking.passengers || []
+    if (initialSeatId) {
+      const match = list.find(
+        (p) =>
+          resolveSeatId(booking.seatLayoutKey, p.seatId) ===
+          resolveSeatId(booking.seatLayoutKey, initialSeatId),
+      )
+      if (match) {
+        return new Set([String(match._id || list.indexOf(match))])
+      }
+    }
+    return new Set(list.map((p, idx) => String(p._id || idx)))
+  })
+
   const [lang, setLang] = useState("en")
   const [showBalance, setShowBalance] = useState(false)
   const [imageBlob, setImageBlob] = useState(null)
@@ -76,26 +93,35 @@ export default function ShareSeatModal({
     }))
   }, [booking.passengers])
 
-  // Initialize selected passengers when modal opens or booking changes
+  // Reset selected passengers and balance toggle when modal opens or target booking changes
   useEffect(() => {
     if (!isOpen) return
-
-    // If initialSeatId is provided, ensure valid passenger selection
-    const keys = new Set(passengers.map((p) => p._key))
-    if (initialSeatId) {
-      const match = passengers.find(
-        (p) =>
-          resolveSeatId(booking.seatLayoutKey, p.seatId) ===
-          resolveSeatId(booking.seatLayoutKey, initialSeatId),
-      )
-      if (match) {
-        keys.add(match._key)
+    const stateKey = `${booking._id || booking.invoiceNo || ""}_${initialSeatId || ""}`
+    if (prevModalStateRef.current !== stateKey) {
+      prevModalStateRef.current = stateKey
+      const list = booking.passengers || []
+      const keys = new Set()
+      if (initialSeatId) {
+        const match = list.find(
+          (p) =>
+            resolveSeatId(booking.seatLayoutKey, p.seatId) ===
+            resolveSeatId(booking.seatLayoutKey, initialSeatId),
+        )
+        if (match) {
+          keys.add(String(match._id || list.indexOf(match)))
+        }
       }
+      if (keys.size === 0) {
+        list.forEach((p, idx) => keys.add(String(p._id || idx)))
+      }
+      setSelectedPaxKeys(keys)
+      setShowBalance(false)
     }
-    setSelectedPaxKeys(keys)
-    setShowBalance(false)
+  }, [isOpen, booking._id, booking.invoiceNo, initialSeatId, booking.seatLayoutKey, booking.passengers])
 
-    // Load custom template from localStorage if present
+  // Sync custom template from localStorage when language changes
+  useEffect(() => {
+    if (!isOpen) return
     try {
       const saved = localStorage.getItem(`yatrahub_seat_msg_template_${lang}`)
       if (saved && saved.trim()) {
@@ -108,7 +134,7 @@ export default function ShareSeatModal({
     } catch {
       // Fallback
     }
-  }, [isOpen, booking, passengers, lang, initialSeatId])
+  }, [isOpen, lang])
 
   // Target passenger seats array
   const sharedSeatIds = useMemo(() => {
@@ -158,6 +184,24 @@ export default function ShareSeatModal({
     customTemplate,
   ])
 
+  // Stable primitive keys for image generation dependencies
+  const bookingKey = booking._id || booking.invoiceNo || ""
+  const layoutKey = booking.seatLayoutKey || departureInfo.layoutKey || booking.busType || departureInfo.busType || ""
+  const busType = booking.busType || departureInfo.busType || ""
+  const tourName = departureInfo.tourName || booking.tourName || ""
+  const journeyDate = String(departureInfo.journeyDate || booking.journeyDate || "")
+  const companyName = operatorInfo.companyName || departureInfo.companyName || ""
+  const companyPhone = operatorInfo.phone || departureInfo.companyPhone || ""
+  const sharedSeatsKey = sharedSeatIds.slice().sort().join(",")
+  const occupiedSeatsKey = useMemo(() => {
+    if (!occupiedSeatsMap || typeof occupiedSeatsMap !== "object") return ""
+    return Object.entries(occupiedSeatsMap)
+      .filter(([, v]) => v && (v.status === "booked" || v.status === "held" || v.status === "blocked"))
+      .map(([k, v]) => `${k}:${v.status}`)
+      .sort()
+      .join(";")
+  }, [occupiedSeatsMap])
+
   // Generate Canvas image blob on parameters change
   useEffect(() => {
     if (!isOpen) return
@@ -168,8 +212,8 @@ export default function ShareSeatModal({
     const timer = setTimeout(async () => {
       try {
         const blob = await generateSeatImageBlob({
-          layoutKey: booking.seatLayoutKey || departureInfo.layoutKey,
-          busType: booking.busType || departureInfo.busType,
+          layoutKey,
+          busType,
           departureInfo,
           booking,
           sharedSeatIds,
@@ -193,21 +237,29 @@ export default function ShareSeatModal({
           toast.error("Failed to generate seat preview image")
         }
       } finally {
-        if (isSubscribed) setGenerating(false)
+        if (isSubscribed) {
+          setGenerating(false)
+        }
       }
     }, 150)
 
     return () => {
       isSubscribed = false
       clearTimeout(timer)
+      setGenerating(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isOpen,
-    booking,
-    departureInfo,
-    sharedSeatIds,
-    occupiedSeatsMap,
-    operatorInfo,
+    bookingKey,
+    layoutKey,
+    busType,
+    tourName,
+    journeyDate,
+    companyName,
+    companyPhone,
+    sharedSeatsKey,
+    occupiedSeatsKey,
     showBalance,
     lang,
     toast,
@@ -569,7 +621,7 @@ export default function ShareSeatModal({
               size="sm"
               onClick={handleDownload}
               icon={<Download size={14} />}
-              disabled={!imageBlob || generating}
+              disabled={!imageBlob}
             >
               Download PNG
             </Button>
@@ -581,7 +633,7 @@ export default function ShareSeatModal({
                 size="sm"
                 onClick={handleWebShare}
                 icon={<Share2 size={14} />}
-                disabled={!imageBlob || generating}
+                disabled={!imageBlob}
               >
                 Share
               </Button>

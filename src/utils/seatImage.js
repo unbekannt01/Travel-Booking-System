@@ -227,10 +227,13 @@ export async function generateSeatImageBlob({
   showBalance = false,
   lang = "en",
 }) {
-  // Wait for web fonts if document.fonts is available
+  // Wait for web fonts if document.fonts is available (with 500ms safety timeout)
   if (typeof document !== "undefined" && document.fonts?.ready) {
     try {
-      await document.fonts.ready
+      await Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ])
     } catch {
       // Non-blocking font wait fallback
     }
