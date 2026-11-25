@@ -51,6 +51,15 @@ export function validateBookingStep(stepIndex, formData, context = {}) {
     if (!isValidIndianPhone(formData?.contactPhone)) {
       addError("contactPhone", "Please provide a valid 10-digit Indian mobile number")
     }
+    if (formData?.pickupPoint && formData.pickupPoint.length > 80) {
+      addError("pickupPoint", "Pickup point must not exceed 80 characters")
+    }
+    if (formData?.dropPoint && formData.dropPoint.length > 80) {
+      addError("dropPoint", "Drop point must not exceed 80 characters")
+    }
+    if (formData?.pickupTime && formData.pickupTime.length > 20) {
+      addError("pickupTime", "Pickup time must not exceed 20 characters")
+    }
   } else if (stepIndex === 1) {
     const passengers = Array.isArray(formData?.passengers) ? formData.passengers : []
     if (passengers.length === 0) {

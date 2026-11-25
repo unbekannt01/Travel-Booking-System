@@ -1064,6 +1064,7 @@ export function buildPickupWiseWhatsAppText({
   const effectiveLayout = manifest.layoutKey || manifest.busType
   const groups = groupPassengersByPickup(passengers, effectiveLayout)
   const normColumns = normalizeColumnSelection(columns)
+  const includePhone = normColumns.includes("mobile") || normColumns.includes("phone")
   const includeBalance = normColumns.includes("balanceDue")
 
   const companyTitle = manifest.companyName || "YatraHub"
@@ -1093,7 +1094,7 @@ export function buildPickupWiseWhatsAppText({
       const name = p.name ? String(p.name).trim() : "Traveler"
       const seat = displaySeat(p.seat || p.seatId, effectiveLayout)
       const phone = p.mobile || p.contact || p.phone || ""
-      const phoneText = phone ? ` • 📞 ${phone}` : ""
+      const phoneText = includePhone && phone ? ` • 📞 ${phone}` : ""
 
       let balText = ""
       if (includeBalance) {

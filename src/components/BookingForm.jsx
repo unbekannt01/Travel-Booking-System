@@ -21,6 +21,7 @@ import {
   Edit3,
   Users,
   Receipt,
+  MapPin,
 } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { toDateInputValue, formatDisplayDate } from "../utils/date"
@@ -186,6 +187,9 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     contactName: editData?.contactName || "",
     contactPhone: editData?.contactPhone || "",
     contactEmail: editData?.contactEmail || "",
+    pickupPoint: editData?.pickupPoint || "",
+    pickupTime: editData?.pickupTime || "",
+    dropPoint: editData?.dropPoint || "",
     tourName: editData?.tourName || "",
     journeyDate: toDateInputValue(editData?.journeyDate),
     duration: editData?.duration || "",
@@ -206,6 +210,8 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
           age: p.age ?? "",
           gender: p.gender || "Male",
           contact: p.contact || "",
+          pickupPoint: p.pickupPoint || editData?.pickupPoint || "",
+          pickupTime: p.pickupTime || editData?.pickupTime || "",
           aadhar: p.aadhar || "",
           seatId: p.seatId || "",
           checkedIn: p.checkedIn,
@@ -217,6 +223,8 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
             age: "",
             gender: "Male",
             contact: "",
+            pickupPoint: editData?.pickupPoint || "",
+            pickupTime: editData?.pickupTime || "",
             aadhar: "",
             seatId: "",
           },
@@ -323,6 +331,20 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
 
     return seats
   }, [formData.tourName, formData.journeyDate, bookings, formData.id, formData._id])
+
+  const tourPickupSuggestions = useMemo(() => {
+    if (!formData.tourName) return []
+    const points = new Set()
+    bookings
+      .filter((b) => b.tourName === formData.tourName && !b.deletedAt && b.status !== "Cancelled")
+      .forEach((b) => {
+        if (b.pickupPoint?.trim()) points.add(b.pickupPoint.trim())
+        ;(b.passengers || []).forEach((p) => {
+          if (p.pickupPoint?.trim()) points.add(p.pickupPoint.trim())
+        })
+      })
+    return Array.from(points).slice(0, 30)
+  }, [formData.tourName, bookings])
 
   const [activeHolds, setActiveHolds] = useState([])
   const [seatConfig, setSeatConfig] = useState(null)
@@ -825,10 +847,13 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
       taxAmount: pricingBreakdown.taxAmount,
       isTaxInclusive: pricingBreakdown.isTaxInclusive,
       passengers: (formData.passengers || []).map((p) => {
-        if (isMaskedAadhaar(p.aadhar)) {
-          return { ...p, aadhar: "[UNCHANGED]" }
+        const paxObj = { ...p }
+        if (isMaskedAadhaar(paxObj.aadhar)) {
+          paxObj.aadhar = "[UNCHANGED]"
         }
-        return p
+        paxObj.pickupPoint = paxObj.pickupPoint || formData.pickupPoint || ""
+        paxObj.pickupTime = paxObj.pickupTime || formData.pickupTime || ""
+        return paxObj
       }),
     }
 
@@ -1248,6 +1273,100 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                         onChange={(e) =>
                           setFormData((prev) => ({ ...prev, contactEmail: e.target.value }))
                         }
+                      />
+                    )}
+                  </Field>
+                </div>
+              </Card>
+
+              {/* Boarding & Pickup Details */}
+              <Card elevation="sm" padding="lg" className="space-y-4">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-border-subtle">
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--yh-radius-md)] bg-brand-soft text-brand"
+                  >
+                    <MapPin size={18} />
+                  </span>
+                  <div>
+                    <h2 className="text-base font-semibold text-ink">
+                      Boarding &amp; Drop Details (Optional)
+                    </h2>
+                    <p className="text-xs text-ink-muted">
+                      Specify pickup location and schedule for manifests and coordinator WhatsApp lists
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field
+                    id="pickupPoint"
+                    label="Pickup point"
+                    hint="e.g. Geeta Mandir, Iscon Cross Road"
+                    error={stepErrors.pickupPoint}
+                  >
+                    {({ id, describedBy }) => (
+                      <>
+                        <Input
+                          id={id}
+                          list="tour-pickup-datalist"
+                          placeholder="Select or enter pickup stop"
+                          value={formData.pickupPoint}
+                          aria-describedby={describedBy}
+                          maxLength={80}
+                          onChange={(e) => {
+                            clearFieldError("pickupPoint")
+                            setFormData((prev) => ({ ...prev, pickupPoint: e.target.value }))
+                          }}
+                        />
+                        <datalist id="tour-pickup-datalist">
+                          {tourPickupSuggestions.map((stop) => (
+                            <option key={stop} value={stop} />
+                          ))}
+                        </datalist>
+                      </>
+                    )}
+                  </Field>
+
+                  <Field
+                    id="pickupTime"
+                    label="Pickup time"
+                    hint="e.g. 06:30 AM or 18:00"
+                    error={stepErrors.pickupTime}
+                  >
+                    {({ id, describedBy }) => (
+                      <Input
+                        id={id}
+                        type="text"
+                        placeholder="HH:MM (e.g. 06:30 AM)"
+                        value={formData.pickupTime}
+                        aria-describedby={describedBy}
+                        maxLength={20}
+                        onChange={(e) => {
+                          clearFieldError("pickupTime")
+                          setFormData((prev) => ({ ...prev, pickupTime: e.target.value }))
+                        }}
+                      />
+                    )}
+                  </Field>
+
+                  <Field
+                    id="dropPoint"
+                    label="Drop point"
+                    hint="Destination stop/station"
+                    error={stepErrors.dropPoint}
+                  >
+                    {({ id, describedBy }) => (
+                      <Input
+                        id={id}
+                        placeholder="e.g. Somnath Temple Gate"
+                        value={formData.dropPoint}
+                        aria-describedby={describedBy}
+                        maxLength={80}
+                        onChange={(e) => {
+                          clearFieldError("dropPoint")
+                          setFormData((prev) => ({ ...prev, dropPoint: e.target.value }))
+                        }}
                       />
                     )}
                   </Field>
@@ -1802,6 +1921,17 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
                       </span>
                     </dd>
                   </div>
+                  {(formData.pickupPoint || formData.dropPoint) && (
+                    <div className="sm:col-span-2 pt-2 border-t border-border-subtle">
+                      <dt className="text-xs text-ink-muted">Boarding &amp; Drop</dt>
+                      <dd className="font-medium text-ink mt-0.5 text-xs">
+                        {formData.pickupPoint ? `Pickup: ${formData.pickupPoint}` : ""}
+                        {formData.pickupTime ? ` (${formData.pickupTime})` : ""}
+                        {formData.pickupPoint && formData.dropPoint ? " · " : ""}
+                        {formData.dropPoint ? `Drop: ${formData.dropPoint}` : ""}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </Card>
 
