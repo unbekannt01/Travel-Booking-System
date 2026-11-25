@@ -1,19 +1,23 @@
-import { useMemo } from "react"
-import { Check, Lock, Clock, Pin, User, Layers, Info, Link2 } from "lucide-react"
+import { useMemo, useState, useEffect } from "react"
+import { Check, Lock, Clock, Pin, Layers, Link2 } from "lucide-react"
 import { getSeatLayout, DEFAULT_LAYOUT_KEY, resolveSeatId } from "../../../shared/seatLayouts.js"
 import { cn } from "../../utils/cn"
+import { Tabs } from "../ui/Tabs"
+import { Badge } from "../ui/Badge"
 
 /**
- * Reusable, Accessible Coach Seat Map Component (Part 6S-2b)
+ * Reusable, Accessible Coach Seat Map Component with Deck Tabs (Part 6S-4)
  *
- * Driven by data definitions from shared/seatLayouts.js.
- * Renders sleeper layouts (2x1-38, 2x2-48, 2x2-40) as ONE unified view without deck switcher:
- * - Rounded bus body container
- * - Amber front strip with "▲ Front" (left) and "Driver" (right)
- * - Four column headers: Left Lower, Left Upper, Central Aisle ("SLEEPER"), Right Lower, Right Upper
- * - Berth boxes with box titles (L1, U1...) and stacked seat buttons inside
- * - Rear section with wide boxes B1, B2 for 2x1-38
- * - Dedicated 2+3 layout for seater-2x3-60
+ * Driven by canonical data definitions from shared/seatLayouts.js:
+ * - Sleeper layouts (sleeper-2x1-38, sleeper-2x2-48, sleeper-2x2-40):
+ *   Separated Lower and Upper decks displayed via accessible Design System Tabs.
+ *   - Lower deck screen: Front/driver strip, Left column (1 berth for 2x1, 2 for 2x2),
+ *     central aisle, Right column (2 berths side-by-side), rear section (B1 for 2x1-38).
+ *   - Upper deck screen: Front/driver strip, Left column, central aisle, Right column,
+ *     rear section (B2 for 2x1-38).
+ *   - Dedicated Rear Berths tab for quick inspection of B1/B2 rear berths.
+ * - Seater layout (seater-2x3-60):
+ *   Single deck display with Front/driver, 2+3 seating with central aisle, rear exit.
  *
  * @param {Object} props
  * @param {Object|string} props.layout - Layout definition object or layout key
@@ -25,6 +29,8 @@ import { cn } from "../../utils/cn"
  * @param {'sm'|'md'|'lg'} [props.size='md'] - Visual density sizing
  * @param {string} [props.className] - Container class name
  * @param {string} [props.lang='en'] - 'en' | 'gu' | 'hi'
+ * @param {'lower'|'upper'|'rear'} [props.activeDeck] - Optional controlled deck tab
+ * @param {Function} [props.onDeckChange] - Callback when active deck tab changes
  */
 export default function SeatMap({
   layout: layoutProp,
@@ -36,6 +42,8 @@ export default function SeatMap({
   size = "md",
   className,
   lang = "en",
+  activeDeck: activeDeckProp,
+  onDeckChange,
 }) {
   const layout = useMemo(() => {
     if (typeof layoutProp === "string") {
@@ -59,25 +67,170 @@ export default function SeatMap({
     return map
   }, [seatStates, layout])
 
-  // Count booked, held, and available
-  const counts = useMemo(() => {
-    if (!layout?.seats) return { booked: 0, held: 0, blocked: 0, available: 0 }
-    let booked = 0
-    let held = 0
-    let blocked = 0
+  const isSleeper = layout?.category === "sleeper"
+  const hasRearSeats = Boolean(layout?.seats?.some((s) => s.section === "rear"))
+
+  // Auto-select starting deck tab based on current selected seat if present
+  const defaultStartingDeck = useMemo(() => {
+    if (!isSleeper) return "lower"
+    if (selectedIds && selectedIds.length > 0) {
+      for (const id of selectedIds) {
+        const canonical = resolveSeatId(layout?.key, id)
+        const seat = layout?.seats?.find((s) => s.id === canonical)
+        if (seat?.section === "rear") return "rear"
+        if (seat?.deck === "upper") return "upper"
+        if (seat?.deck === "lower") return "lower"
+      }
+    }
+    return "lower"
+  }, [selectedIds, layout, isSleeper])
+
+  const [internalDeck, setInternalDeck] = useState(defaultStartingDeck)
+  const currentDeck = activeDeckProp !== undefined ? activeDeckProp : internalDeck
+
+  const handleDeckTabSelect = (deckId) => {
+    if (activeDeckProp === undefined) {
+      setInternalDeck(deckId)
+    }
+    if (onDeckChange) {
+      onDeckChange(deckId)
+    }
+  }
+
+  // Update internal deck if selectedIds change externally
+  useEffect(() => {
+    if (selectedIds && selectedIds.length > 0 && activeDeckProp === undefined) {
+      const canonical = resolveSeatId(layout?.key, selectedIds[selectedIds.length - 1])
+      const seat = layout?.seats?.find((s) => s.id === canonical)
+      if (seat) {
+        if (seat.section === "rear" && internalDeck !== "rear" && internalDeck !== seat.deck) {
+          // Keep current view or sync
+        } else if (seat.deck && seat.deck !== internalDeck && internalDeck !== "rear") {
+          setInternalDeck(seat.deck)
+        }
+      }
+    }
+  }, [selectedIds, layout]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deck-wise and bus-wide counts
+  const { summaryCounts, deckCounts } = useMemo(() => {
+    const summary = { booked: 0, held: 0, blocked: 0, available: 0, total: layout?.totalSeats || 0 }
+    const decks = {
+      lower: { total: 0, booked: 0, held: 0, blocked: 0, available: 0, selected: 0 },
+      upper: { total: 0, booked: 0, held: 0, blocked: 0, available: 0, selected: 0 },
+      rear: { total: 0, booked: 0, held: 0, blocked: 0, available: 0, selected: 0 },
+    }
+
+    if (!layout?.seats) return { summaryCounts: summary, deckCounts: decks }
+
     for (const seat of layout.seats) {
       const state = statesMap.get(seat.id)
-      if (state?.status === "booked") booked++
-      else if (state?.status === "held") held++
-      else if (state?.status === "blocked") blocked++
+      const status = state?.status || "available"
+      const isSel = selectedSet.has(seat.id)
+      const deckKey = seat.deck === "upper" ? "upper" : "lower"
+
+      // Summary
+      if (status === "booked") summary.booked++
+      else if (status === "held") summary.held++
+      else if (status === "blocked") summary.blocked++
+
+      // Deck
+      decks[deckKey].total++
+      if (status === "booked") decks[deckKey].booked++
+      else if (status === "held") decks[deckKey].held++
+      else if (status === "blocked") decks[deckKey].blocked++
+      else decks[deckKey].available++
+      if (isSel) decks[deckKey].selected++
+
+      // Rear
+      if (seat.section === "rear") {
+        decks.rear.total++
+        if (status === "booked") decks.rear.booked++
+        else if (status === "held") decks.rear.held++
+        else if (status === "blocked") decks.rear.blocked++
+        else decks.rear.available++
+        if (isSel) decks.rear.selected++
+      }
     }
-    return {
-      booked,
-      held,
-      blocked,
-      available: layout.totalSeats - booked - held - blocked,
+
+    summary.available = summary.total - summary.booked - summary.held - summary.blocked
+    return { summaryCounts: summary, deckCounts: decks }
+  }, [layout, statesMap, selectedSet])
+
+  // Localized headers dictionary
+  const LABELS = useMemo(() => ({
+    front: lang === "gu" ? "▲ આગળ" : lang === "hi" ? "▲ आगे" : "▲ Front",
+    driver: lang === "gu" ? "ડ્રાઇવર" : lang === "hi" ? "ड्राइवर" : "Driver",
+    lowerDeck: lang === "gu" ? "નીચેનો ડેક" : lang === "hi" ? "निचला ડેक" : "Lower deck",
+    upperDeck: lang === "gu" ? "ઉપરનો ડેક" : lang === "hi" ? "ऊपरी डेक" : "Upper deck",
+    rearSeats: lang === "gu" ? "પાછળની સીટ (Rear)" : lang === "hi" ? "पिछली सीटें (Rear)" : "Rear berths (2)",
+    leftSide: lang === "gu" ? "ડાબી બાજુ" : lang === "hi" ? "बाईं ओर" : "Left Berth",
+    rightSide: lang === "gu" ? "જમણી બાજુ" : lang === "hi" ? "दायीં ओर" : "Right Berths",
+    aisle: lang === "gu" ? "રસ્તો" : lang === "hi" ? "गलियारा" : "SLEEPER",
+    rearSection: lang === "gu" ? "પાછળનો વિભાગ (Rear Cabin)" : lang === "hi" ? "पिछला केबिन (Rear)" : "Rear Cabin",
+    emergencyExit: lang === "gu" ? "પાછળનો ભાગ • ઇમરજન્સી એક્ઝિટ" : lang === "hi" ? "पिछला भाग • आपातकालीन निकास" : "Rear / Back of Coach • Emergency Exit",
+  }), [lang])
+
+  // Sleeper Deck Tab Items (must be defined before any early return)
+  const deckTabItems = useMemo(() => {
+    if (!isSleeper) return []
+
+    const items = [
+      {
+        id: "lower",
+        label: (
+          <span className="flex items-center gap-1.5">
+            <span>{LABELS.lowerDeck}</span>
+            <span className="text-[11px] font-normal text-ink-muted">
+              ({deckCounts.lower.booked}/{deckCounts.lower.total})
+            </span>
+          </span>
+        ),
+        badge: deckCounts.lower.selected > 0 ? (
+          <Badge variant="primary" size="sm">
+            {deckCounts.lower.selected} selected
+          </Badge>
+        ) : null,
+      },
+      {
+        id: "upper",
+        label: (
+          <span className="flex items-center gap-1.5">
+            <span>{LABELS.upperDeck}</span>
+            <span className="text-[11px] font-normal text-ink-muted">
+              ({deckCounts.upper.booked}/{deckCounts.upper.total})
+            </span>
+          </span>
+        ),
+        badge: deckCounts.upper.selected > 0 ? (
+          <Badge variant="primary" size="sm">
+            {deckCounts.upper.selected} selected
+          </Badge>
+        ) : null,
+      },
+    ]
+
+    if (hasRearSeats) {
+      items.push({
+        id: "rear",
+        label: (
+          <span className="flex items-center gap-1.5">
+            <span>{LABELS.rearSeats}</span>
+            <span className="text-[11px] font-normal text-ink-muted">
+              ({deckCounts.rear.booked}/{deckCounts.rear.total})
+            </span>
+          </span>
+        ),
+        badge: deckCounts.rear.selected > 0 ? (
+          <Badge variant="primary" size="sm">
+            {deckCounts.rear.selected} selected
+          </Badge>
+        ) : null,
+      })
     }
-  }, [layout, statesMap])
+
+    return items
+  }, [isSleeper, hasRearSeats, deckCounts, LABELS])
 
   if (!layout) {
     return (
@@ -85,19 +238,6 @@ export default function SeatMap({
         No bus layout definition available.
       </div>
     )
-  }
-
-  const isSleeper = layout.category === "sleeper"
-
-  // Localized headers dictionary
-  const LABELS = {
-    front: lang === "gu" ? "▲ આગળ" : lang === "hi" ? "▲ आगे" : "▲ Front",
-    driver: lang === "gu" ? "ડ્રાઇવર" : lang === "hi" ? "ड्राइवर" : "Driver",
-    leftLower: lang === "gu" ? "ડાબી નીચે" : lang === "hi" ? "बाईં निचली" : "Left Lower",
-    leftUpper: lang === "gu" ? "ડાબી ઉપર" : lang === "hi" ? "बाईં ऊपरी" : "Left Upper",
-    rightLower: lang === "gu" ? "જમણી નીચે" : lang === "hi" ? "दायीં निचली" : "Right Lower",
-    rightUpper: lang === "gu" ? "જમણી ઉપર" : lang === "hi" ? "दायीં ऊपरी" : "Right Upper",
-    rearSeats: lang === "gu" ? "પાછળની સીટ (Rear Seats)" : lang === "hi" ? "पिछली सीटें (Rear)" : "Rear Seats",
   }
 
   const renderSeatButton = (seat) => {
@@ -147,6 +287,7 @@ export default function SeatMap({
       <button
         key={seat.id}
         type="button"
+        data-seat-id={seat.id}
         disabled={!isClickable}
         aria-label={accessibleName}
         aria-pressed={isSelected}
@@ -157,7 +298,7 @@ export default function SeatMap({
         }}
         className={cn(
           "relative flex flex-col items-center justify-between p-1 rounded-[var(--yh-radius-md)] border text-left transition-all",
-          "w-full min-h-[44px] min-w-[44px]",
+          "w-full min-h-[46px] min-w-[44px]",
           "focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1",
           // Available state
           isAvailable && [
@@ -167,7 +308,7 @@ export default function SeatMap({
           ],
           // Selected state
           isSelected && [
-            "bg-brand text-brand-fg border-brand font-bold shadow-xs ring-1 ring-brand cursor-pointer",
+            "bg-brand text-brand-fg border-brand font-bold shadow-xs ring-2 ring-brand cursor-pointer",
           ],
           // Booked state
           isBooked && [
@@ -248,6 +389,7 @@ export default function SeatMap({
                 >
                   {state.paymentState === "paid" ? "✓" : state.paymentState === "partial" ? "½" : "✗"}
                 </span>
+
                 {/* Gender Badge */}
                 {state.gender && (
                   <span
@@ -348,26 +490,30 @@ export default function SeatMap({
     )
   }
 
-  // Render unified sleeper grid matching owner reference pictures
-  const renderUnifiedSleeperGrid = () => {
+  // Render a Single Deck Screen (Lower or Upper)
+  const renderDeckScreen = (deck) => {
     const rowsCount = layout.grid.rows // 6 for 2x1 and 2x2-48; 5 for 2x2-40
     const rowsArray = Array.from({ length: rowsCount }, (_, i) => i + 1)
 
-    // Group seats by row and column
+    // Build index of seats on this deck
     const seatMap = new Map()
     for (const seat of layout.seats) {
-      if (seat.section === "main") {
-        const key = `${seat.row}-${seat.side}-${seat.deck}-${seat.slot}`
+      if (seat.deck === deck && seat.section === "main") {
+        const key = `${seat.row}-${seat.side}-${seat.slot}`
         seatMap.set(key, seat)
       }
     }
 
-    const rearSeats = layout.seats.filter((s) => s.section === "rear")
+    const deckRearSeats = layout.seats.filter(
+      (s) => s.section === "rear" && (s.deck === deck || !s.deck),
+    )
+
+    const is2x1 = layout.key === "sleeper-2x1-38"
 
     return (
-      <div className="flex flex-col items-center p-2 sm:p-4 rounded-[var(--yh-radius-xl)] border-2 border-border/80 bg-card shadow-sm w-full max-w-2xl mx-auto">
-        {/* Rounded Coach Body Outer Shell */}
-        <div className="w-full bg-surface p-2.5 sm:p-3.5 rounded-[var(--yh-radius-2xl)] border-2 border-border-subtle shadow-inner space-y-3">
+      <div className="w-full max-w-xl mx-auto space-y-3">
+        {/* Coach Body Outer Shell */}
+        <div className="w-full bg-surface p-2.5 sm:p-4 rounded-[var(--yh-radius-2xl)] border-2 border-border-subtle shadow-inner space-y-3">
           {/* 1. Yellow Front Strip with "▲ Front" and "Driver" */}
           <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-950 dark:text-amber-200 text-xs font-bold uppercase tracking-wide">
             <span className="flex items-center gap-1.5 font-black">{LABELS.front}</span>
@@ -377,114 +523,96 @@ export default function SeatMap({
             </div>
           </div>
 
-          {/* 2. Four Column Headers */}
-          <div className="grid grid-cols-[1fr_1fr_36px_1fr_1fr] sm:grid-cols-[1fr_1fr_44px_1fr_1fr] gap-1.5 text-center text-[10px] sm:text-xs font-bold text-ink-muted uppercase border-b border-border-subtle pb-1.5">
-            <div className="truncate px-0.5" title={LABELS.leftLower}>
-              {LABELS.leftLower}
-            </div>
-            <div className="truncate px-0.5" title={LABELS.leftUpper}>
-              {LABELS.leftUpper}
+          {/* 2. Column Headers: Left Berth(s) | Aisle | Right Berths */}
+          <div className={cn(
+            "grid gap-2 text-center text-[10px] sm:text-xs font-bold text-ink-muted uppercase border-b border-border-subtle pb-1.5",
+            is2x1
+              ? "grid-cols-[1fr_36px_2fr] sm:grid-cols-[1fr_44px_2fr]"
+              : "grid-cols-[1fr_36px_1fr] sm:grid-cols-[1fr_44px_1fr]",
+          )}>
+            <div className="truncate px-0.5">
+              {is2x1 ? (deck === "lower" ? "Left Berth (L1-L6)" : "Left Berth (U1-U6)") : (deck === "lower" ? "Left Berths (Lower)" : "Left Berths (Upper)")}
             </div>
             <div className="text-[9px] font-black tracking-widest text-ink-muted/60 self-center">
               ||
             </div>
-            <div className="truncate px-0.5" title={LABELS.rightLower}>
-              {LABELS.rightLower}
-            </div>
-            <div className="truncate px-0.5" title={LABELS.rightUpper}>
-              {LABELS.rightUpper}
+            <div className="truncate px-0.5">
+              {deck === "lower" ? "Right Berths (Lower)" : "Right Berths (Upper)"}
             </div>
           </div>
 
-          {/* 3. Main Rows (Berth Boxes with stacked seats) */}
+          {/* 3. Main Berth Rows */}
           <div className="space-y-2">
             {rowsArray.map((rowNum) => {
-              // Left Lower Box (L{rowNum})
-              const leftLower1 = seatMap.get(`${rowNum}-left-lower-1`)
-              const leftLower2 = seatMap.get(`${rowNum}-left-lower-2`)
-              // Left Upper Box (U{rowNum})
-              const leftUpper1 = seatMap.get(`${rowNum}-left-upper-1`)
-              const leftUpper2 = seatMap.get(`${rowNum}-left-upper-2`)
-              // Right Lower Box (L{rowNum})
-              const rightLower1 = seatMap.get(`${rowNum}-right-lower-1`)
-              const rightLower2 = seatMap.get(`${rowNum}-right-lower-2`)
-              // Right Upper Box (U{rowNum})
-              const rightUpper1 = seatMap.get(`${rowNum}-right-upper-1`)
-              const rightUpper2 = seatMap.get(`${rowNum}-right-upper-2`)
+              const left1 = seatMap.get(`${rowNum}-left-1`)
+              const left2 = seatMap.get(`${rowNum}-left-2`)
+              const right1 = seatMap.get(`${rowNum}-right-1`)
+              const right2 = seatMap.get(`${rowNum}-right-2`)
+
+              const boxLabel = deck === "lower" ? `L${rowNum}` : `U${rowNum}`
 
               return (
                 <div
-                  key={`row-${rowNum}`}
-                  className="grid grid-cols-[1fr_1fr_36px_1fr_1fr] sm:grid-cols-[1fr_1fr_44px_1fr_1fr] gap-1.5 items-stretch"
+                  key={`deck-${deck}-row-${rowNum}`}
+                  className={cn(
+                    "grid gap-2 items-stretch",
+                    is2x1
+                      ? "grid-cols-[1fr_36px_2fr] sm:grid-cols-[1fr_44px_2fr]"
+                      : "grid-cols-[1fr_36px_1fr] sm:grid-cols-[1fr_44px_1fr]",
+                  )}
                 >
-                  {/* Col 1: Left Lower Berth Box */}
+                  {/* Left Compartment */}
                   <div className="flex flex-col gap-1 p-1 rounded-lg border border-border-subtle/80 bg-surface-muted/30">
                     <span className="text-[9px] font-extrabold text-ink-muted/70 text-center uppercase tracking-wider">
-                      L{rowNum}
+                      {boxLabel}
                     </span>
-                    {renderSeatButton(leftLower1)}
-                    {leftLower2 && renderSeatButton(leftLower2)}
+                    {is2x1 ? (
+                      renderSeatButton(left1)
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1">
+                        {renderSeatButton(left1)}
+                        {renderSeatButton(left2)}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Col 2: Left Upper Berth Box */}
-                  <div className="flex flex-col gap-1 p-1 rounded-lg border border-border-subtle/80 bg-surface-muted/30">
-                    <span className="text-[9px] font-extrabold text-ink-muted/70 text-center uppercase tracking-wider">
-                      U{rowNum}
-                    </span>
-                    {renderSeatButton(leftUpper1)}
-                    {leftUpper2 && renderSeatButton(leftUpper2)}
-                  </div>
-
-                  {/* Col 3: Central Aisle with Vertical "SLEEPER" */}
+                  {/* Central Walking Aisle */}
                   <div
                     aria-hidden="true"
                     className="flex flex-col items-center justify-center border-x-2 border-dashed border-border-subtle/60 text-[9px] font-black text-ink-muted/50 select-none py-1"
                   >
-                    <span>S</span>
-                    <span>L</span>
-                    <span>E</span>
-                    <span>E</span>
-                    <span>P</span>
-                    <span>E</span>
-                    <span>R</span>
+                    <span>{boxLabel}</span>
                   </div>
 
-                  {/* Col 4: Right Lower Berth Box */}
+                  {/* Right Compartment (2 berths side-by-side) */}
                   <div className="flex flex-col gap-1 p-1 rounded-lg border border-border-subtle/80 bg-surface-muted/30">
                     <span className="text-[9px] font-extrabold text-ink-muted/70 text-center uppercase tracking-wider">
-                      L{rowNum}
+                      {boxLabel}
                     </span>
-                    {renderSeatButton(rightLower1)}
-                    {rightLower2 && renderSeatButton(rightLower2)}
-                  </div>
-
-                  {/* Col 5: Right Upper Berth Box */}
-                  <div className="flex flex-col gap-1 p-1 rounded-lg border border-border-subtle/80 bg-surface-muted/30">
-                    <span className="text-[9px] font-extrabold text-ink-muted/70 text-center uppercase tracking-wider">
-                      U{rowNum}
-                    </span>
-                    {renderSeatButton(rightUpper1)}
-                    {rightUpper2 && renderSeatButton(rightUpper2)}
+                    <div className="grid grid-cols-2 gap-1">
+                      {renderSeatButton(right1)}
+                      {renderSeatButton(right2)}
+                    </div>
                   </div>
                 </div>
               )
             })}
           </div>
 
-          {/* 4. Rear Section for 2x1-38 (Wide Boxes B1 and B2) */}
-          {rearSeats.length > 0 && (
+          {/* 4. Rear Section (if this deck holds rear berth) */}
+          {deckRearSeats.length > 0 && (
             <div className="mt-3 pt-2.5 border-t-2 border-dashed border-border-subtle">
               <div className="text-center text-[10px] font-extrabold text-ink-muted uppercase tracking-wider mb-1.5">
-                {LABELS.rearSeats}
+                {LABELS.rearSection} ({deck === "lower" ? "Berth B1" : "Berth B2"})
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {rearSeats.map((rs) => (
+              <div className="max-w-xs mx-auto">
+                {deckRearSeats.map((rs) => (
                   <div
                     key={rs.id}
                     className="flex flex-col gap-1 p-1.5 rounded-lg border border-border-subtle bg-surface-muted/40"
                   >
                     <span className="text-[9px] font-extrabold text-ink-muted/80 text-center uppercase">
-                      Box {rs.box}
+                      Box {rs.box} ({deck === "lower" ? "Lower Deck Rear" : "Upper Deck Rear"})
                     </span>
                     {renderSeatButton(rs)}
                   </div>
@@ -492,6 +620,47 @@ export default function SeatMap({
               </div>
             </div>
           )}
+
+          {/* 5. Emergency Exit / Back of Coach */}
+          <div className="mt-2 py-1 text-center text-[9px] font-bold text-ink-muted/60 uppercase tracking-widest border-t border-border-subtle">
+            {LABELS.emergencyExit}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Dedicated Rear Screen for 2x1-38
+  const renderRearScreen = () => {
+    const rearSeats = layout.seats.filter((s) => s.section === "rear")
+
+    return (
+      <div className="w-full max-w-md mx-auto space-y-3">
+        <div className="w-full bg-surface p-3 sm:p-4 rounded-[var(--yh-radius-2xl)] border-2 border-border-subtle shadow-inner space-y-3">
+          <div className="text-center text-xs font-bold text-ink-muted uppercase tracking-wider pb-1 border-b border-border-subtle">
+            Rear Berths (B1 Lower • B2 Upper)
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {rearSeats.map((rs) => (
+              <div
+                key={rs.id}
+                className="flex flex-col gap-1.5 p-2 rounded-lg border border-border-subtle bg-surface-muted/40"
+              >
+                <div className="flex items-center justify-between text-[10px] font-extrabold text-ink-muted uppercase">
+                  <span>Box {rs.box}</span>
+                  <Badge variant="neutral" size="sm">
+                    {rs.deck === "lower" ? "Lower Deck" : "Upper Deck"}
+                  </Badge>
+                </div>
+                {renderSeatButton(rs)}
+              </div>
+            ))}
+          </div>
+
+          <div className="py-1 text-center text-[9px] font-bold text-ink-muted/60 uppercase tracking-widest border-t border-border-subtle">
+            {LABELS.emergencyExit}
+          </div>
         </div>
       </div>
     )
@@ -559,7 +728,7 @@ export default function SeatMap({
 
           {/* Rear / Back Indicator */}
           <div className="mt-3 py-1 text-center text-[9px] font-bold text-ink-muted/60 uppercase tracking-widest border-t border-border-subtle">
-            Rear / Back of Coach • Emergency Exit
+            {LABELS.emergencyExit}
           </div>
         </div>
       </div>
@@ -568,17 +737,27 @@ export default function SeatMap({
 
   return (
     <div className={cn("space-y-3 w-full", className)}>
-      {/* Header bar: Layout summary & Legend */}
+      {/* 1. Whole-Bus Summary Bar & Legend */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border-subtle">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Layers size={16} className="text-brand shrink-0" />
           <span className="text-xs font-bold text-ink">{layout.label}</span>
           <span className="text-[11px] text-ink-muted">
-            • {counts.booked}/{layout.totalSeats} Booked ({counts.available} Free)
+            • {summaryCounts.booked}/{layout.totalSeats} Booked ({summaryCounts.available} Free)
           </span>
+          {summaryCounts.held > 0 && (
+            <Badge variant="warning" size="sm">
+              {summaryCounts.held} Held
+            </Badge>
+          )}
+          {summaryCounts.blocked > 0 && (
+            <Badge variant="danger" size="sm">
+              {summaryCounts.blocked} Blocked
+            </Badge>
+          )}
         </div>
 
-        {/* Status Legend (Non-color reliant with patterns & labels) */}
+        {/* Status Legend (Non-color reliant with icons & labels) */}
         <div className="flex flex-wrap items-center gap-3 text-[11px]" aria-label="Seat Status Legend">
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-3.5 rounded border border-border-subtle bg-surface shadow-xs" />
@@ -617,24 +796,48 @@ export default function SeatMap({
         </div>
       </div>
 
-      {/* Internal Accessible Scroll Container (Zero page horizontal scroll) */}
-      <div
-        role="region"
-        aria-label="Bus seat layout"
-        /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be keyboard focusable */
-        tabIndex={0}
-        className="overflow-x-auto overflow-y-auto max-w-full pb-2 focus:outline-none focus:ring-1 focus:ring-brand rounded-[var(--yh-radius-lg)]"
-      >
-        {isSleeper ? (
-          <div className="min-w-[480px] sm:min-w-[540px] flex justify-center py-1">
-            {renderUnifiedSleeperGrid()}
+      {/* 2. Accessible Deck Tabs for Sleeper Coaches */}
+      {isSleeper ? (
+        <div className="space-y-3">
+          <div className="flex justify-center">
+            <Tabs
+              items={deckTabItems}
+              value={currentDeck}
+              onChange={handleDeckTabSelect}
+              ariaLabel="Bus Decks"
+              className="w-auto"
+            />
           </div>
-        ) : (
+
+          {/* 3. Internal Accessible Scroll Region */}
+          <div
+            role="region"
+            aria-label={`${currentDeck === "lower" ? LABELS.lowerDeck : currentDeck === "upper" ? LABELS.upperDeck : LABELS.rearSeats} seat layout`}
+            /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be keyboard focusable */
+            tabIndex={0}
+            className="overflow-x-auto overflow-y-auto max-w-full pb-2 focus:outline-none focus:ring-1 focus:ring-brand rounded-[var(--yh-radius-lg)]"
+          >
+            <div className="min-w-[320px] flex justify-center py-1">
+              {currentDeck === "lower" && renderDeckScreen("lower")}
+              {currentDeck === "upper" && renderDeckScreen("upper")}
+              {currentDeck === "rear" && renderRearScreen()}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Seater Coach Single Deck */
+        <div
+          role="region"
+          aria-label="Bus seat layout"
+          /* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- WCAG 2.1 SC 2.1.1: scrollable data region must be keyboard focusable */
+          tabIndex={0}
+          className="overflow-x-auto overflow-y-auto max-w-full pb-2 focus:outline-none focus:ring-1 focus:ring-brand rounded-[var(--yh-radius-lg)]"
+        >
           <div className="min-w-[340px] flex justify-center py-1">
             {renderSeaterGrid()}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

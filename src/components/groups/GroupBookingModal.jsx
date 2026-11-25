@@ -13,11 +13,11 @@ import {
   Lock,
 } from "lucide-react"
 import { Modal, Button, Input, Select, Field, Badge, Card } from "../ui"
+import SeatMap from "../seats/SeatMap"
 import { useToast } from "../common/ToastContext"
-import { formatINR, formatSeatLabel } from "../../utils/formatters"
+import { formatINR } from "../../utils/formatters"
 import { toDateInputValue } from "../../utils/date"
 import {
-  getSeatLayout,
   layoutKeyForBusType,
   STANDARD_BUS_TYPES,
   resolveSeatId,
@@ -129,7 +129,6 @@ export default function GroupBookingModal({
   }, [tourName, journeyDate, busType])
 
   const layoutKey = useMemo(() => layoutKeyForBusType(busType), [busType])
-  const layoutDef = useMemo(() => getSeatLayout(layoutKey), [layoutKey])
 
   // Compute occupied seats on departure from existing bookings
   const occupiedDepartureSeats = useMemo(() => {
@@ -166,6 +165,33 @@ export default function GroupBookingModal({
     })
     return map
   }, [members, layoutKey])
+
+  // Seat states and active passenger seat for shared SeatMap
+  const groupSeatStates = useMemo(() => {
+    const states = {}
+    for (const seatId of occupiedDepartureSeats) {
+      states[seatId] = { status: "booked" }
+    }
+    for (const [seatId, info] of memberAssignedSeats.entries()) {
+      const isCurrentPax =
+        info.memberIdx === activeSeatMemberIdx &&
+        info.paxIdx === activeSeatPaxIdx
+      if (!isCurrentPax) {
+        states[seatId] = {
+          status: "booked",
+          groupName: `M#${info.memberIdx + 1}`,
+          passengerName: info.memberName,
+        }
+      }
+    }
+    return states
+  }, [occupiedDepartureSeats, memberAssignedSeats, activeSeatMemberIdx, activeSeatPaxIdx])
+
+  const currentSelectedSeatId = useMemo(() => {
+    const activeMember = members[activeSeatMemberIdx]
+    const activePax = activeMember?.passengers?.[activeSeatPaxIdx]
+    return activePax?.seatId ? [resolveSeatId(layoutKey, activePax.seatId)] : []
+  }, [members, activeSeatMemberIdx, activeSeatPaxIdx, layoutKey])
 
   // Total metrics
   const totalSeats = useMemo(() => {
@@ -300,7 +326,7 @@ export default function GroupBookingModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!step1Valid || step2Errors.length > 0) return
+    if (step !== 2 || !step1Valid || step2Errors.length > 0) return
 
     setServerError("")
     setIsSubmitting(true)
@@ -372,7 +398,16 @@ export default function GroupBookingModal({
       title={step === 1 ? "New Group Booking — Step 1: Group Info" : `New Group Booking — Step 2: Member Details`}
       size="xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+            e.preventDefault()
+          }
+        }}
+        className="space-y-4"
+      >
         {serverError && (
           <div
             role="alert"
@@ -717,52 +752,19 @@ export default function GroupBookingModal({
                   Click any free berth to assign to selected passenger:
                 </p>
 
-                {/* Simplified seat grid for group selection */}
+                {/* Shared SeatMap with Deck Tabs */}
                 <div
                   role="region"
                   aria-label="Coach Seat Grid"
-                  className="max-h-[380px] overflow-y-auto space-y-1.5 text-xs p-1"
+                  className="max-h-[460px] overflow-y-auto space-y-1.5 text-xs p-1"
                 >
-                  {layoutDef?.seats?.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {layoutDef.seats.map((b) => {
-                        const canonical = resolveSeatId(layoutKey, b.id)
-                        const isTakenDeparture = occupiedDepartureSeats.has(canonical)
-                        const memberAssigned = memberAssignedSeats.get(canonical)
-                        const isCurrentPax =
-                          memberAssigned?.memberIdx === activeSeatMemberIdx &&
-                          memberAssigned?.paxIdx === activeSeatPaxIdx
-
-                        let btnClass = "border-border-subtle bg-surface hover:bg-surface-hover text-ink"
-                        let label = b.name || formatSeatLabel(canonical)
-
-                        if (isCurrentPax) {
-                          btnClass = "border-brand bg-brand text-brand-fg font-bold"
-                        } else if (memberAssigned) {
-                          btnClass = "border-blue-400 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-semibold cursor-not-allowed"
-                          label += ` (M#${memberAssigned.memberIdx + 1})`
-                        } else if (isTakenDeparture) {
-                          btnClass = "border-slate-300 bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
-                        }
-
-                        return (
-                          <button
-                            key={b.id}
-                            type="button"
-                            data-seat-id={canonical}
-                            disabled={isTakenDeparture || (memberAssigned && !isCurrentPax)}
-                            onClick={() => handleSelectSeat(b.id)}
-                            className={`p-1.5 rounded text-[11px] text-center border transition-colors cursor-pointer truncate ${btnClass}`}
-                            title={`${canonical}${memberAssigned ? ` (${memberAssigned.memberName})` : ""}`}
-                          >
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-ink-muted py-4 text-center">Loading coach layout...</p>
-                  )}
+                  <SeatMap
+                    layout={layoutKey}
+                    seatStates={groupSeatStates}
+                    selectedIds={currentSelectedSeatId}
+                    onSeatClick={(seatId) => handleSelectSeat(seatId)}
+                    size="sm"
+                  />
                 </div>
               </div>
             </div>
