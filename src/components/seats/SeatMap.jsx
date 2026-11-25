@@ -135,11 +135,13 @@ export default function SeatMap({
 
     const isClickable = interactiveAll ? !readOnly : !readOnly && !isBooked && !isHeld && !isBlocked
 
-    const groupTag = state?.bookingRef
-      ? state.bookingRef.split("-").slice(-1)[0]
-      : state?.groupId
-        ? state.groupId.slice(-3).toUpperCase()
-        : null
+    const groupTag = state?.groupName
+      ? state.groupName.slice(0, 8)
+      : state?.bookingRef
+        ? state.bookingRef.split("-").slice(-1)[0]
+        : state?.groupId
+          ? state.groupId.slice(-3).toUpperCase()
+          : null
 
     return (
       <button
@@ -310,8 +312,14 @@ export default function SeatMap({
 
           {/* Group booking indicator */}
           {isBooked && groupTag && (
-            <span className="block text-[8px] font-mono text-ink-muted/80 leading-none">
-              #{groupTag}
+            <span
+              className={`block text-[8px] font-mono leading-none ${
+                state?.groupName
+                  ? "font-bold text-brand bg-brand-soft/70 px-0.5 py-0.5 rounded border border-brand/20 truncate max-w-[55px]"
+                  : "text-ink-muted/80"
+              }`}
+            >
+              {state?.groupName ? `👥 ${groupTag}` : `#${groupTag}`}
             </span>
           )}
 

@@ -448,8 +448,13 @@ export default function PassengerManagement({
                         <Badge variant="primary" size="sm" className="mb-0.5 block w-fit">
                           {b.tourName}
                         </Badge>
-                        <span className="text-xs text-ink-muted block">
-                          {formatDisplayDate(b.journeyDate)} • #{b.invoiceNo}
+                        <span className="text-xs text-ink-muted flex items-center gap-1.5 flex-wrap">
+                          <span>{formatDisplayDate(b.journeyDate)} • #{b.invoiceNo}</span>
+                          {b.groupId && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-soft text-brand border border-brand/20">
+                              👥 Group
+                            </span>
+                          )}
                         </span>
                       </TableCell>
 
@@ -577,8 +582,13 @@ export default function PassengerManagement({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <span className="font-bold text-ink text-base block truncate">{p.name}</span>
-                      <span className="text-xs text-ink-muted">
-                        Seat: <strong className="text-brand tabular-nums">{formatSeatLabel(p.seatId)}</strong>
+                      <span className="text-xs text-ink-muted flex items-center gap-1.5 flex-wrap">
+                        <span>Seat: <strong className="text-brand tabular-nums">{formatSeatLabel(p.seatId)}</strong></span>
+                        {b.groupId && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-soft text-brand border border-brand/20">
+                            👥 Group
+                          </span>
+                        )}
                       </span>
                     </div>
                     <StatusPill

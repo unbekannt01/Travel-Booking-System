@@ -55,6 +55,9 @@ import {
 import { cn } from "../utils/cn"
 import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
 import LiveSeatMap from "./departures/LiveSeatMap"
+import GroupBookingModal from "./groups/GroupBookingModal"
+import GroupDetailDrawer from "./groups/GroupDetailDrawer"
+import DepartureGroupsModal from "./groups/DepartureGroupsModal"
 
 // Generate all valid seat IDs for a given bus type
 const generateAllSeats = (busType) => {
@@ -139,6 +142,12 @@ export default function JourneyManager({
   // Passenger Seat Layout modal state
   const [showSeatLayoutModal, setShowSeatLayoutModal] = useState(false)
   const [activeLayoutDeparture, setActiveLayoutDeparture] = useState(null)
+
+  // Group Bookings & Group Payments state (Part 6S-3b)
+  const [selectedGroupDeparture, setSelectedGroupDeparture] = useState(null)
+  const [showDepartureGroupsModal, setShowDepartureGroupsModal] = useState(false)
+  const [showGroupBookingModal, setShowGroupBookingModal] = useState(false)
+  const [activeGroupId, setActiveGroupId] = useState(null)
 
   const uniqueTours = useMemo(() => [...new Set(bookings.map((b) => b.tourName))].filter(Boolean), [bookings])
 
@@ -545,22 +554,37 @@ export default function JourneyManager({
           )}
         </div>
 
-        {/* Print / Export Action Menu */}
-        <div className="relative self-end sm:self-auto shrink-0">
+        {/* Print & Group Actions */}
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setShowExportOptions(!showExportOptions)}
-            aria-expanded={showExportOptions}
-            aria-haspopup="true"
-            leftIcon={<Printer size={14} />}
-            rightIcon={<ChevronDown size={14} className="opacity-70" />}
+            onClick={() => {
+              setSelectedGroupDeparture(null)
+              setShowGroupBookingModal(true)
+            }}
+            leftIcon={<Users size={14} className="text-brand" />}
             className="whitespace-nowrap shrink-0 inline-flex items-center"
           >
-            <span>Print Manifest</span>
+            <span>Group Booking</span>
           </Button>
-          {showExportOptions && (
+
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowExportOptions(!showExportOptions)}
+              aria-expanded={showExportOptions}
+              aria-haspopup="true"
+              leftIcon={<Printer size={14} />}
+              rightIcon={<ChevronDown size={14} className="opacity-70" />}
+              className="whitespace-nowrap shrink-0 inline-flex items-center"
+            >
+              <span>Print Manifest</span>
+            </Button>
+            {showExportOptions && (
             <div className="absolute right-0 top-full mt-1.5 w-60 rounded-[var(--yh-radius-lg)] bg-surface-elevated border border-border-subtle shadow-[var(--yh-shadow-overlay)] z-[var(--yh-z-dropdown)] overflow-hidden py-1">
               <button
                 type="button"
@@ -621,6 +645,7 @@ export default function JourneyManager({
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -856,6 +881,19 @@ export default function JourneyManager({
                     >
                       <Bus size={13} className="mr-1 text-brand" />
                       <span>Seat Map</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedGroupDeparture(dep)
+                        setShowDepartureGroupsModal(true)
+                      }}
+                      title="Manage Tour Groups & Group Payments"
+                    >
+                      <Users size={13} className="mr-1 text-brand" />
+                      <span>Groups</span>
                     </Button>
                     <Button
                       type="button"
@@ -1682,6 +1720,46 @@ export default function JourneyManager({
             initialGroupByPickup={manifestModalConfig.preset === "pickup-wise"}
           />
         </Suspense>
+      )}
+
+      {/* Departure Groups List Modal (Part 6S-3b) */}
+      {showDepartureGroupsModal && selectedGroupDeparture && (
+        <DepartureGroupsModal
+          isOpen={showDepartureGroupsModal}
+          onClose={() => setShowDepartureGroupsModal(false)}
+          departure={selectedGroupDeparture}
+          onOpenGroupDetail={(gId) => setActiveGroupId(gId)}
+          onOpenNewGroupBooking={(dep) => {
+            setSelectedGroupDeparture(dep)
+            setShowGroupBookingModal(true)
+          }}
+        />
+      )}
+
+      {/* Group Detail & Payment Drawer (Part 6S-3b) */}
+      {activeGroupId && (
+        <GroupDetailDrawer
+          isOpen={Boolean(activeGroupId)}
+          onClose={() => setActiveGroupId(null)}
+          groupId={activeGroupId}
+          onGroupUpdated={() => {
+            // refresh data
+          }}
+        />
+      )}
+
+      {/* Group Booking Wizard Modal (Part 6S-3b) */}
+      {showGroupBookingModal && (
+        <GroupBookingModal
+          isOpen={showGroupBookingModal}
+          onClose={() => setShowGroupBookingModal(false)}
+          initialDeparture={selectedGroupDeparture}
+          tours={uniqueTours.map((t) => ({ id: t, name: t }))}
+          bookings={bookings}
+          onGroupCreated={(group) => {
+            setActiveGroupId(group._id)
+          }}
+        />
       )}
     </div>
   )

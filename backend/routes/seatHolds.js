@@ -4,6 +4,7 @@ import { z } from "zod"
 import SeatHold from "../models/SeatHold.js"
 import Booking from "../models/Booking.js"
 import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
+import BookingGroup from "../models/BookingGroup.js"
 import { logAudit } from "../models/AuditLog.js"
 import verifyToken from "../middleware/auth.js"
 import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
@@ -133,6 +134,25 @@ export async function getDepartureSeatMap(req, res) {
       ...busCondition,
     }).lean()
 
+    // 4. Fetch active booking groups for this departure
+    const activeGroups = await BookingGroup.find({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+      ...busCondition,
+      status: "active",
+    }).lean()
+
+    const groupMap = new Map()
+    for (const g of activeGroups) {
+      groupMap.set(g._id.toString(), {
+        id: g._id.toString(),
+        name: g.name,
+        leaderName: g.leaderName || "",
+        leaderPhone: g.leaderPhone || "",
+      })
+    }
+
     // Build lookup maps
     const bookedSeats = new Map() // canonicalId -> seat detail
     for (const b of bookings) {
@@ -150,6 +170,9 @@ export async function getDepartureSeatMap(req, res) {
       } else if (total === 0) {
         paymentState = "paid"
       }
+
+      const bGroupId = b.groupId ? b.groupId.toString() : null
+      const grp = bGroupId ? groupMap.get(bGroupId) : null
 
       for (const p of b.passengers || []) {
         const rawSeat = p.seatId || p.seatNumber
@@ -169,7 +192,10 @@ export async function getDepartureSeatMap(req, res) {
           city: p.city || "",
           contactPhone: p.contact || b.contactPhone || "",
           contactName: b.contactName || "",
-          groupId: b._id.toString(),
+          groupId: bGroupId || b._id.toString(),
+          groupName: grp ? grp.name : null,
+          groupLeader: grp ? grp.leaderName : null,
+          isCrossBookingGroup: Boolean(bGroupId),
           paymentState,
           balanceDue: balance,
           totalAmount: total,

@@ -23,6 +23,7 @@ import exportRoutes from "./routes/export.js"
 import importRoutes from "./routes/import.js"
 import departureRoutes from "./routes/departures.js"
 import seatHoldRoutes from "./routes/seatHolds.js"
+import groupRoutes from "./routes/groups.js"
 
 const app = express()
 
@@ -87,6 +88,7 @@ app.use("/api/export", exportRoutes)
 app.use("/api/import", importRoutes)
 app.use("/api/departures", departureRoutes)
 app.use("/api/seat-holds", seatHoldRoutes)
+app.use("/api/groups", groupRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()

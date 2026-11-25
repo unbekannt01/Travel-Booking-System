@@ -70,6 +70,7 @@ const bookingSchema = new mongoose.Schema(
     passengers: [passengerSchema],
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
+    groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
@@ -79,5 +80,6 @@ const bookingSchema = new mongoose.Schema(
 bookingSchema.index({ userId: 1, invoiceNo: 1 }, { unique: true })
 bookingSchema.index({ userId: 1, deletedAt: 1 })
 bookingSchema.index({ userId: 1, customerId: 1 })
+bookingSchema.index({ userId: 1, groupId: 1 })
 
 export default mongoose.model("Booking", bookingSchema)

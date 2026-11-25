@@ -24,6 +24,8 @@ const paymentSchema = new mongoose.Schema(
     voidReason: { type: String, default: "" },
     voidedAt: { type: Date, default: null },
     voidedBy: { type: String, default: "" },
+    groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null },
+    groupPaymentId: { type: String, default: null },
   },
   { timestamps: true }
 )
@@ -31,5 +33,7 @@ const paymentSchema = new mongoose.Schema(
 // Receipt numbers must be unique per user
 paymentSchema.index({ userId: 1, receiptNo: 1 }, { unique: true })
 paymentSchema.index({ userId: 1, bookingId: 1 })
+paymentSchema.index({ userId: 1, groupId: 1 })
+paymentSchema.index({ userId: 1, groupPaymentId: 1 })
 
 export default mongoose.model("Payment", paymentSchema)

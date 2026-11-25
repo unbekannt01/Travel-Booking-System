@@ -548,296 +548,325 @@ export async function upsertCustomerForBooking(userId, { contactName, contactPho
   }
 }
 
-// POST /api/bookings
-router.post("/", verifyToken, async (req, res) => {
+// Core booking creation function reusable by POST /api/bookings and POST /api/groups
+export async function createBookingCore({
+  userId,
+  user,
+  userDoc,
+  body,
+  req,
+  groupId = null,
+}) {
+  const {
+    contactName,
+    contactPhone,
+    contactEmail,
+    tourName,
+    journeyDate,
+    duration,
+    busType,
+    paymentMode,
+    totalAmount,
+    advanceReceived,
+    passengers,
+    discount = 0,
+    discountType = "fixed",
+    gstRate = 0,
+    isTaxInclusive = false,
+    invoiceNo: clientInvoiceNo,
+    pickupPoint,
+    pickupTime,
+    dropPoint,
+  } = body
+
+  // Basic required validations
+  if (!contactName || !contactPhone || !tourName || !journeyDate) {
+    const err = new Error("Contact name, phone, tour name, and journey date are required.")
+    err.status = 400
+    throw err
+  }
+
+  if (busType && !isValidBusType(busType)) {
+    const err = new Error(`Invalid bus type '${busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`)
+    err.status = 400
+    throw err
+  }
+  const canonicalBusType = busType ? normalizeBusType(busType) : ""
+
+  const bookingDate = body.date || new Date()
+  const checkAdvance = Math.round(Number(advanceReceived || 0) * 100) / 100
+  if (checkAdvance > 0) {
+    await assertBooksOpen(userId, bookingDate)
+  }
+
+  if (!validateIndianPhone(contactPhone)) {
+    const err = new Error("Please provide a valid 10-digit Indian mobile number.")
+    err.status = 400
+    throw err
+  }
+
+  if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
+    const err = new Error("At least one passenger is required.")
+    err.status = 400
+    throw err
+  }
+
+  for (let i = 0; i < passengers.length; i++) {
+    const p = passengers[i]
+    if (!p.name || !p.city) {
+      const err = new Error(`Passenger ${i + 1} is missing name or city.`)
+      err.status = 400
+      throw err
+    }
+    const age = Number(p.age)
+    if (isNaN(age) || age < 1 || age > 120) {
+      const err = new Error(`Passenger ${p.name || i + 1} must have a valid age.`)
+      err.status = 400
+      throw err
+    }
+    if (p.aadhar && !validateAadhaar(p.aadhar)) {
+      const err = new Error(`Aadhaar for ${p.name} must be a valid 12-digit number.`)
+      err.status = 400
+      throw err
+    }
+  }
+
+  // Validate seat layout and passenger-seat parity
+  const seatLayoutError = validateSeatLayout(passengers, busType)
+  if (seatLayoutError) {
+    const err = new Error(seatLayoutError.message)
+    err.status = seatLayoutError.status
+    throw err
+  }
+
+  // Check seat conflicts
+  const seatConflict = await checkSeatConflicts({
+    userId,
+    tourName,
+    journeyDate,
+    busType,
+    passengers,
+    holdId: body.holdId || null,
+    overrideLadies: body.overrideLadies,
+    overrideReason: body.overrideReason,
+  })
+  if (seatConflict && (seatConflict.conflictingSeats || seatConflict.status)) {
+    const err = new Error(seatConflict.message)
+    err.status = seatConflict.status || 409
+    err.code = seatConflict.code || "SEAT_CONFLICT"
+    err.conflictingSeats = seatConflict.conflictingSeats
+    err.holdInfo = seatConflict.holdInfo
+    throw err
+  }
+
+  // Server authority over pricing: query Tour & compute totals, discount, GST
+  const { pricing } = await computeServerPricing({
+    userId,
+    tourName,
+    passengers,
+    discount,
+    discountType,
+    gstRate,
+    isTaxInclusive,
+    baseAmount: body.baseAmount || totalAmount,
+  })
+
+  const finalServerTotal = pricing.finalTotal
+  const numAdvance = Number(advanceReceived || 0)
+
+  if (isNaN(numAdvance) || numAdvance < 0) {
+    const err = new Error("Advance payment cannot be negative.")
+    err.status = 400
+    throw err
+  }
+
+  if (totalAmount !== undefined && totalAmount !== null) {
+    const clientTotal = Math.round(Number(totalAmount) * 100) / 100
+    if (Math.abs(clientTotal - finalServerTotal) > 0.05) {
+      const err = new Error(`Total amount mismatch: client provided ₹${clientTotal}, but server calculated ₹${finalServerTotal}.`)
+      err.status = 400
+      throw err
+    }
+  }
+
+  if (numAdvance > finalServerTotal) {
+    const err = new Error("Advance payment cannot exceed total amount.")
+    err.status = 400
+    throw err
+  }
+
+  // Fetch user settings for invoice and receipt prefixes if available
+  const userRecord = userDoc || (await User.findById(userId).select("invoicePrefix receiptPrefix"))
+  const customPrefix = userRecord?.invoicePrefix || "YHB"
+  const customReceiptPrefix = userRecord?.receiptPrefix || "REC"
+
+  // Single source of truth for invoiceNo: ensure user-uniqueness
+  let invoiceNo = clientInvoiceNo
+  if (invoiceNo) {
+    const existing = await Booking.findOne({ userId, invoiceNo })
+    if (existing) {
+      invoiceNo = null
+    }
+  }
+
+  const { start: normalizedJourneyDate } = getDayBounds(journeyDate)
+
+  const initialPayments =
+    numAdvance > 0
+      ? [
+          {
+            amount: numAdvance,
+            date: body.date ? new Date(body.date) : new Date(),
+            mode: paymentMode || "Cash",
+            notes: "Initial advance payment",
+          },
+        ]
+      : []
+
+  let linkedCustomer = null
   try {
-    const {
+    linkedCustomer = await upsertCustomerForBooking(userId, {
       contactName,
       contactPhone,
       contactEmail,
-      tourName,
-      journeyDate,
-      duration,
-      busType,
-      paymentMode,
-      totalAmount,
-      advanceReceived,
-      passengers,
-      discount = 0,
-      discountType = "fixed",
-      gstRate = 0,
-      isTaxInclusive = false,
-      invoiceNo: clientInvoiceNo,
-      pickupPoint,
-      pickupTime,
-      dropPoint,
-    } = req.body
-
-    // Basic required validations
-    if (!contactName || !contactPhone || !tourName || !journeyDate) {
-      return res.status(400).json({ message: "Contact name, phone, tour name, and journey date are required." })
-    }
-
-    if (busType && !isValidBusType(busType)) {
-      return res.status(400).json({
-        message: `Invalid bus type '${busType}'. Allowed types: ${STANDARD_BUS_TYPES.join(", ")}`,
-      })
-    }
-    const canonicalBusType = busType ? normalizeBusType(busType) : ""
-
-    const bookingDate = req.body.date || new Date()
-    const checkAdvance = Math.round(Number(advanceReceived || 0) * 100) / 100
-    if (checkAdvance > 0) {
-      await assertBooksOpen(req.user.id, bookingDate)
-    }
-
-    if (!validateIndianPhone(contactPhone)) {
-      return res.status(400).json({ message: "Please provide a valid 10-digit Indian mobile number." })
-    }
-
-    if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
-      return res.status(400).json({ message: "At least one passenger is required." })
-    }
-
-    for (let i = 0; i < passengers.length; i++) {
-      const p = passengers[i]
-      if (!p.name || !p.city) {
-        return res.status(400).json({ message: `Passenger ${i + 1} is missing name or city.` })
-      }
-      const age = Number(p.age)
-      if (isNaN(age) || age < 1 || age > 120) {
-        return res.status(400).json({ message: `Passenger ${p.name || i + 1} must have a valid age.` })
-      }
-      if (p.aadhar && !validateAadhaar(p.aadhar)) {
-        return res.status(400).json({ message: `Aadhaar for ${p.name} must be a valid 12-digit number.` })
-      }
-    }
-
-    // Validate seat layout and passenger-seat parity
-    const seatLayoutError = validateSeatLayout(passengers, busType)
-    if (seatLayoutError) {
-      return res.status(seatLayoutError.status).json({ message: seatLayoutError.message })
-    }
-
-    // Check seat conflicts
-    const seatConflict = await checkSeatConflicts({
-      userId: req.user.id,
-      tourName,
-      journeyDate,
-      busType,
-      passengers,
-      holdId: req.body.holdId || null,
-      overrideLadies: req.body.overrideLadies,
-      overrideReason: req.body.overrideReason,
     })
-    if (seatConflict && (seatConflict.conflictingSeats || seatConflict.status)) {
-      return res.status(seatConflict.status || 409).json({
-        code: seatConflict.code || "SEAT_CONFLICT",
-        message: seatConflict.message,
-        conflictingSeats: seatConflict.conflictingSeats,
-        holdInfo: seatConflict.holdInfo,
-      })
-    }
+  } catch (custErr) {
+    console.warn("[CustomerUpsert] Non-blocking customer link failed:", custErr.name, custErr.code || "")
+  }
 
-    // Server authority over pricing: query Tour & compute totals, discount, GST
-    const { pricing } = await computeServerPricing({
-      userId: req.user.id,
-      tourName,
-      passengers,
-      discount,
-      discountType,
-      gstRate,
-      isTaxInclusive,
-      baseAmount: req.body.baseAmount || totalAmount,
-    })
-
-    const finalServerTotal = pricing.finalTotal
-    const numAdvance = Number(advanceReceived || 0)
-
-    if (isNaN(numAdvance) || numAdvance < 0) {
-      return res.status(400).json({ message: "Advance payment cannot be negative." })
-    }
-
-    if (totalAmount !== undefined && totalAmount !== null) {
-      const clientTotal = Math.round(Number(totalAmount) * 100) / 100
-      if (Math.abs(clientTotal - finalServerTotal) > 0.05) {
-        return res.status(400).json({
-          message: `Total amount mismatch: client provided ₹${clientTotal}, but server calculated ₹${finalServerTotal}.`,
-        })
+  const newBooking = new Booking({
+    invoiceNo: "PENDING",
+    customerId: linkedCustomer ? linkedCustomer._id : null,
+    groupId: groupId || body.groupId || null,
+    date: body.date ? new Date(body.date) : new Date(),
+    tourName,
+    journeyDate: normalizedJourneyDate,
+    duration: duration || "",
+    busType: canonicalBusType || "",
+    seatLayoutKey: layoutKeyForBusType(canonicalBusType || ""),
+    contactName,
+    contactPhone,
+    contactEmail: contactEmail || "",
+    pickupPoint: pickupPoint || "",
+    pickupTime: pickupTime || "",
+    dropPoint: dropPoint || "",
+    paymentMode: paymentMode || "Cash",
+    totalAmount: finalServerTotal,
+    advanceReceived: numAdvance,
+    isPaid: numAdvance >= finalServerTotal && finalServerTotal > 0,
+    status: "Confirmed",
+    discount: pricing.discountAmount,
+    discountType: pricing.discountType,
+    gstRate: pricing.gstRate,
+    taxAmount: pricing.taxAmount,
+    isTaxInclusive: pricing.isTaxInclusive,
+    payments: initialPayments,
+    passengers: passengers.map((p) => {
+      const paxObj = { ...p }
+      paxObj.pickupPoint = paxObj.pickupPoint || pickupPoint || ""
+      paxObj.pickupTime = paxObj.pickupTime || pickupTime || ""
+      if (paxObj.aadhar) {
+        paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
+        paxObj.aadharEncrypted = true
       }
-    }
+      return paxObj
+    }),
+    userId,
+  })
 
-    if (numAdvance > finalServerTotal) {
-      return res.status(400).json({ message: "Advance payment cannot exceed total amount." })
-    }
-
-    // Fetch user settings for invoice and receipt prefixes if available
-    const userDoc = await User.findById(req.user.id).select("invoicePrefix receiptPrefix")
-    const customPrefix = userDoc?.invoicePrefix || "YHB"
-    const customReceiptPrefix = userDoc?.receiptPrefix || "REC"
-
-    // Single source of truth for invoiceNo: ensure user-uniqueness
-    let invoiceNo = clientInvoiceNo
-    if (invoiceNo) {
-      const existing = await Booking.findOne({ userId: req.user.id, invoiceNo })
-      if (existing) {
-        invoiceNo = null
-      }
-    }
-
-    const { start: normalizedJourneyDate } = getDayBounds(journeyDate)
-
-    const initialPayments =
-      numAdvance > 0
-        ? [
-            {
-              amount: numAdvance,
-              date: req.body.date ? new Date(req.body.date) : new Date(),
-              mode: paymentMode || "Cash",
-              notes: "Initial advance payment",
-            },
-          ]
-        : []
-
-    let linkedCustomer = null
+  let savedBooking = null
+  let attempts = 0
+  while (!savedBooking && attempts < 5) {
+    attempts++
     try {
-      linkedCustomer = await upsertCustomerForBooking(req.user.id, {
-        contactName,
-        contactPhone,
-        contactEmail,
-      })
-    } catch (custErr) {
-      console.warn("[CustomerUpsert] Non-blocking customer link failed:", custErr.name, custErr.code || "")
-    }
-
-    const newBooking = new Booking({
-      invoiceNo: "PENDING",
-      customerId: linkedCustomer ? linkedCustomer._id : null,
-      date: req.body.date ? new Date(req.body.date) : new Date(),
-      tourName,
-      journeyDate: normalizedJourneyDate,
-      duration: duration || "",
-      busType: canonicalBusType || "",
-      seatLayoutKey: layoutKeyForBusType(canonicalBusType || ""),
-      contactName,
-      contactPhone,
-      contactEmail: contactEmail || "",
-      pickupPoint: pickupPoint || "",
-      pickupTime: pickupTime || "",
-      dropPoint: dropPoint || "",
-      paymentMode: paymentMode || "Cash",
-      totalAmount: finalServerTotal,
-      advanceReceived: numAdvance,
-      isPaid: numAdvance >= finalServerTotal && finalServerTotal > 0,
-      status: "Confirmed",
-      discount: pricing.discountAmount,
-      discountType: pricing.discountType,
-      gstRate: pricing.gstRate,
-      taxAmount: pricing.taxAmount,
-      isTaxInclusive: pricing.isTaxInclusive,
-      payments: initialPayments,
-      passengers: passengers.map((p) => {
-        const paxObj = { ...p }
-        paxObj.pickupPoint = paxObj.pickupPoint || pickupPoint || ""
-        paxObj.pickupTime = paxObj.pickupTime || pickupTime || ""
-        if (paxObj.aadhar) {
-          paxObj.aadhar = encryptAadhaar(paxObj.aadhar)
-          paxObj.aadharEncrypted = true
-        }
-        return paxObj
-      }),
-      userId: req.user.id,
-    })
-
-    let savedBooking = null
-    let attempts = 0
-    while (!savedBooking && attempts < 5) {
-      attempts++
-      try {
-        if (!invoiceNo || attempts > 1) {
-          invoiceNo = await getNextInvoiceNo(req.user.id, tourName, journeyDate, customPrefix)
-        }
-        newBooking.invoiceNo = invoiceNo
-        savedBooking = await newBooking.save()
-      } catch (err) {
-        if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNo) {
-          invoiceNo = null // regenerate on next attempt
-        } else {
-          throw err
-        }
+      if (!invoiceNo || attempts > 1) {
+        invoiceNo = await getNextInvoiceNo(userId, tourName, journeyDate, customPrefix)
+      }
+      newBooking.invoiceNo = invoiceNo
+      savedBooking = await newBooking.save()
+    } catch (err) {
+      if (err.code === 11000 && err.keyPattern && err.keyPattern.invoiceNo) {
+        invoiceNo = null // regenerate on next attempt
+      } else {
+        throw err
       }
     }
+  }
 
-    if (!savedBooking) {
-      return res.status(409).json({ message: "Could not generate a unique invoice number. Please try again." })
+  if (!savedBooking) {
+    const err = new Error("Could not generate a unique invoice number. Please try again.")
+    err.status = 409
+    throw err
+  }
+
+  // Single code path: Issue tax-invoice IssuedDocument alongside booking
+  try {
+    const u = userRecord || (await User.findById(userId))
+    if (u) {
+      await ensureLegacyInvoiceDocument(savedBooking, u)
     }
+  } catch (docErr) {
+    console.error("Warning: Could not create initial IssuedDocument for booking:", docErr.name, docErr.code || "")
+  }
 
-    // Single code path: Issue tax-invoice IssuedDocument alongside booking
+  // If advance is received, record in separate Payment ledger collection
+  if (numAdvance > 0) {
     try {
-      const user = req.userDoc || (await User.findById(req.user.id))
-      if (user) {
-        await ensureLegacyInvoiceDocument(savedBooking, user)
-      }
-    } catch (docErr) {
-      console.error("Warning: Could not create initial IssuedDocument for booking:", docErr.name, docErr.code || "")
+      const receiptNo = await getNextReceiptNo(userId, customReceiptPrefix)
+      const paymentDoc = new Payment({
+        userId,
+        bookingId: savedBooking._id,
+        groupId: savedBooking.groupId || null,
+        receiptNo,
+        amount: numAdvance,
+        type: "advance",
+        paymentMode: paymentMode || "Cash",
+        paymentDate: savedBooking.date,
+        notes: "Initial advance payment",
+        recordedBy: user?.userName || user?.email || "Operator",
+      })
+      await paymentDoc.save()
+      await syncBookingPayments(savedBooking._id, userId)
+    } catch (payErr) {
+      console.error("Warning: Could not create initial Payment ledger record:", payErr.name, payErr.code || "")
     }
+  }
 
-    // If advance is received, record in separate Payment ledger collection
-    if (numAdvance > 0) {
-      try {
-        const receiptNo = await getNextReceiptNo(req.user.id, customReceiptPrefix)
-        const paymentDoc = new Payment({
-          userId: req.user.id,
+  await recordHistory({
+    userId,
+    entityType: "booking",
+    entityId: savedBooking._id,
+    action: "created",
+    user,
+  })
+
+  if (seatConflict?.ladiesOverrides?.length > 0 && req) {
+    for (const ov of seatConflict.ladiesOverrides) {
+      await logAudit({
+        userId,
+        action: "LADIES_SEAT_OVERRIDE",
+        req,
+        meta: {
           bookingId: savedBooking._id,
-          receiptNo,
-          amount: numAdvance,
-          type: "advance",
-          paymentMode: paymentMode || "Cash",
-          paymentDate: savedBooking.date,
-          notes: "Initial advance payment",
-          recordedBy: req.user.userName || req.user.email || "Operator",
-        })
-        await paymentDoc.save()
-        await syncBookingPayments(savedBooking._id, req.user.id)
-      } catch (payErr) {
-        console.error("Warning: Could not create initial Payment ledger record:", payErr.name, payErr.code || "")
-      }
+          invoiceNo: savedBooking.invoiceNo,
+          passengerName: ov.passengerName,
+          seatId: ov.seatId,
+          overrideReason: ov.overrideReason,
+        },
+      })
     }
+  }
 
-    await recordHistory({
-      userId: req.user.id,
-      entityType: "booking",
-      entityId: savedBooking._id,
-      action: "created",
-      user: req.user,
-    })
-
-    if (seatConflict?.ladiesOverrides?.length > 0) {
-      for (const ov of seatConflict.ladiesOverrides) {
+  // If booking was authorized via a seat hold, convert the hold
+  if (seatConflict?.authorizedHold) {
+    try {
+      await SeatHold.findByIdAndUpdate(seatConflict.authorizedHold._id, {
+        status: "converted",
+        convertedBookingId: savedBooking._id,
+      })
+      if (req) {
         await logAudit({
-          userId: req.user.id,
-          action: "LADIES_SEAT_OVERRIDE",
-          req,
-          meta: {
-            bookingId: savedBooking._id,
-            invoiceNo: savedBooking.invoiceNo,
-            passengerName: ov.passengerName,
-            seatId: ov.seatId,
-            overrideReason: ov.overrideReason,
-          },
-        })
-      }
-    }
-
-    // If booking was authorized via a seat hold, convert the hold
-    if (seatConflict?.authorizedHold) {
-      try {
-        await SeatHold.findByIdAndUpdate(seatConflict.authorizedHold._id, {
-          status: "converted",
-          convertedBookingId: savedBooking._id,
-        })
-        await logAudit({
-          userId: req.user.id,
+          userId,
           action: "seat_hold_converted",
           category: "seat_management",
           entityType: "SeatHold",
@@ -849,12 +878,28 @@ router.post("/", verifyToken, async (req, res) => {
             seatIds: seatConflict.authorizedHold.seatIds,
           },
         })
-      } catch (hErr) {
-        console.warn("Could not mark hold converted:", hErr)
       }
+    } catch (hErr) {
+      console.warn("Could not mark hold converted:", hErr)
     }
+  }
 
-    res.status(201).json(maskBookingPaxAadhaar(savedBooking))
+  return { booking: savedBooking, seatConflict, pricing }
+}
+
+// POST /api/bookings
+router.post("/", verifyToken, async (req, res) => {
+  try {
+    const { booking } = await createBookingCore({
+      userId: req.user.id,
+      user: req.user,
+      userDoc: req.userDoc,
+      body: req.body,
+      req,
+      groupId: req.body.groupId || null,
+    })
+
+    res.status(201).json(maskBookingPaxAadhaar(booking))
   } catch (error) {
     if (error.statusCode === 423 || error.name === "BooksLockedError") {
       return res.status(423).json({
@@ -863,7 +908,12 @@ router.post("/", verifyToken, async (req, res) => {
         transactionDate: error.transactionDate,
       })
     }
-    res.status(400).json({ message: error.message })
+    res.status(error.status || 400).json({
+      code: error.code,
+      message: error.message,
+      conflictingSeats: error.conflictingSeats,
+      holdInfo: error.holdInfo,
+    })
   }
 })
 
@@ -1025,6 +1075,7 @@ router.put("/:id", verifyToken, async (req, res) => {
       "pickupPoint",
       "pickupTime",
       "dropPoint",
+      "groupId",
       "tourName",
       "duration",
       "busType",

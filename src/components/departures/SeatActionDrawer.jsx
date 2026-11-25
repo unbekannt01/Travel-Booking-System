@@ -186,11 +186,16 @@ export default function SeatActionDrawer({
               </span>
             </div>
 
-            {seat.groupId && (
+            {seat.groupName ? (
+              <span className="text-xs font-semibold text-brand bg-brand-soft border border-brand/20 px-2 py-0.5 rounded flex items-center gap-1">
+                <span>👥 Group: {seat.groupName}</span>
+                {seat.groupLeader && <span className="text-ink-muted">({seat.groupLeader})</span>}
+              </span>
+            ) : seat.groupId ? (
               <span className="text-xs font-mono font-bold text-ink-muted bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">
                 Group #{seat.bookingRef?.split("-").slice(-1)[0] || seat.groupId.slice(-3).toUpperCase()}
               </span>
-            )}
+            ) : null}
           </div>
 
           {/* ── AVAILABLE ACTIONS ── */}
