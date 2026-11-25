@@ -1129,3 +1129,52 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - `src/components/PassengerManagement.jsx`: Added "Share Seat Card" button on traveler table rows and mobile card views.
   - *Automated tests not written, per owner decision.*
 
+---
+
+## 29. Group Booking Engine, Reusable Core Pipeline, and Proportional Payment Allocator (Part 6S-3b)
+
+- **Reusable Core Booking Pipeline (`backend/routes/bookings.js:createBookingCore`)**:
+  - Extracted the booking creation pipeline from `POST /api/bookings` into an exported `createBookingCore` function reusable across single and multi-member booking endpoints.
+  - Sequentially manages:
+    - Customer upsertion and linking (`upsertCustomerForBooking`).
+    - Custom sequential invoice number generation with collision retry loop.
+    - Seat layout structure and parity validation (`validateSeatLayout`).
+    - Departure-level seat conflict checks against active bookings and non-expired holds (`checkSeatConflicts`).
+    - AES-256-GCM Aadhaar encryption (`encryptAadhaar`).
+    - Standalone MongoDB sequential compensation handling: if any member fails validation or persistence midway through group creation, a compensation pass soft-deletes previously created members in reverse order.
+    - Pricing authority: respects custom negotiated group member fares when `groupId` is present, while strictly enforcing catalog pricing rules on individual consumer bookings.
+
+- **BookingGroup Data Model (`backend/models/BookingGroup.js`)**:
+  - Scoped by tenant `userId` with a compound index `{ userId, tourName, journeyDate, busType, status }`.
+  - Holds group identity (`name`, `leaderName`, `leaderPhone`, `note`, `status`).
+  - Bidirectional relation: `Booking.js` holds indexed `groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null, index: true }`.
+  - Disband lifecycle: Setting status to `"disbanded"` unsets `groupId` across member bookings in a single query without destroying invoices, passenger check-ins, or payment records.
+
+- **Pure Integer Paise Group Payment Engine (`shared/groupPayments.js`)**:
+  - **Paise Conversion**: Converts all inputs via `toPaise(amount)` and outputs via `fromPaise(paise)`, avoiding IEEE 754 floating-point drift.
+  - **Proportional Allocation (`calculateProportionalAllocation`)**:
+    - Each member's initial allocation is floored to integer paise: `Math.floor((totalPaise * balancePaise) / totalBalancePaise)`.
+    - Remainder paise calculation: `remainderPaise = totalPaise - sum(allocatedPaise)`.
+    - Deterministic Remainder Distribution: Remainder paise (at most $N-1$ paise for $N$ members) are awarded 1 paise at a time to members with the largest outstanding balance due. Ties are deterministically broken by member array index.
+    - Guarantee: $\sum \text{allocatedPaise} \equiv \text{totalPaise}$ under all permutations, with zero fractional paise lost or gained.
+  - **Equal Share Allocation (`calculateEqualAllocation`)**:
+    - Divides total equally among members with balance due, capping at individual balance due. Excess funds cascade iteratively to remaining members until fully allocated.
+  - **Manual Mode Validation (`validateManualAllocation`)**:
+    - Validates that user-specified member amounts sum exactly to total paise, and no member is over-allocated past their individual balance due.
+
+- **Authoritative Payment Ledger Architecture (`GroupPayment.js` & `backend/routes/groups.js`)**:
+  - **Single Source of Truth**: Group payments do not bypass the ledger. Each allocated share generates a real `Payment` record in the primary `Payment` collection with its own sequential receipt number (`getNextReceiptNo`), stamped with `groupPaymentId` and `groupId`.
+  - **Automatic Booking Synchronization**: After recording or undoing payments, `syncBookingPayments` recalculates the member booking's `advanceReceived`, `isPaid`, and embedded `payments` array.
+  - **Idempotency**: `idempotencyKey` indexed uniquely per user prevents duplicate double-charges from network retries or rapid double-clicks.
+  - **Undo Capability**: Reverses group payments by marking constituent `Payment` records as `isVoid: true` and recalculating member balances, gated by the books lock check (`assertBooksOpen`).
+
+- **Frontend Integration**:
+  - `src/components/groups/GroupBookingModal.jsx`: 2-step modal with live group summary bar, passenger/seat allocation, and coach layout grid.
+  - `src/components/groups/DepartureGroupsModal.jsx`: Modal displaying departure groups with member counts, seat totals, and financial summary cards.
+  - `src/components/groups/GroupDetailDrawer.jsx`: Slide-over drawer with member table, seat tags, balances, payment history, and actions ("Record Group Payment", "Copy for WhatsApp", "Disband").
+  - `src/components/groups/RecordGroupPaymentModal.jsx`: Payment recording modal with allocation mode selector, live preview table, and overpayment guard.
+  - `src/components/seats/SeatMap.jsx`: Booked coach berths display `👥 <groupName>` indicators.
+  - `src/components/PassengerManagement.jsx`: Displays `👥 Group` badge on group member rows.
+  - *Automated tests not written, per owner decision.*
+
+

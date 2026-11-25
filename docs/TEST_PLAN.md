@@ -808,6 +808,67 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.24 Manual Verification Checklist — Part 6S-3b (Group Booking & Payment Split)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-3b ("automated tests not run, per owner decision"). All verifications were conducted manually using the checklist below and verified with an end-to-end real browser Playwright execution.
+
+- [x] **1. Part 0 Carry-over: Boarding Details in BookingForm**:
+  - Open new booking form; verify "Boarding & Drop Details (Optional)" card is present with Pickup point, Pickup time, and Drop point inputs.
+  - Type in pickup point; verify `#tour-pickup-datalist` suggests existing tour stops.
+  - Verify invalid time formats (e.g. `25:00` or `abc`) trigger a validation error toast.
+- [x] **2. Part 0 Carry-over: Driver WhatsApp Text Phone Selection & Zero Aadhaar**:
+  - In Journeys screen, open Manifest Print Modal and click "Copy as WhatsApp text".
+  - If mobile/phone column is NOT selected in manifest columns, verify passenger phone numbers are completely omitted from the plain text.
+  - If mobile/phone column IS selected, verify phone numbers appear.
+  - **Zero Aadhaar Guarantee**: Verify Aadhaar numbers NEVER appear in the driver plain-text export under any circumstances.
+- [x] **3. Group Booking Wizard (2-Step Creation)**:
+  - In Journeys screen or Departure card, click "Group Booking" (or "New Group Booking").
+  - Step 1: Fill Group Name ("Patel Parivar Yatra"), Leader Name, Leader Phone, Tour, Journey Date, Bus Type, and Default Pickup/Drop.
+  - Click "Proceed to Member Details"; verify Step 2 loads with live summary bar (Members, Seats, Total Fare).
+  - Add 3 member bookings (e.g. Ramesh ₹2,500, Suresh ₹5,000, Mahesh ₹2,500).
+  - Allocate berths using coach grid: Ramesh -> `left-L1-1`, Suresh -> `left-L2-1` & `left-L3-1`, Mahesh -> `right-L1-1`.
+  - Click "Create Group"; verify 3 distinct member bookings (`YHB-...`) and 1 `BookingGroup` are created in MongoDB.
+- [x] **4. Pre-Validation & Concurrency Safeguards**:
+  - Verify coach capacity check: requesting more seats than bus capacity is rejected with HTTP 400.
+  - Verify duplicate seat check: assigning the same seat to two members within the group is rejected with HTTP 409 `SEAT_CONFLICT`.
+  - Verify departure collision check: assigning a seat already booked or held by another traveler on the departure is rejected with HTTP 409.
+  - Verify rollback compensation: if any member fails during sequential creation, earlier members are automatically soft-deleted.
+- [x] **5. Departure Groups Modal & Group Detail Drawer**:
+  - On the Departure Card, click "Groups"; verify `DepartureGroupsModal` lists the group with member count, seat count, total fare, and balance due.
+  - Click "View Group"; verify `GroupDetailDrawer` slides out.
+  - Verify financial cards (Total Fare, Total Advance, Balance Due).
+  - Verify member table lists each member with individual invoice number, seat badges, fare, and balance.
+  - Click "Copy for WhatsApp"; verify formatted group summary is copied to clipboard.
+- [x] **6. Live Seat Map & Travelers Indicators**:
+  - Open Live Seat Map for the departure; verify seats booked by the group show `👥 Patel...` tag pills.
+  - Click any group seat; verify Seat Action Drawer displays group name and leader contact.
+  - Navigate to Travelers (`#passengers`); verify group member rows display `👥 Group` badge.
+- [x] **7. One Total Payment Split Engine (Proportional, Equal, Manual)**:
+  - In `GroupDetailDrawer`, click "Record Group Payment".
+  - Enter total amount ₹5,000 (with total group balance due ₹10,000 across Ramesh ₹2,500, Suresh ₹5,000, Mahesh ₹2,500).
+  - Verify Proportional mode preview table: Ramesh gets ₹1,250, Suresh gets ₹2,500, Mahesh gets ₹1,250.
+  - Test 1-paise integer remainder distribution (e.g. ₹3,333.33): verify remainder paise is awarded deterministically to largest balance due with 0 floating-point drift.
+  - Switch to "Equal Share": verify funds distribute equally up to individual balance caps.
+  - Test overpayment protection: entering ₹15,000 (> ₹10,000) displays error "exceeds total group balance due" and disables submission.
+  - Submit ₹4,000 via UPI; verify 3 discrete `Payment` records created in `Payment` collection with atomic receipt numbers (`REC-...`).
+  - Verify member booking balances and paid states update automatically in MongoDB.
+- [x] **8. Undo Group Payment**:
+  - In `GroupDetailDrawer` payments history, click "Undo Payment" on the recorded group payment; confirm void.
+  - Verify group payment status changes to `"undone"`.
+  - Verify all 3 associated `Payment` records are marked `isVoid: true`.
+  - Verify all 3 member bookings have their advance and balance restored to original amounts.
+- [x] **9. Disband Group**:
+  - In `GroupDetailDrawer`, click "Disband"; confirm.
+  - Verify group status changes to `"disbanded"`.
+  - Verify member bookings remain completely intact on the departure with `groupId` cleared.
+- [x] **10. Accessibility & Viewport Responsiveness**:
+  - Verify full keyboard navigation (`Tab`, `Enter`, `Escape`) across all group modals and drawer.
+  - Test on 360px mobile viewport: verify zero horizontal page scroll (`scrollWidth === innerWidth`).
+  - Test on 1440px desktop viewport: verify crisp responsive cards and tables.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
 With 361 unit & regression tests passing across 93 TAP test suites, 78 component tests passing across 17 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 6 Part 6a is officially completed. Remaining gaps scheduled for future phases:
