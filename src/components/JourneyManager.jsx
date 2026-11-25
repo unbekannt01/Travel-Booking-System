@@ -20,6 +20,7 @@ import {
   Plus,
   TrendingUp,
   Layout,
+  FileSpreadsheet,
 } from "lucide-react"
 import { togglePassengerCheckin, batchCheckin, swapSeat } from "../data/bookings"
 import { recordPayment } from "../data/payments"
@@ -34,6 +35,7 @@ import BoardingPassModal from "./common/BoardingPassModal"
 import SeatLayoutModal from "./common/SeatLayoutModal"
 
 const ManifestPrintModal = lazy(() => import("./common/ManifestPrintModal"))
+const PaymentSheetModal = lazy(() => import("./common/PaymentSheetModal"))
 import {
   Card,
   Button,
@@ -54,6 +56,7 @@ import {
 } from "./ui"
 import { cn } from "../utils/cn"
 import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
+import { calculateDepartureGroupStats } from "../../shared/groupHelpers.js"
 import LiveSeatMap from "./departures/LiveSeatMap"
 import GroupBookingModal from "./groups/GroupBookingModal"
 import GroupDetailDrawer from "./groups/GroupDetailDrawer"
@@ -97,6 +100,7 @@ export default function JourneyManager({
   const [selectedTour, setSelectedTour] = useState("all")
   const [showExportOptions, setShowExportOptions] = useState(false)
   const [manifestModalConfig, setManifestModalConfig] = useState(null)
+  const [paymentSheetModalConfig, setPaymentSheetModalConfig] = useState(null)
 
   // Trip expenses & financials state
   const [tripExpenses, setTripExpenses] = useState(initialExpenses)
@@ -200,6 +204,8 @@ export default function JourneyManager({
         const bookedCount = dep.bookedSeats.size || dep.totalPax
         const occupancyPct = Math.min(100, Math.round((bookedCount / dep.capacity) * 100))
         const balanceDue = Math.max(0, dep.totalAmount - dep.advanceReceived)
+        const groupStats = calculateDepartureGroupStats(dep.bookings || [])
+        const groupCount = groupStats.groupCount
 
         let statusTag = "Upcoming"
         let statusBadgeVariant = "brand"
@@ -219,6 +225,7 @@ export default function JourneyManager({
           bookedCount,
           occupancyPct,
           balanceDue,
+          groupCount,
           statusTag,
           statusBadgeVariant,
         }
@@ -646,6 +653,21 @@ export default function JourneyManager({
                 >
                   <span>📍 Pickup-Wise Passenger List</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExportOptions(false)
+                    const depKey = selectedDepartureKey || (filteredDepartures[0]?.key) || (departures[0]?.key)
+                    setPaymentSheetModalConfig({
+                      isOpen: true,
+                      departureKey: depKey,
+                    })
+                  }}
+                  className="w-full px-4 py-2 text-left text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet size={13} />
+                  <span>💰 Departure Payment Sheet (A4)</span>
+                </button>
               </div>
             )}
           </div>
@@ -895,7 +917,7 @@ export default function JourneyManager({
                         title="Manage Tour Groups & Group Payments"
                       >
                         <Users size={13} className="mr-1 text-brand" />
-                        <span>Groups</span>
+                        <span>Groups{dep.groupCount > 0 ? ` (${dep.groupCount})` : ""}</span>
                       </Button>
                       <Button
                         type="button"
@@ -925,6 +947,21 @@ export default function JourneyManager({
                       >
                         <Printer size={13} className="mr-1 text-brand" />
                         <span>Manifest</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setPaymentSheetModalConfig({
+                            isOpen: true,
+                            departureKey: dep.key,
+                          })
+                        }}
+                        title="Configure and Print Departure Payment Sheet (A4)"
+                      >
+                        <FileSpreadsheet size={13} className="mr-1 text-emerald-600 dark:text-emerald-400" />
+                        <span>Payment Sheet</span>
                       </Button>
                       <Button
                         type="button"
@@ -1724,6 +1761,19 @@ export default function JourneyManager({
         </Suspense>
       )}
 
+      {/* Operator Payment & Collection Sheet Modal */}
+      {paymentSheetModalConfig?.isOpen && (
+        <Suspense fallback={null}>
+          <PaymentSheetModal
+            isOpen={paymentSheetModalConfig.isOpen}
+            onClose={() => setPaymentSheetModalConfig(null)}
+            departureKey={paymentSheetModalConfig.departureKey}
+            departures={departures}
+            user={user}
+          />
+        </Suspense>
+      )}
+
       {/* Departure Groups List Modal (Part 6S-3b) */}
       {showDepartureGroupsModal && selectedGroupDeparture && (
         <DepartureGroupsModal
@@ -1744,6 +1794,7 @@ export default function JourneyManager({
           isOpen={Boolean(activeGroupId)}
           onClose={() => setActiveGroupId(null)}
           groupId={activeGroupId}
+          user={user}
           onGroupUpdated={() => {
             // refresh data
           }}

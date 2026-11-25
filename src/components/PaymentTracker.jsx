@@ -11,6 +11,7 @@ import {
   Ban,
   Printer,
   IndianRupee,
+  FileText,
 } from "lucide-react"
 import { useToast } from "./common/ToastContext"
 import { formatDisplayDate } from "../utils/date"
@@ -20,6 +21,7 @@ import { getPaymentUrgencyMeta } from "../utils/dashboardOverview"
 import { listPayments } from "../data/payments"
 import { calculateBookingFinancials } from "../../shared/profitLoss.js"
 import ReceiptModal from "./common/ReceiptModal"
+import PaymentSummaryModal from "./common/PaymentSummaryModal"
 import {
   Card,
   Badge,
@@ -57,12 +59,14 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
   const [voidingPaymentId, setVoidingPaymentId] = useState(null)
   const [voidReason, setVoidReason] = useState("")
   const [viewReceiptPayment, setViewReceiptPayment] = useState(null)
+  const [showPaymentSummaryModal, setShowPaymentSummaryModal] = useState(false)
 
   const closeLedgerModal = () => {
     setViewReceiptPayment(null)
     setViewLedgerBooking(null)
     setLedgerPayments([])
     setVoidingPaymentId(null)
+    setShowPaymentSummaryModal(false)
   }
 
   const handleOpenLedger = (booking) => {
@@ -521,9 +525,21 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
             <div className="border border-border-subtle rounded-[var(--yh-radius-md)] overflow-hidden">
               <div className="bg-surface-muted/60 px-4 py-2.5 border-b border-border-subtle flex justify-between items-center text-xs">
                 <span className="font-semibold text-ink-muted uppercase tracking-wider text-[11px]">
-                  Official Receipts & Audit Ledger
+                  Official Receipts &amp; Audit Ledger
                 </span>
-                {loadingLedger && <span className="font-semibold text-brand text-[11px]">Loading ledger...</span>}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPaymentSummaryModal(true)}
+                    className="text-xs h-7 px-2.5"
+                    icon={<FileText size={12} />}
+                  >
+                    Payment Summary
+                  </Button>
+                  {loadingLedger && <span className="font-semibold text-brand text-[11px]">Loading ledger...</span>}
+                </div>
               </div>
               {(ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []).length > 0 ? (
                 <div className="overflow-x-auto">
@@ -649,6 +665,17 @@ export default function PaymentTracker({ bookings, onMarkPaid, onVoidPayment, us
           payment={viewReceiptPayment}
           user={user}
           onClose={() => setViewReceiptPayment(null)}
+        />
+      )}
+
+      {/* Passenger Payment Summary Modal (Output 1) */}
+      {showPaymentSummaryModal && viewLedgerBooking && (
+        <PaymentSummaryModal
+          isOpen={showPaymentSummaryModal}
+          onClose={() => setShowPaymentSummaryModal(false)}
+          booking={viewLedgerBooking}
+          payments={ledgerPayments.length > 0 ? ledgerPayments : viewLedgerBooking.payments || []}
+          user={user}
         />
       )}
     </section>

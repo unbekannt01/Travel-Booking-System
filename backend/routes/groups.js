@@ -266,6 +266,43 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       status: "active",
     }).sort({ createdAt: -1 })
 
+    // Lazily bridge multi-passenger bookings (2+ pax) into real BookingGroup records idempotently
+    try {
+      const standaloneMultiPax = await Booking.find({
+        userId: req.user.id,
+        tourName,
+        journeyDate: { $gte: start, $lte: end },
+        ...busCondition,
+        deletedAt: null,
+        $or: [{ groupId: null }, { groupId: { $exists: false } }],
+        "passengers.1": { $exists: true },
+      })
+
+      for (const b of standaloneMultiPax) {
+        const pCount = b.passengers?.length || 1
+        const leadName = b.passengers?.[0]?.name || b.contactName || "Traveler"
+        const grpName = b.groupName?.trim() || `${leadName} + ${pCount - 1}`
+        const newGroup = new BookingGroup({
+          userId: req.user.id,
+          name: grpName,
+          leaderName: leadName,
+          leaderPhone: b.contactPhone || "",
+          tourName: b.tourName,
+          journeyDate: b.journeyDate,
+          busType: b.busType || "2x1 Sleeper Luxury",
+          note: "Auto group from multi-passenger booking",
+          status: "active",
+        })
+        await newGroup.save()
+        b.groupId = newGroup._id
+        if (!b.groupName) b.groupName = grpName
+        await b.save()
+        groups.push(newGroup)
+      }
+    } catch (lazyErr) {
+      console.warn("[GroupsDeparture] Non-blocking lazy group bridging error:", lazyErr.message)
+    }
+
     if (groups.length === 0) {
       return res.json({ groups: [] })
     }
@@ -321,7 +358,45 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
 // GET /api/groups/:id - Detail view of a single group
 router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
   try {
-    const group = await BookingGroup.findOne({ _id: req.params.id, userId: req.user.id })
+    let group = null
+    try {
+      group = await BookingGroup.findOne({ _id: req.params.id, userId: req.user.id })
+    } catch {
+      // not a valid ObjectId or not found
+    }
+
+    if (!group) {
+      try {
+        const b = await Booking.findOne({ _id: req.params.id, userId: req.user.id, deletedAt: null })
+        if (b && (b.groupId || (b.passengers && b.passengers.length > 1))) {
+          if (b.groupId) {
+            group = await BookingGroup.findOne({ _id: b.groupId, userId: req.user.id })
+          } else {
+            const pCount = b.passengers?.length || 1
+            const leadName = b.passengers?.[0]?.name || b.contactName || "Traveler"
+            const grpName = b.groupName?.trim() || `${leadName} + ${pCount - 1}`
+            group = new BookingGroup({
+              userId: req.user.id,
+              name: grpName,
+              leaderName: leadName,
+              leaderPhone: b.contactPhone || "",
+              tourName: b.tourName,
+              journeyDate: b.journeyDate,
+              busType: b.busType || "2x1 Sleeper Luxury",
+              note: "Auto group from multi-passenger booking",
+              status: "active",
+            })
+            await group.save()
+            b.groupId = group._id
+            if (!b.groupName) b.groupName = grpName
+            await b.save()
+          }
+        }
+      } catch (err) {
+        console.warn("[GroupDetail] Error resolving group for booking ID:", err.message)
+      }
+    }
+
     if (!group) {
       return res.status(404).json({ message: "Group not found." })
     }

@@ -71,6 +71,7 @@ const bookingSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null },
+    groupName: { type: String, trim: true, default: "" },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },

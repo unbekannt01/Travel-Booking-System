@@ -9,6 +9,7 @@ import {
   Copy,
   RotateCcw,
   Check,
+  Printer,
 } from "lucide-react"
 import { Drawer, Button, Badge, ConfirmDialog } from "../ui"
 import { useToast } from "../common/ToastContext"
@@ -16,12 +17,14 @@ import { formatINR } from "../../utils/formatters"
 import { formatDisplayDate } from "../../utils/date"
 import RecordGroupPaymentModal from "./RecordGroupPaymentModal"
 import AddGroupMemberModal from "./AddGroupMemberModal"
+import PaymentSummaryModal from "../common/PaymentSummaryModal"
 
 export default function GroupDetailDrawer({
   isOpen,
   onClose,
   groupId,
   onGroupUpdated,
+  user,
 }) {
   const { toast } = useToast()
   const [data, setData] = useState(null)
@@ -30,6 +33,7 @@ export default function GroupDetailDrawer({
 
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showAddMemberModal, setShowAddMemberModal] = useState(false)
+  const [showPaymentSummaryModal, setShowPaymentSummaryModal] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState(null)
   const [paymentToUndo, setPaymentToUndo] = useState(null)
   const [showDisbandConfirm, setShowDisbandConfirm] = useState(false)
@@ -273,6 +277,15 @@ export default function GroupDetailDrawer({
               >
                 Copy for WhatsApp
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                leftIcon={<Printer size={14} />}
+                onClick={() => setShowPaymentSummaryModal(true)}
+              >
+                Payment Summary
+              </Button>
               {group.status === "active" && (
                 <Button
                   type="button"
@@ -510,6 +523,18 @@ export default function GroupDetailDrawer({
           variant="danger"
           onConfirm={handleDisbandGroup}
           loading={actionLoading}
+        />
+      )}
+
+      {/* Group Payment Summary Print / Download Modal (Output 1) */}
+      {showPaymentSummaryModal && group && (
+        <PaymentSummaryModal
+          isOpen={showPaymentSummaryModal}
+          onClose={() => setShowPaymentSummaryModal(false)}
+          group={group}
+          memberBookings={members}
+          groupPayments={payments}
+          user={user}
         />
       )}
     </>

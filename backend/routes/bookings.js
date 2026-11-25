@@ -740,6 +740,11 @@ export async function createBookingCore({
     invoiceNo: "PENDING",
     customerId: linkedCustomer ? linkedCustomer._id : null,
     groupId: groupId || body.groupId || null,
+    groupName:
+      (body.groupName && String(body.groupName).trim()) ||
+      (passengers.length > 1
+        ? (passengers[0]?.name ? `${passengers[0].name} + ${passengers.length - 1}` : "Group")
+        : ""),
     date: body.date ? new Date(body.date) : new Date(),
     tourName,
     journeyDate: normalizedJourneyDate,
@@ -1078,6 +1083,7 @@ router.put("/:id", verifyToken, async (req, res) => {
       "pickupTime",
       "dropPoint",
       "groupId",
+      "groupName",
       "tourName",
       "duration",
       "busType",

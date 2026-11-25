@@ -173,6 +173,11 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           decryptedAadhaar = aadharEnc ? decryptAadhaar(aadharVal) : aadharVal
         }
 
+        const pCount = (b.passengers || []).length || 1
+        const pFare = p.fare !== undefined ? p.fare : Math.round((b.totalAmount || 0) / pCount)
+        const pPaid = p.paid !== undefined ? p.paid : Math.round((b.advanceReceived || 0) / pCount)
+        const pBalance = Math.max(0, pFare - pPaid)
+
         passengers.push({
           id: p._id || p.id,
           bookingId: b._id || b.id,
@@ -187,6 +192,11 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           pickup: p.pickupPoint || b.pickupPoint || "",
           pickupPoint: p.pickupPoint || b.pickupPoint || "",
           pickupTime: p.pickupTime || b.pickupTime || "",
+          groupId: b.groupId ? String(b.groupId) : (pCount > 1 ? `booking-${b._id || b.id}` : null),
+          groupName: b.groupName || (pCount > 1 ? `${(b.passengers[0]?.name || b.contactName || "Traveler")} + ${pCount - 1}` : ""),
+          fare: pFare,
+          paid: pPaid,
+          balance: pBalance,
           balanceDue: balance,
           paymentStatus,
           isPaid,

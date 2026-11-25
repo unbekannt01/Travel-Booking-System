@@ -230,6 +230,7 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
           },
         ],
     isFixedPrice: false,
+    groupName: editData?.groupName || "",
     seatLayout: layoutKeyForBusType(editData?.busType),
   }))
 
@@ -744,7 +745,11 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
     if (formData.passengers.length > 1) {
       const updated = formData.passengers.filter((_, i) => i !== index)
       setActivePassengerIndex((prev) => Math.min(prev, updated.length - 1))
-      setFormData((prev) => ({ ...prev, passengers: updated }))
+      setFormData((prev) => ({
+        ...prev,
+        passengers: updated,
+        groupName: updated.length > 1 ? prev.groupName : "",
+      }))
       setStepErrors({})
       setStepErrorSummary([])
     }
@@ -841,6 +846,11 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
 
     const finalData = {
       ...formData,
+      groupName:
+        formData.groupName?.trim() ||
+        (formData.passengers?.length > 1
+          ? `${formData.passengers[0]?.name || formData.contactName || "Lead"} + ${formData.passengers.length - 1}`
+          : ""),
       totalAmount: pricingBreakdown.finalTotal,
       baseAmount: pricingBreakdown.baseAmount,
       discount: pricingBreakdown.discountAmount,
@@ -1451,6 +1461,41 @@ export default function BookingForm({ onSave, tours = [], editData, onCancel, bo
               )}
 
               <div className="space-y-4">
+                {formData.passengers.length > 1 && (
+                  <div className="rounded-[var(--yh-radius-lg)] bg-brand-soft/40 border border-brand/20 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-brand text-white font-bold text-xs shrink-0">
+                        👥
+                      </span>
+                      <div>
+                        <p className="font-bold text-ink text-sm">
+                          Group booking ({formData.passengers.length} passengers)
+                        </p>
+                        <p className="text-ink-muted text-[11px]">
+                          Treated as a unified group on payment sheets, summaries &amp; operator manifests.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="sm:w-64 shrink-0">
+                      <label htmlFor="group-name-input" className="block text-[11px] font-semibold text-ink-muted mb-1">
+                        Group Name (Optional)
+                      </label>
+                      <Input
+                        id="group-name-input"
+                        type="text"
+                        placeholder={
+                          formData.passengers[0]?.name || formData.contactName
+                            ? `${formData.passengers[0]?.name || formData.contactName} + ${formData.passengers.length - 1}`
+                            : "Group Name"
+                        }
+                        value={formData.groupName || ""}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, groupName: e.target.value }))}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {formData.passengers.map((p, i) => (
                   <div
                     key={i}
