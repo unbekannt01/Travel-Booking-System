@@ -869,6 +869,61 @@ npm run ui:smoke -- --quick
 
 ---
 
+## 3.25 Manual Verification Checklist — Part 6S-4 (Booking Review Step & Lower/Upper Deck Tabs)
+
+> [!NOTE]
+> Per explicit owner decision, automated tests were not run and no new automated tests were written in Part 6S-4 ("automated tests not run, per owner decision"). All verifications were conducted manually using the checklist below and verified with an end-to-end real browser Playwright execution.
+
+- [x] **1. Problem 1 Verification: Step 0 Enter Key Prevention**:
+  - Open New Booking form (`/` -> "New Booking").
+  - On Step 0 (Tour, Date, Contact), fill Tour, Journey Date, Bus Type, and Primary Contact.
+  - Focus inside phone number field (`#contactPhone`) and press Enter.
+  - Verify form does NOT submit, does NOT advance to Step 1, and Step 0 remains active (`PASS: Enter in Step 0 input did NOT advance or submit`).
+- [x] **2. Problem 2 Verification: Sleeper Seat Picker Deck Tabs**:
+  - Advance to Step 1 (Passengers & Seats). Fill passenger 1 details and click seat selector.
+  - In Seat Picker modal, verify Design System Tabs are rendered:
+    - "Lower deck" (with live count, e.g. `Lower deck (0/18)`).
+    - "Upper deck" (with live count).
+    - "Rear berths (2)" (for 2x1 38-berth bus).
+  - Verify front amber strip with "▲ Front" on the left and "Driver" (☸) on the right.
+  - Verify 3-column structure: Left cabin, central aisle ("SLEEPER"), Right cabin with 2 berths side-by-side.
+  - Click "Upper deck" tab; select an available upper berth (e.g. `left-U1-1`).
+  - Confirm selection and return to passenger form.
+- [x] **3. Problem 1 Verification: Step 2 Enter Key Prevention**:
+  - Advance to Step 2 (Pricing & Payment).
+  - Enter base amount (₹5,000) and advance received (₹2,000).
+  - Focus inside advance received field (`#advanceReceived`) and press Enter.
+  - Verify form does NOT submit and does NOT redirect to home overview (`PASS: Enter in Pricing input did NOT submit`).
+- [x] **4. Problem 1 Verification: Review Step Presentation & Contents**:
+  - On Step 2, click "Next: Review".
+  - Verify Step 3 (Review Step) is presented and active.
+  - Verify Review screen displays:
+    - Tour destination and journey date.
+    - Bus arrangement.
+    - Primary traveler contact name and phone number.
+    - Passenger list with formatted seat labels (e.g. "Seat Left U1-1").
+    - Pricing summary (Base fare, Total amount, Advance paid, Balance due).
+    - Boarding & drop points (if provided).
+    - Operational notice ("Please review all booking details carefully before confirming").
+- [x] **5. Problem 1 Verification: 'Back to edit' Workflow**:
+  - On Step 3 Review screen, click "Back to edit".
+  - Verify form navigates back to Step 2 (Pricing & Payment).
+  - Verify all entered values (e.g. advance received ₹2,000) are strictly preserved.
+  - Click "Next: Review" again; verify returns cleanly to Step 3.
+- [x] **6. Problem 1 Verification: Single-Shot Confirmation**:
+  - On Step 3 Review screen, click "Confirm Booking".
+  - Verify button displays loading spinner and disables during flight.
+  - Verify booking is saved to MongoDB, toast notification appears, and operator is redirected to dashboard.
+- [x] **7. Problem 2 Verification: Group Booking Modal Coach Map Unification**:
+  - Open Group Booking Modal ("Group Booking" on Departure).
+  - Advance to Step 2 (Member Details).
+  - Verify coach selection uses the shared `SeatMap` with Lower deck / Upper deck tabs and unified styling.
+- [x] **8. Responsive Viewport Check (360px Mobile)**:
+  - Resize viewport to 360px mobile width.
+  - Verify deck tabs, berth buttons, summary footer, and Review screen render cleanly with zero horizontal overflow or clipping.
+
+---
+
 ## 4. Current Testing Gaps & Roadmap
 
 With 361 unit & regression tests passing across 93 TAP test suites, 78 component tests passing across 17 Vitest suites, zero ESLint errors (with `jsx-a11y` enabled), and the automated `ui:smoke` tool in place, Phase 6 Part 6a is officially completed. Remaining gaps scheduled for future phases:

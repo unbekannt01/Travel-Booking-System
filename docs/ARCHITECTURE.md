@@ -1177,4 +1177,42 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
   - `src/components/PassengerManagement.jsx`: Displays `👥 Group` badge on group member rows.
   - *Automated tests not written, per owner decision.*
 
+---
+
+## 30. Deck Tabs Architecture in Shared SeatMap & Non-Bypassing Multi-Step Booking Forms (Part 6S-4)
+
+- **Separated Lower/Upper Deck Presentation (`src/components/seats/SeatMap.jsx`)**:
+  - **Design System Tabs Integration**:
+    - For sleeper coach layouts (`sleeper-2x1-38`, `sleeper-2x2-48`, `sleeper-2x2-40`), replaced the 5-column side-by-side presentation with clean deck tabs:
+      - **Lower deck**: Displays lower berths with live occupancy counts (e.g. `Lower deck (7/18)`), localized trilingual deck labels (`en`, `gu`, `hi`), and selected seat counter badge.
+      - **Upper deck**: Displays upper berths with live occupancy counts and selected seat counter badge.
+      - **Rear berths (2)**: Dedicated tab for 2x1 38-berth buses showing `rear-B1` (lower) and `rear-B2` (upper).
+    - For seater coaches (`seater-2x3-60`): Renders a single unified deck screen without tabs.
+  - **Cabin Geometry & Layout Realism**:
+    - Each deck renders an amber Front/Driver strip (`▲ Front` on left, `Driver` ☸ on right).
+    - 3-column coach layout:
+      - Left cabin box: 1 berth for 2x1 sleeper, 2 berths side-by-side for 2x2 sleeper.
+      - Central aisle: Vertical label (`SLEEPER` or `AISLE`) dividing left and right cabins.
+      - Right cabin box: 2 berths side-by-side.
+    - Rear section: Displays rear berth box at bottom and emergency exit indicator.
+  - **Whole-Bus Summary & Status Legend**:
+    - Rendered above the tabs: whole-bus counters (Total, Available, Booked, Held, Blocked) and accessible status pill legend.
+  - **Smart Deck Auto-Selection**:
+    - When `selectedIds` contains a seat on the upper deck, `SeatMap` automatically activates the Upper Deck tab on initial mount or seat selection.
+  - **Caller Unification**:
+    - Unified `SeatMap.jsx` as the single authoritative visual seat picker across all entry points: `BookingForm.jsx`, `LiveSeatMap.jsx`, `GroupBookingModal.jsx`, `ShareSeatModal.jsx`, and `MoveSeatModal.jsx`.
+
+- **Anti-Bypass & Enter-Prevention Form Engine (`src/components/BookingForm.jsx` & `GroupBookingModal.jsx`)**:
+  - **Review Step Integrity**:
+    - Guaranteed sequential progression: Step 0 (Tour & Date) -> Step 1 (Passengers & Seats) -> Step 2 (Pricing & Payment) -> Step 3 (Review screen).
+    - Step 3 displays primary contact details, passenger list with formatted seat labels (`Seat Left L1-1`), complete pricing breakdown (total, advance, balance due), boarding & drop points, and operational notices.
+    - "Back to edit" button returns to Step 2 with all data and fields strictly preserved.
+  - **Enter Key Suppression**:
+    - `<form>` is equipped with an `onKeyDown` handler intercepting Enter key presses on non-textarea elements (`if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") e.preventDefault()`). Pressing Enter inside phone, date, name, or advance amount fields never submits or navigates.
+  - **Disarmed Native Submission & Button Decoupling**:
+    - Both desktop and mobile action buttons render as `type="button"` with distinct React keys (`key="step-btn-confirm"`, `key="mobile-step-btn-confirm"`).
+    - `handleSubmit` strictly verifies `currentStep === BOOKING_STEPS.length - 1` before initiating any save or validation call.
+    - Single-shot execution guarded by `isSubmitting` state; server-side errors remain pinned to the Review screen for operator resolution.
+  - *Automated tests not written, per owner decision.*
+
 
