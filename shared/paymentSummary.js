@@ -549,6 +549,8 @@ export function renderPaymentSummaryHtml({
     }
   }
 
+  const hasMultipleBookings = isGroup && memberBookings.length > 1
+
   // Passenger Rows HTML
   const passengerRowsHtml = breakdown.passengers
     .map((p) => {
@@ -558,7 +560,7 @@ export function renderPaymentSummaryHtml({
       const isDue = p.balancePaise > 0
 
       const balanceCellHtml = isDue
-        ? `<span class="due-marker"><strong>₹${formatRupees(balanceRupees)}</strong> <span class="due-badge">[DUE]</span></span>`
+        ? `<strong class="text-due">₹${formatRupees(balanceRupees)}</strong>`
         : `<span class="paid-marker">₹0</span>`
 
       const statusLabel =
@@ -571,8 +573,8 @@ export function renderPaymentSummaryHtml({
 
       return `<tr>
         <td class="text-center font-bold">${p.srNo}</td>
-        <td class="cell-wrap"><strong>${escapeHtml(p.name)}</strong>${isGroup && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
-        <td class="text-center font-mono font-bold">${seatDisplay}</td>
+        <td class="cell-wrap"><strong>${escapeHtml(p.name)}</strong>${hasMultipleBookings && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
+        <td class="seat-cell">${seatDisplay}</td>
         <td class="text-right">₹${formatRupees(fareRupees)}</td>
         <td class="text-right font-medium">₹${formatRupees(paidRupees)}</td>
         <td class="text-right">${balanceCellHtml}</td>
@@ -633,23 +635,28 @@ export function renderPaymentSummaryHtml({
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Devanagari", "Noto Sans Gujarati", Roboto, Arial, sans-serif;
     background: #ffffff;
     color: #000000;
-    font-size: 10.5px;
+    font-size: 10px;
     line-height: 1.35;
-    padding: 12mm;
+    padding: 16px 20px;
     box-sizing: border-box;
     width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
   }
 
   @media print {
     body {
-      padding: 12mm;
+      padding: 10mm;
       background: #ffffff;
+      font-size: 10px;
+      max-width: 100%;
     }
     .no-print { display: none !important; }
     table { page-break-inside: auto; }
     tr { page-break-inside: avoid; break-inside: avoid; }
     thead { display: table-header-group; }
     tfoot { display: table-footer-group; page-break-inside: avoid; break-inside: avoid; }
+    tr.running-header-row { display: table-row !important; }
   }
 
   .summary-wrapper {
@@ -701,7 +708,7 @@ export function renderPaymentSummaryHtml({
 
   .meta-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: 1.1fr 1fr 1.4fr 1.2fr;
     gap: 4px 10px;
     background: #f8fafc;
     border: 1px solid #000000;
@@ -774,6 +781,9 @@ export function renderPaymentSummaryHtml({
     border: 1px solid #000000;
   }
 
+  tr.running-header-row {
+    display: none;
+  }
   tr.running-header-row th {
     background: #ffffff;
     font-size: 8px;
@@ -800,6 +810,19 @@ export function renderPaymentSummaryHtml({
   .font-medium { font-weight: 700; }
   .text-muted { color: #666666; }
   .ref-sub { font-size: 8.5px; color: #444444; font-weight: normal; }
+
+  .seat-cell {
+    white-space: nowrap !important;
+    font-family: monospace, Consolas, sans-serif;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: -0.01em;
+  }
+
+  .due-amount {
+    color: #000000;
+    font-weight: 900;
+  }
 
   .cell-wrap {
     word-break: break-word;
@@ -857,36 +880,7 @@ export function renderPaymentSummaryHtml({
     border: 1px solid #cbd5e1;
   }
 
-  .totals-summary-box {
-    margin-left: auto;
-    width: 260px;
-    border: 1px solid #000000;
-    border-radius: 3px;
-    background: #f8fafc;
-    padding: 6px 10px;
-    margin-bottom: 12px;
-  }
-  .totals-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 2px 0;
-    font-size: 10.5px;
-  }
-  .totals-row.grand {
-    border-top: 1px solid #000000;
-    margin-top: 3px;
-    padding-top: 4px;
-    font-size: 11.5px;
-    font-weight: 900;
-  }
-  .total-due-text {
-    color: #000000;
-    font-weight: 900;
-  }
-  .total-paid-text {
-    color: #15803d;
-    font-weight: 900;
-  }
+
 
   .footer-notice {
     margin-top: 10px;
@@ -945,13 +939,13 @@ export function renderPaymentSummaryHtml({
 
   <table class="data-table">
     <colgroup>
-      <col style="width: 36px;"/>
+      <col style="width: 32px;"/>
       <col style="width: auto;"/>
-      <col style="width: 58px;"/>
-      <col style="width: 82px;"/>
-      <col style="width: 82px;"/>
-      <col style="width: 92px;"/>
-      <col style="width: 72px;"/>
+      <col style="width: 95px;"/>
+      <col style="width: 78px;"/>
+      <col style="width: 78px;"/>
+      <col style="width: 84px;"/>
+      <col style="width: 64px;"/>
     </colgroup>
     <thead>
       <tr class="running-header-row">
@@ -962,7 +956,7 @@ export function renderPaymentSummaryHtml({
       <tr>
         <th class="text-center">${escapeHtml(t.srNo)}</th>
         <th class="text-left">${escapeHtml(t.passengerName)}</th>
-        <th class="text-center">${escapeHtml(t.seatNo)}</th>
+        <th class="text-center" style="white-space: nowrap;">${escapeHtml(t.seatNo)}</th>
         <th class="text-right">${escapeHtml(t.fare)}</th>
         <th class="text-right">${escapeHtml(t.paid)}</th>
         <th class="text-right">${escapeHtml(t.balance)}</th>
@@ -977,34 +971,18 @@ export function renderPaymentSummaryHtml({
     </tfoot>
   </table>
 
-  <!-- Overall Financial Summary Box -->
-  <div class="totals-summary-box">
-    <div class="totals-row">
-      <span class="font-bold">${escapeHtml(t.fare)}:</span>
-      <span class="font-bold">₹${formatRupees(totalFare)}</span>
-    </div>
-    <div class="totals-row">
-      <span class="font-bold">${escapeHtml(t.paid)}:</span>
-      <span class="total-paid-text">₹${formatRupees(totalPaid)}</span>
-    </div>
-    <div class="totals-row grand">
-      <span class="font-bold">${escapeHtml(t.balance)}:</span>
-      <span class="total-due-text">₹${formatRupees(totalBalance)}</span>
-    </div>
-  </div>
-
   <!-- Payment Transactions History Section -->
-  <div class="section-title">
+  <div class="section-title" style="margin-top: 14px;">
     <span>💳 ${escapeHtml(t.paymentHistory)}</span>
   </div>
 
   <table class="data-table">
     <colgroup>
-      <col style="width: 36px;"/>
+      <col style="width: 32px;"/>
       <col style="width: 85px;"/>
-      <col style="width: 95px;"/>
-      <col style="width: 90px;"/>
-      <col style="width: 110px;"/>
+      <col style="width: 85px;"/>
+      <col style="width: 75px;"/>
+      <col style="width: 105px;"/>
       <col style="width: auto;"/>
     </colgroup>
     <thead>
