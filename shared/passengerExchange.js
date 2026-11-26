@@ -9,6 +9,16 @@ import { resolveSeatId } from "./seatLayouts.js"
 import { normalizeIndianMobile } from "./customers.js"
 import { round2 } from "./businessLogic.js"
 
+export function toDateStr(d) {
+  if (!d) return ""
+  if (typeof d === "string") return d.slice(0, 10)
+  try {
+    return new Date(d).toISOString().slice(0, 10)
+  } catch {
+    return ""
+  }
+}
+
 export const EXCHANGE_FORMAT = "yatri-passengers"
 export const EXCHANGE_VERSION = 1
 export const SUPPORTED_LAYOUT = "sleeper-2x2-48"
@@ -65,13 +75,10 @@ export function sameName(a, b) {
 }
 
 /**
- * Normalizes payment mode. Maps yatriDesk's "Other" to "Cash".
+ * Normalizes payment mode. Maps valid modes or defaults to Cash.
  */
 export function mapPaymentMode(mode) {
   const m = String(mode || "Cash").trim()
-  if (m.toLowerCase() === "other") {
-    return { mode: "Cash", noteSuffix: "Mode: Other (imported)" }
-  }
   const match = VALID_PAYMENT_MODES.find((v) => v.toLowerCase() === m.toLowerCase())
   return { mode: match || "Cash", noteSuffix: "" }
 }
@@ -127,7 +134,7 @@ export function validateExchangeFile(raw) {
     }
 
     const sanitizedTrip = {
-      xid: sanitizeExchangeString(trip.xid, 100),
+      xid: sanitizeExchangeString(trip.xid, 200),
       route: sanitizeExchangeString(trip.route, EXCHANGE_LIMITS.MAX_STR_LEN.route),
       date: String(trip.date || "").trim().slice(0, 10),
       time: sanitizeExchangeString(trip.time, 20),
@@ -156,7 +163,7 @@ export function validateExchangeFile(raw) {
         const canonicalSeat = resolveSeatId(SUPPORTED_LAYOUT, rawSeat)
 
         const rawPhone = String(p.phone || p.contact || "").trim()
-        const normalizedPhone = normalizeIndianMobile(rawPhone) || ""
+        const normalizedPhone = normalizeIndianMobile(rawPhone)?.normalized || ""
 
         let gender = "Male"
         const gRaw = String(p.gender || "").trim().toLowerCase()
@@ -201,7 +208,7 @@ export function validateExchangeFile(raw) {
 
             totalPayments++
             sanitizedPax.payments.push({
-              xid: sanitizeExchangeString(pm.xid || pm.receiptId, 80),
+              xid: sanitizeExchangeString(pm.xid || pm.receiptId, 200),
               amount: amt,
               mode: sanitizeExchangeString(pm.mode || "Cash", 30),
               date: String(pm.date || "").trim().slice(0, 10),
@@ -294,7 +301,7 @@ export function planPassengerMerge({
   const prefer = options.prefer === "file" ? "file" : "keep"
   const defaultAge = options.defaultAge ? parseInt(options.defaultAge, 10) : null
   const defaultCity = options.defaultCity ? String(options.defaultCity).trim() : ""
-  const fallbackPhone = options.fallbackPhone ? normalizeIndianMobile(options.fallbackPhone) : ""
+  const fallbackPhone = options.fallbackPhone ? (normalizeIndianMobile(options.fallbackPhone)?.normalized || "") : ""
   const importPayments = options.importPayments !== false
 
   // Index active seats in target departure
@@ -309,7 +316,7 @@ export function planPassengerMerge({
       occupiedSeatMap.set(canon, { booking: b, passenger: p })
 
       const normName = normalizeName(p.name)
-      const phone = normalizeIndianMobile(p.contact || b.contactPhone) || ""
+      const phone = normalizeIndianMobile(p.contact || b.contactPhone)?.normalized || ""
       if (normName && phone) {
         paxByPhoneAndName.set(`${normName}:${phone}`, { seatId: canon, booking: b, passenger: p })
       }
@@ -364,7 +371,7 @@ export function planPassengerMerge({
           passenger: filePax,
           occupiedBy: occupied.passenger.name,
           action: "CONFLICT",
-          reason: `Seat occupied by different passenger '${occupied.passenger.name}'`,
+          reason: `Seat occupied by different passenger '${occupied.passenger.name}' (always skipped)`,
         })
         continue
       }
@@ -394,19 +401,28 @@ export function planPassengerMerge({
       const newPayments = []
       if (importPayments && Array.isArray(filePax.payments)) {
         for (const pm of filePax.payments) {
+          const effectiveDate = pm.date || toDateStr(new Date())
           // Check if payment already exists in booking's ledger
-          const isDup = (occupied.booking.payments || []).some((bp) => {
+          const existingPaymentList = occupied.booking.activePayments || occupied.booking.payments || []
+          const isDup = existingPaymentList.some((bp) => {
             if (pm.xid && bp.referenceNo && (bp.referenceNo === pm.xid || bp.referenceNo.startsWith(pm.xid))) return true
-            return bp.amount === pm.amount && String(bp.mode).toLowerCase() === String(pm.mode).toLowerCase()
+            if (pm.xid && bp.externalRef && (bp.externalRef === pm.xid || bp.externalRef.startsWith(pm.xid))) return true
+            const bpDate = bp.paymentDate ? toDateStr(bp.paymentDate) : bp.date ? toDateStr(bp.date) : ""
+            const modeA = String(bp.paymentMode || bp.mode || "Cash").toLowerCase()
+            const modeB = String(pm.mode || "Cash").toLowerCase()
+            return bp.amount === pm.amount && modeA === modeB && (!bpDate || !effectiveDate || bpDate === effectiveDate)
           })
 
           if (!isDup) {
             // Check books lock
-            if (booksLockDate && pm.date && new Date(pm.date) <= new Date(booksLockDate)) {
+            if (booksLockDate && new Date(effectiveDate) <= new Date(booksLockDate)) {
               skippedBooksLockedPayments++
               continue
             }
-            newPayments.push(pm)
+            newPayments.push({
+              ...pm,
+              date: effectiveDate,
+            })
             totalNewPaymentsAmount = round2(totalNewPaymentsAmount + pm.amount)
           }
         }
@@ -445,11 +461,11 @@ export function planPassengerMerge({
           passenger: filePax,
           action: "HOLD",
           holdInfo: {
-            kind: hold.kind,
+            kind: hold.mode || "hold",
             holderName: hold.holderName,
             expiresAt: hold.expiresAt,
           },
-          reason: `Seat has an active ${hold.kind}`,
+          reason: `Seat has an active ${hold.mode || "hold"} (always skipped)`,
         })
         continue
       }
@@ -472,26 +488,11 @@ export function planPassengerMerge({
         continue
       }
 
-      // Check required fields for ADD
-      const effectiveAge = filePax.age || defaultAge
-      const effectiveCity = filePax.city || defaultCity
-      const effectivePhone = filePax.phone || fallbackPhone
-
-      if (!effectiveAge || !effectiveCity || !effectivePhone) {
-        countInvalid++
-        results.push({
-          seatId,
-          passenger: filePax,
-          action: "INVALID",
-          missing: [
-            !effectiveAge && "age",
-            !effectiveCity && "city",
-            !effectivePhone && "phone",
-          ].filter(Boolean),
-          reason: "Missing mandatory fields (age, city, or phone)",
-        })
-        continue
-      }
+      // Safe defaults for ADD (accept SeatDesk file as-is when age/city/phone/gender are empty)
+      const effectiveAge = filePax.age || defaultAge || 30
+      const effectiveCity = filePax.city || defaultCity || "Unknown"
+      const effectivePhone = filePax.phone || fallbackPhone || ""
+      const effectiveGender = filePax.gender || "Other"
 
       // ADD new passenger
       countAdd++
@@ -500,11 +501,15 @@ export function planPassengerMerge({
       const newPayments = []
       if (importPayments && Array.isArray(filePax.payments)) {
         for (const pm of filePax.payments) {
-          if (booksLockDate && pm.date && new Date(pm.date) <= new Date(booksLockDate)) {
+          const effectiveDate = pm.date || toDateStr(new Date())
+          if (booksLockDate && new Date(effectiveDate) <= new Date(booksLockDate)) {
             skippedBooksLockedPayments++
             continue
           }
-          newPayments.push(pm)
+          newPayments.push({
+            ...pm,
+            date: effectiveDate,
+          })
           totalNewPaymentsAmount = round2(totalNewPaymentsAmount + pm.amount)
         }
       }
@@ -516,6 +521,7 @@ export function planPassengerMerge({
           age: effectiveAge,
           city: effectiveCity,
           phone: effectivePhone,
+          gender: effectiveGender,
         },
         action: "ADD",
         fare: filePax.fare,

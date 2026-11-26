@@ -157,7 +157,8 @@ export function modeToAccount(mode) {
     clean === "imps" ||
     clean === "online" ||
     clean === "qr" ||
-    clean === "dd"
+    clean === "dd" ||
+    clean === "other"
   ) {
     return { account: "bank", isFallback: false }
   }

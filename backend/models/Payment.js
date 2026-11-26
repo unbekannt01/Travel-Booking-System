@@ -13,7 +13,7 @@ const paymentSchema = new mongoose.Schema(
     },
     paymentMode: {
       type: String,
-      enum: ["Cash", "UPI", "Card", "Net Banking", "Cheque"],
+      enum: ["Cash", "UPI", "Card", "Net Banking", "Cheque", "Other"],
       default: "Cash",
     },
     paymentDate: { type: Date, default: Date.now },

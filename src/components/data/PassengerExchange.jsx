@@ -97,8 +97,8 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
   // Handle Export
   const handleExport = async () => {
     if (includeAadhaar) {
-      if (!exportPassword || exportPassword.length < 6) {
-        toast.error("Encryption password must be at least 6 characters.")
+      if (!exportPassword || exportPassword.length < 8) {
+        toast.error("Encryption password must be at least 8 characters.")
         return
       }
       if (exportPassword !== exportPasswordConfirm) {
@@ -120,11 +120,10 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
       })
 
       let fileToDownload = res.file
-      let filename = `yatrahub-passengers-${new Date().toISOString().slice(0, 10)}.json`
+      const filename = `yatrahub-passengers-${new Date().toISOString().slice(0, 10)}.json`
 
       if (includeAadhaar) {
         fileToDownload = await encryptExchange(res.file, exportPassword)
-        filename = `yatrahub-passengers-${new Date().toISOString().slice(0, 10)}.json.enc`
       }
 
       // Trigger browser download
@@ -202,7 +201,7 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
       const json = JSON.parse(text)
 
       // Check if encrypted envelope
-      if (json && json.yatriDesk === 1 && json.enc === "AES-GCM" && json.data) {
+      if (json && json.enc) {
         setIsEncryptedFile(true)
         setRawEnvelope(json)
         return
@@ -488,10 +487,10 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
 
               {includeAadhaar && (
                 <div className="pt-3 border-t border-border-subtle grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="File Password (min 6 characters)">
+                  <Field label="File Password (min 8 characters)">
                     <Input
                       type="password"
-                      placeholder="Enter strong password..."
+                      placeholder="Enter strong password (min 8 chars)..."
                       value={exportPassword}
                       onChange={(e) => setExportPassword(e.target.value)}
                       className="text-xs"
@@ -531,7 +530,7 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
                 disabled={isExporting}
                 icon={<Download size={14} />}
               >
-                {includeAadhaar ? "Encrypt & Download (.json.enc)" : "Download Plain JSON"}
+                {includeAadhaar ? "Encrypt & Download (.json)" : "Download Plain JSON"}
               </Button>
             </div>
           </Card>
@@ -615,7 +614,7 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
               <div className="space-y-1">
                 <h3 className="text-base font-semibold text-ink">Select yatriDesk Exchange File</h3>
                 <p className="text-xs text-ink-muted">
-                  Upload a <code>.json</code> or password-encrypted <code>.json.enc</code> exchange file (max 5 MB).
+                  Upload a <code>.json</code> exchange file (plain or password-encrypted, max 5 MB).
                 </p>
               </div>
 
@@ -624,7 +623,7 @@ export default function PassengerExchange({ tours = [], onViewBatches }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".json,.enc,.json.enc"
+                  accept=".json"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="exchange-file-upload"

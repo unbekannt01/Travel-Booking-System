@@ -54,6 +54,27 @@ export async function commitTripPassengers({
     deletedAt: null,
   })
 
+  if (existingBookings.length > 0) {
+    const bIds = existingBookings.map((b) => b._id)
+    const activePayments = await Payment.find({
+      userId,
+      bookingId: { $in: bIds },
+      isVoid: false,
+    }).lean()
+
+    const pmsByBooking = new Map()
+    for (const p of activePayments) {
+      const k = p.bookingId.toString()
+      if (!pmsByBooking.has(k)) pmsByBooking.set(k, [])
+      pmsByBooking.get(k).push(p)
+    }
+    for (const b of existingBookings) {
+      const pList = pmsByBooking.get(b._id.toString()) || []
+      b.activePayments = pList
+      b.payments = pList
+    }
+  }
+
   // 2. Fetch active seat holds
   const now = new Date()
   const existingHolds = await SeatHold.find({
@@ -98,13 +119,13 @@ export async function commitTripPassengers({
     const passengers = rows.map((r) => {
       const p = r.passenger
       return {
-        name: p.name,
+        name: p.name || "Passenger",
         nameGu: p.nameGu || "",
-        age: p.age,
-        gender: p.gender || "Male",
-        city: p.city,
+        age: p.age || 30,
+        gender: p.gender || "Other",
+        city: p.city || "Unknown",
         seatId: r.seatId,
-        contact: p.phone,
+        contact: p.phone || "",
         pickupPoint: p.pickup || "",
         pickupTime: "",
         aadhar: p.aadhaar ? encryptAadhaar(p.aadhaar) : undefined,
@@ -126,15 +147,10 @@ export async function commitTripPassengers({
       continue
     }
 
-    // Determine contact person (first passenger with valid 10-digit phone, or fallback)
+    // Determine contact person (first passenger with valid 10-digit phone, or fallback, or safe default)
     let contactPax = rows.find((r) => r.passenger.phone && r.passenger.phone.length === 10)
-    let contactName = contactPax ? contactPax.passenger.name : rows[0].passenger.name
-    let contactPhone = contactPax ? contactPax.passenger.phone : options.fallbackPhone || ""
-
-    if (!contactPhone) {
-      console.warn("[PassengerImport] Skipping booking creation: no valid contact phone available.")
-      continue
-    }
+    let contactName = contactPax ? contactPax.passenger.name : (rows[0].passenger.name || "Passenger")
+    let contactPhone = contactPax ? contactPax.passenger.phone : (options.fallbackPhone || "0000000000")
 
     const totalAmount = round2(rows.reduce((sum, r) => sum + (r.fare || 0), 0))
     const invoiceNo = await getNextInvoiceNo(userId, tourName, journeyDate, user.invoicePrefix || "YHB")
@@ -229,6 +245,23 @@ export async function commitTripPassengers({
           }
 
           const { mode: mappedMode, noteSuffix } = mapPaymentMode(pm.mode)
+
+          // Check if already in db
+          const isDupInDb = await Payment.exists({
+            userId,
+            bookingId: savedBooking._id,
+            isVoid: false,
+            $or: [
+              ...(pm.xid ? [{ externalRef: pm.xid }, { referenceNo: pm.xid }] : []),
+              {
+                amount: pm.amount,
+                paymentMode: mappedMode,
+              },
+            ],
+          })
+          if (isDupInDb) {
+            continue
+          }
           const receiptNo = await getNextReceiptNo(userId, user.receiptPrefix || "REC", pm.date ? new Date(pm.date) : new Date())
           const notesText = [pm.notes, noteSuffix].filter(Boolean).join(" - ") || "Imported from yatriDesk"
 
@@ -241,6 +274,7 @@ export async function commitTripPassengers({
             paymentMode: mappedMode,
             paymentDate: pm.date ? new Date(pm.date) : new Date(),
             referenceNo: pm.xid || "",
+            externalRef: pm.xid || null,
             notes: notesText,
             passengerSeatId: row.seatId || "",
             recordedBy: "Import",
@@ -320,6 +354,23 @@ export async function commitTripPassengers({
           }
 
           const { mode: mappedMode, noteSuffix } = mapPaymentMode(pm.mode)
+
+          // Check if already in db
+          const isDupInDb = await Payment.exists({
+            userId,
+            bookingId: booking._id,
+            isVoid: false,
+            $or: [
+              ...(pm.xid ? [{ externalRef: pm.xid }, { referenceNo: pm.xid }] : []),
+              {
+                amount: pm.amount,
+                paymentMode: mappedMode,
+              },
+            ],
+          })
+          if (isDupInDb) {
+            continue
+          }
           const receiptNo = await getNextReceiptNo(userId, user.receiptPrefix || "REC", pm.date ? new Date(pm.date) : new Date())
           const notesText = [pm.notes, noteSuffix].filter(Boolean).join(" - ") || "Imported from yatriDesk (Merged)"
 
@@ -332,6 +383,7 @@ export async function commitTripPassengers({
             paymentMode: mappedMode,
             paymentDate: pm.date ? new Date(pm.date) : new Date(),
             referenceNo: pm.xid || "",
+            externalRef: pm.xid || null,
             notes: notesText,
             passengerSeatId: item.seatId || "",
             recordedBy: "Import",

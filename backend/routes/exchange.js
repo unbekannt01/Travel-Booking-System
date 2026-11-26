@@ -268,13 +268,12 @@ router.get("/passengers", verifyToken, exchangeLimiter, async (req, res) => {
             if (pIdx !== -1) {
               const xid = pm.referenceNo?.startsWith("sd:")
                 ? pm.referenceNo
-                : `tbs:${pm._id}#1`
+                : `tbs:${pm._id}`
               paxPayments[pIdx].push({
                 xid,
                 amount: pm.amount,
                 mode: pm.paymentMode || "Cash",
                 date: toDateStr(pm.paymentDate),
-                notes: pm.notes || "",
               })
               continue
             }
@@ -297,14 +296,13 @@ router.get("/passengers", verifyToken, exchangeLimiter, async (req, res) => {
               const xidBase = pm.referenceNo?.startsWith("sd:")
                 ? pm.referenceNo
                 : `tbs:${pm._id}`
-              const xid = `${xidBase}#${fragmentIdx++}`
+              const xid = fragmentIdx === 1 && actualTake === pm.amount ? xidBase : `${xidBase}#${fragmentIdx++}`
 
               paxPayments[currentPaxIdx].push({
                 xid,
                 amount: round2(actualTake),
                 mode: pm.paymentMode || "Cash",
                 date: toDateStr(pm.paymentDate),
-                notes: pm.notes || "",
               })
 
               paymentRemaining = round2(paymentRemaining - actualTake)
@@ -343,21 +341,26 @@ router.get("/passengers", verifyToken, exchangeLimiter, async (req, res) => {
           else if (gRaw === "male" || gRaw === "m") gender = "Male"
           else gender = ""
 
-          tripPassengers.push({
+          const paxRecord = {
             seat: canonicalSeat,
             name: p.name || "",
             age: p.age || null,
             gender,
-            phone: normalizeIndianMobile(p.contact || b.contactPhone) || "",
+            phone: normalizeIndianMobile(p.contact || b.contactPhone)?.normalized || "",
             city: p.city || "",
-            aadhaar: decryptedAadhaar,
             pickup: p.pickupPoint || b.pickupPoint || "",
             note: "",
             fare: fares[i] || 0,
             group: currentGroup,
             invoiceNo: b.invoiceNo,
             payments: paxPayments[i] || [],
-          })
+          }
+
+          if (includeAadhaar && decryptedAadhaar) {
+            paxRecord.aadhaar = decryptedAadhaar
+          }
+
+          tripPassengers.push(paxRecord)
           totalExportedPassengers++
         }
       }
@@ -389,6 +392,9 @@ router.get("/passengers", verifyToken, exchangeLimiter, async (req, res) => {
       aadhaarIncluded: includeAadhaar,
       trips,
     }
+
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private")
+    res.setHeader("Pragma", "no-cache")
 
     res.json({
       file,

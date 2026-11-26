@@ -228,6 +228,27 @@ router.post("/passengers/preview", verifyToken, importPreviewLimiter, async (req
           deletedAt: null,
         }).lean()
 
+        if (existingBookings.length > 0) {
+          const bIds = existingBookings.map((b) => b._id)
+          const activePayments = await Payment.find({
+            userId,
+            bookingId: { $in: bIds },
+            isVoid: false,
+          }).lean()
+
+          const pmsByBooking = new Map()
+          for (const p of activePayments) {
+            const k = p.bookingId.toString()
+            if (!pmsByBooking.has(k)) pmsByBooking.set(k, [])
+            pmsByBooking.get(k).push(p)
+          }
+          for (const b of existingBookings) {
+            const pList = pmsByBooking.get(b._id.toString()) || []
+            b.activePayments = pList
+            b.payments = pList
+          }
+        }
+
         const now = new Date()
         existingHolds = await SeatHold.find({
           userId,
@@ -396,6 +417,9 @@ router.post("/passengers/commit", verifyToken, importCommitLimiter, async (req, 
     res.status(201).json({
       success: true,
       batchId: batch._id,
+      createdBookingIds: allCreatedBookings,
+      importedPaymentIds: allImportedPayments,
+      mergedBookingIds: allMergedBookings,
       summary: batch.summary,
       message: `Successfully processed ${allCreatedBookings.length} new bookings and merged ${allMergedBookings.length} existing bookings.`,
     })
