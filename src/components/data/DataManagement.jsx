@@ -28,6 +28,7 @@ import {
   parseCsv,
 } from "../../../shared/csv.js"
 import { EXPENSE_CATEGORIES } from "../../../shared/expenses.js"
+import PassengerExchange from "./PassengerExchange"
 import { useToast } from "../common/ToastContext"
 import {
   Download,
@@ -56,7 +57,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined" && window.location.hash) {
       const match = window.location.hash.match(/[?&]tab=([^&]+)/)
-      if (match && ["export", "import", "batches"].includes(match[1])) {
+      if (match && ["export", "import", "batches", "exchange"].includes(match[1])) {
         return match[1]
       }
     }
@@ -68,7 +69,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
     const handleHashChange = () => {
       if (typeof window !== "undefined" && window.location.hash) {
         const match = window.location.hash.match(/[?&]tab=([^&]+)/)
-        if (match && ["export", "import", "batches"].includes(match[1])) {
+        if (match && ["export", "import", "batches", "exchange"].includes(match[1])) {
           setActiveTab(match[1])
           if (match[1] === "import") {
             setWizardStep(1)
@@ -379,6 +380,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
     () => [
       { id: "export", label: "Export System Data" },
       { id: "import", label: "Import CSV Data" },
+      { id: "exchange", label: "Passenger Exchange" },
       { id: "batches", label: `Recent Batches (${batches.length})` },
     ],
     [batches.length],
@@ -1373,7 +1375,17 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
         )}
 
         {/* ------------------------------------------------------------------- */}
-        {/* TAB 3: RECENT IMPORT BATCHES */}
+        {/* TAB 3: PASSENGER EXCHANGE (Part 6X) */}
+        {/* ------------------------------------------------------------------- */}
+        {activeTab === "exchange" && (
+          <PassengerExchange
+            tours={tours}
+            onViewBatches={() => setActiveTab("batches")}
+          />
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* TAB 4: RECENT IMPORT BATCHES */}
         {/* ------------------------------------------------------------------- */}
         {activeTab === "batches" && (
           <Card className="p-5 border-border-subtle space-y-4">
@@ -1432,7 +1444,7 @@ export default function DataManagement({ user = null, tours = [], initialTab = "
                             {new Date(batch.createdAt).toLocaleString()}
                           </td>
                           <td className="p-3">
-                            <Badge variant={batch.type === "customers" ? "primary" : "warning"}>
+                            <Badge variant={batch.type === "customers" ? "primary" : batch.type === "passengers" ? "brand" : "warning"}>
                               {batch.type}
                             </Badge>
                           </td>

@@ -73,6 +73,19 @@ const bookingSchema = new mongoose.Schema(
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null },
     groupName: { type: String, trim: true, default: "" },
+    source: {
+      type: String,
+      enum: ["manual", "import", "TBS", "yatriDesk", "csv"],
+      default: "manual",
+    },
+    importBatchId: { type: mongoose.Schema.Types.ObjectId, ref: "ImportBatch", default: null },
+    pricingOverride: { type: Boolean, default: false },
+    externalRef: {
+      system: { type: String, default: "" },
+      tripXid: { type: String, default: "" },
+      group: { type: Number, default: null },
+      invoiceNo: { type: String, default: "" },
+    },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
@@ -83,5 +96,7 @@ bookingSchema.index({ userId: 1, invoiceNo: 1 }, { unique: true })
 bookingSchema.index({ userId: 1, deletedAt: 1 })
 bookingSchema.index({ userId: 1, customerId: 1 })
 bookingSchema.index({ userId: 1, groupId: 1 })
+bookingSchema.index({ userId: 1, "externalRef.tripXid": 1 }, { sparse: true })
+bookingSchema.index({ userId: 1, importBatchId: 1 })
 
 export default mongoose.model("Booking", bookingSchema)

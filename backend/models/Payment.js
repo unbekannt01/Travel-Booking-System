@@ -26,6 +26,8 @@ const paymentSchema = new mongoose.Schema(
     voidedBy: { type: String, default: "" },
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: "BookingGroup", default: null },
     groupPaymentId: { type: String, default: null },
+    passengerSeatId: { type: String, default: "" },
+    externalRef: { type: String, default: null, trim: true },
   },
   { timestamps: true }
 )
@@ -35,5 +37,6 @@ paymentSchema.index({ userId: 1, receiptNo: 1 }, { unique: true })
 paymentSchema.index({ userId: 1, bookingId: 1 })
 paymentSchema.index({ userId: 1, groupId: 1 })
 paymentSchema.index({ userId: 1, groupPaymentId: 1 })
+paymentSchema.index({ userId: 1, externalRef: 1 }, { sparse: true })
 
 export default mongoose.model("Payment", paymentSchema)

@@ -6,6 +6,9 @@ import ImportBatch from "../models/ImportBatch.js"
 import Customer from "../models/Customer.js"
 import Expense from "../models/Expense.js"
 import Booking from "../models/Booking.js"
+import Payment from "../models/Payment.js"
+import Tour from "../models/Tour.js"
+import SeatHold from "../models/SeatHold.js"
 import { logAudit } from "../models/AuditLog.js"
 import {
   parseCsv,
@@ -21,6 +24,16 @@ import {
 } from "../../shared/csv.js"
 import { normalizeIndianMobile } from "../../shared/customers.js"
 import { getEffectiveLockDate } from "../utils/booksLock.js"
+import {
+  validateExchangeFile,
+  planPassengerMerge,
+  CANONICAL_BUS_TYPE,
+  SUPPORTED_LAYOUT,
+} from "../../shared/passengerExchange.js"
+import { commitTripPassengers } from "../utils/passengerImport.js"
+import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
+import { getDayBounds, round2 } from "../../shared/businessLogic.js"
+import { syncBookingPayments } from "./payments.js"
 
 const router = express.Router()
 
@@ -89,6 +102,306 @@ router.get("/batches", verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Fetch import batches error:", error.name)
     res.status(500).json({ message: "Failed to fetch import batches." })
+  }
+})
+
+/**
+ * POST /api/import/passengers/preview
+ * Validates yatriDesk exchange JSON, maps trips to departures, plans merge, and returns summary with HMAC token.
+ */
+router.post("/passengers/preview", verifyToken, importPreviewLimiter, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { exchange, mapping = {}, options = {} } = req.body
+
+    const validation = validateExchangeFile(exchange)
+    if (!validation.valid) {
+      return res.status(400).json({
+        message: "Invalid exchange file.",
+        errors: validation.errors,
+      })
+    }
+
+    const sanitized = validation.sanitized
+    const lockDate = await getEffectiveLockDate(userId)
+    const busCondition = getBusCondition(CANONICAL_BUS_TYPE)
+
+    // Load user's tours for inventory checks
+    const availableTours = await Tour.find({ userId }).select("name pricingType fixedPrice lowerPrice upperPrice busType").lean()
+    const tourNamesSet = new Set(availableTours.map((t) => t.name.toLowerCase()))
+
+    const tripsPlan = []
+    let totalAdd = 0
+    let totalMerge = 0
+    let totalSame = 0
+    let totalConflict = 0
+    let totalHold = 0
+    let totalDup = 0
+    let totalInvalid = 0
+    let totalNewFares = 0
+    let totalNewPayments = 0
+
+    for (const trip of sanitized.trips) {
+      // Determine target departure
+      let targetDep = mapping[trip.xid]
+
+      if (!targetDep) {
+        // 1. Previous link
+        const prevBooking = await Booking.findOne({
+          userId,
+          "externalRef.tripXid": trip.xid,
+          status: { $ne: "Cancelled" },
+          deletedAt: null,
+        }).select("tourName journeyDate busType").lean()
+
+        if (prevBooking) {
+          targetDep = {
+            tourName: prevBooking.tourName,
+            journeyDateStr: prevBooking.journeyDate.toISOString().slice(0, 10),
+            busType: CANONICAL_BUS_TYPE,
+            matchedBy: "previous_link",
+          }
+        } else if (trip.xid?.startsWith("tbs:")) {
+          // 2. TBS departureKey hint
+          const parsed = parseDepartureKey(trip.xid.slice(4))
+          if (parsed) {
+            targetDep = {
+              tourName: parsed.tourName,
+              journeyDateStr: parsed.dateStr,
+              busType: CANONICAL_BUS_TYPE,
+              matchedBy: "tbs_xid",
+            }
+          }
+        }
+
+        // 3. Match by date + contained tour name
+        if (!targetDep && trip.date) {
+          const { start, end } = getDayBounds(trip.date)
+          const candidateBookings = await Booking.find({
+            userId,
+            journeyDate: { $gte: start, $lte: end },
+            ...busCondition,
+            status: { $ne: "Cancelled" },
+            deletedAt: null,
+          }).select("tourName journeyDate").lean()
+
+          const normTripRoute = trip.route.toLowerCase()
+          const matched = candidateBookings.find((cb) => {
+            const cbNorm = cb.tourName.toLowerCase()
+            return cbNorm === normTripRoute || cbNorm.includes(normTripRoute) || normTripRoute.includes(cbNorm)
+          })
+
+          if (matched) {
+            targetDep = {
+              tourName: matched.tourName,
+              journeyDateStr: trip.date,
+              busType: CANONICAL_BUS_TYPE,
+              matchedBy: "date_and_route",
+            }
+          }
+        }
+
+        // 4. Default to new departure
+        if (!targetDep) {
+          targetDep = {
+            tourName: trip.route,
+            journeyDateStr: trip.date,
+            busType: CANONICAL_BUS_TYPE,
+            isNew: true,
+            tourExists: tourNamesSet.has(trip.route.toLowerCase()),
+          }
+        }
+      }
+
+      // Fetch bookings & holds for target departure
+      let existingBookings = []
+      let existingHolds = []
+
+      if (targetDep.tourName && targetDep.journeyDateStr) {
+        const { start, end } = getDayBounds(targetDep.journeyDateStr)
+        existingBookings = await Booking.find({
+          userId,
+          tourName: targetDep.tourName,
+          journeyDate: { $gte: start, $lte: end },
+          ...busCondition,
+          status: { $ne: "Cancelled" },
+          deletedAt: null,
+        }).lean()
+
+        const now = new Date()
+        existingHolds = await SeatHold.find({
+          userId,
+          tourName: targetDep.tourName,
+          journeyDate: { $gte: start, $lte: end },
+          status: "active",
+          ...busCondition,
+          $or: [{ mode: "manual" }, { expiresAt: { $gt: now } }],
+        }).lean()
+      }
+
+      const plan = planPassengerMerge({
+        trip,
+        existingBookings,
+        existingHolds,
+        booksLockDate: lockDate,
+        options,
+      })
+
+      totalAdd += plan.summary.add
+      totalMerge += plan.summary.merge
+      totalSame += plan.summary.same
+      totalConflict += plan.summary.conflict
+      totalHold += plan.summary.hold
+      totalDup += plan.summary.dup
+      totalInvalid += plan.summary.invalid
+      totalNewFares = round2(totalNewFares + plan.summary.totalNewFares)
+      totalNewPayments = round2(totalNewPayments + plan.summary.totalNewPaymentsAmount)
+
+      tripsPlan.push({
+        tripXid: trip.xid,
+        route: trip.route,
+        date: trip.date,
+        targetDeparture: targetDep,
+        plan,
+      })
+    }
+
+    const contentHash = crypto.createHash("sha256").update(JSON.stringify(sanitized)).digest("hex")
+    const expiry = Date.now() + 30 * 60 * 1000 // 30 minutes
+    const previewToken = generatePreviewToken(userId, "passengers", mapping, contentHash, expiry)
+
+    res.json({
+      valid: true,
+      previewToken,
+      tokenExpiry: expiry,
+      tripsPlan,
+      summary: {
+        totalTrips: sanitized.trips.length,
+        totalPassengers: validation.stats.totalPassengers,
+        skippedTripsLayout: validation.stats.skippedTripsLayout,
+        add: totalAdd,
+        merge: totalMerge,
+        same: totalSame,
+        conflict: totalConflict,
+        hold: totalHold,
+        dup: totalDup,
+        invalid: totalInvalid,
+        totalNewFares,
+        totalNewPayments,
+      },
+    })
+  } catch (error) {
+    console.error("Passenger import preview error:", error)
+    res.status(500).json({ message: "Failed to generate passenger import preview." })
+  }
+})
+
+/**
+ * POST /api/import/passengers/commit
+ * Authoritatively executes the passenger import plan, creates bookings and payments, and creates an ImportBatch.
+ */
+router.post("/passengers/commit", verifyToken, importCommitLimiter, async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { exchange, mapping = {}, options = {}, previewToken } = req.body
+
+    const validation = validateExchangeFile(exchange)
+    if (!validation.valid) {
+      return res.status(400).json({ message: "Invalid exchange file.", errors: validation.errors })
+    }
+
+    const sanitized = validation.sanitized
+    const contentHash = crypto.createHash("sha256").update(JSON.stringify(sanitized)).digest("hex")
+
+    const isValidToken = verifyPreviewToken(previewToken, userId, "passengers", mapping, contentHash)
+    if (!isValidToken) {
+      return res.status(400).json({
+        message: "Preview token is invalid or expired. Please preview again.",
+        code: "STALE_PREVIEW_TOKEN",
+      })
+    }
+
+    // Initialize ImportBatch
+    const batch = new ImportBatch({
+      userId,
+      type: "passengers",
+      status: "committing",
+      totalRows: validation.stats.totalPassengers,
+      successCount: 0,
+      skippedCount: 0,
+      recordIds: [],
+      createdBookingIds: [],
+      importedPaymentIds: [],
+      mergedBookingIds: [],
+      summary: {},
+    })
+    await batch.save()
+
+    const allCreatedBookings = []
+    const allImportedPayments = []
+    const allMergedBookings = []
+    let totalAdded = 0
+    let totalMerged = 0
+
+    for (const trip of sanitized.trips) {
+      const targetDep = mapping[trip.xid] || {
+        tourName: trip.route,
+        journeyDateStr: trip.date,
+        busType: CANONICAL_BUS_TYPE,
+      }
+
+      const result = await commitTripPassengers({
+        userId,
+        trip,
+        targetDeparture: targetDep,
+        batchId: batch._id,
+        options,
+      })
+
+      allCreatedBookings.push(...result.createdBookingIds)
+      allImportedPayments.push(...result.importedPaymentIds)
+      allMergedBookings.push(...result.mergedBookingIds)
+      totalAdded += result.summary.add
+      totalMerged += result.summary.merge
+    }
+
+    batch.createdBookingIds = allCreatedBookings
+    batch.importedPaymentIds = allImportedPayments
+    batch.mergedBookingIds = allMergedBookings
+    batch.recordIds = [...allCreatedBookings, ...allImportedPayments]
+    batch.successCount = allCreatedBookings.length + allMergedBookings.length
+    batch.skippedCount = Math.max(0, validation.stats.totalPassengers - (totalAdded + totalMerged))
+    batch.status = "committed"
+    batch.summary = {
+      createdBookingsCount: allCreatedBookings.length,
+      importedPaymentsCount: allImportedPayments.length,
+      mergedBookingsCount: allMergedBookings.length,
+      addedPassengers: totalAdded,
+      mergedPassengers: totalMerged,
+    }
+    await batch.save()
+
+    await logAudit({
+      userId,
+      action: "IMPORT_PASSENGERS",
+      req,
+      meta: {
+        batchId: batch._id,
+        createdBookings: allCreatedBookings.length,
+        importedPayments: allImportedPayments.length,
+        mergedBookings: allMergedBookings.length,
+      },
+    })
+
+    res.status(201).json({
+      success: true,
+      batchId: batch._id,
+      summary: batch.summary,
+      message: `Successfully processed ${allCreatedBookings.length} new bookings and merged ${allMergedBookings.length} existing bookings.`,
+    })
+  } catch (error) {
+    console.error("Passenger import commit error:", error)
+    res.status(500).json({ message: "Failed to commit passenger import." })
   }
 })
 
@@ -567,6 +880,48 @@ router.post("/batches/:id/undo", verifyToken, importCommitLimiter, async (req, r
             cust.deletedAt = new Date()
             cust.deletedBy = userId
             await cust.save()
+            undoSummary.undone++
+          }
+        }
+      }
+    } else if (batch.type === "passengers") {
+      // 1. Revert imported payments (void them if not books-locked)
+      for (const payId of batch.importedPaymentIds || []) {
+        const pm = await Payment.findOne({ _id: payId, userId })
+        if (!pm || pm.isVoid) continue
+
+        const pmDateStr = pm.paymentDate ? pm.paymentDate.toISOString().slice(0, 10) : ""
+        if (lockDate && pmDateStr <= lockDate) {
+          undoSummary.booksLocked++
+        } else {
+          pm.isVoid = true
+          pm.voidReason = "Import batch undo"
+          pm.voidedAt = new Date()
+          pm.voidedBy = req.user.userName || "Operator"
+          await pm.save()
+          await syncBookingPayments(pm.bookingId)
+          undoSummary.undone++
+        }
+      }
+
+      // 2. Soft-delete created bookings if they have no other active payments
+      for (const bId of batch.createdBookingIds || []) {
+        const booking = await Booking.findOne({ _id: bId, userId })
+        if (!booking || booking.deletedAt) {
+          undoSummary.alreadyDeleted++
+        } else {
+          const hasOtherPayments = await Payment.exists({
+            bookingId: booking._id,
+            _id: { $nin: batch.importedPaymentIds || [] },
+            isVoid: false,
+          })
+
+          if (hasOtherPayments) {
+            undoSummary.inUse++
+          } else {
+            booking.deletedAt = new Date()
+            booking.cancellationReason = "Import batch undo"
+            await booking.save()
             undoSummary.undone++
           }
         }

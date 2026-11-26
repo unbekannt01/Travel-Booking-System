@@ -1067,10 +1067,13 @@ router.put("/:id", verifyToken, async (req, res) => {
 
     if (req.body.totalAmount !== undefined && req.body.totalAmount !== null) {
       const clientTotal = Math.round(Number(req.body.totalAmount) * 100) / 100
-      if (Math.abs(clientTotal - pricing.finalTotal) > 0.05) {
+      if (!booking.pricingOverride && Math.abs(clientTotal - pricing.finalTotal) > 0.05) {
         return res.status(400).json({
           message: `Total amount mismatch: client provided ₹${clientTotal}, but server recomputed ₹${pricing.finalTotal}.`,
         })
+      }
+      if (booking.pricingOverride) {
+        booking.totalAmount = clientTotal
       }
     }
 

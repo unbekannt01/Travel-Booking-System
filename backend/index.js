@@ -24,6 +24,7 @@ import importRoutes from "./routes/import.js"
 import departureRoutes from "./routes/departures.js"
 import seatHoldRoutes from "./routes/seatHolds.js"
 import groupRoutes from "./routes/groups.js"
+import exchangeRoutes from "./routes/exchange.js"
 
 const app = express()
 
@@ -59,9 +60,11 @@ app.use(cookieParser())
 app.use("/api/auth/update-company", express.json({ limit: "5mb" }))
 app.use("/api/auth/update-company", express.urlencoded({ limit: "5mb", extended: true }))
 
-// Route-specific 1.5MB payload limit for CSV import endpoints
-app.use("/api/import", express.json({ limit: "1.5mb" }))
-app.use("/api/import", express.urlencoded({ limit: "1.5mb", extended: true }))
+// Route-specific 5MB payload limit for import and exchange endpoints (Part 6X)
+app.use("/api/import", express.json({ limit: "5mb" }))
+app.use("/api/import", express.urlencoded({ limit: "5mb", extended: true }))
+app.use("/api/exchange", express.json({ limit: "5mb" }))
+app.use("/api/exchange", express.urlencoded({ limit: "5mb", extended: true }))
 
 // Route-specific 500KB payload limit for document template assets (SEC-015)
 app.use("/api/document-templates/assets", express.json({ limit: "500kb" }))
@@ -93,6 +96,7 @@ app.use("/api/import", importRoutes)
 app.use("/api/departures", departureRoutes)
 app.use("/api/seat-holds", seatHoldRoutes)
 app.use("/api/groups", groupRoutes)
+app.use("/api/exchange", exchangeRoutes)
 
 // Minimal health check endpoint
 const serverStartedAt = new Date().toISOString()

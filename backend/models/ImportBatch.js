@@ -11,7 +11,7 @@ const importBatchSchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ["customers", "expenses"],
+      enum: ["customers", "expenses", "passengers"],
     },
     status: {
       type: String,
@@ -38,6 +38,22 @@ const importBatchSchema = new mongoose.Schema(
       type: [{ type: mongoose.Schema.Types.ObjectId }],
       required: true,
       default: [],
+    },
+    createdBookingIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Booking" }],
+      default: [],
+    },
+    importedPaymentIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Payment" }],
+      default: [],
+    },
+    mergedBookingIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Booking" }],
+      default: [],
+    },
+    summary: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     revertedCount: {
       type: Number,

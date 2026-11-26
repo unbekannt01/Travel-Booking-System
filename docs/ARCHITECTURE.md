@@ -1215,4 +1215,52 @@ Phase 5c closes Phase 5 with a semi-automated, privacy-centric reminder flow:
     - Single-shot execution guarded by `isSubmitting` state; server-side errors remain pinned to the Review screen for operator resolution.
   - *Automated tests not written, per owner decision.*
 
+---
+
+## 31. Passenger Exchange Architecture with yatriDesk / SeatDesk (Phase 6X)
+
+- **Purpose & Scope**:
+  - Enables bidirectional exchange of passenger rosters, seat assignments, and payment records between YatraHub (TBS) and yatriDesk (SeatDesk v18).
+  - Standard interchange schema: `yatri-passengers` v1 format for 48-berth sleeper coaches (`sleeper-2x2-48`, canonical bus type `2x2 Sleeper Luxury (48 berths)`).
+
+- **In-Browser Encryption & Decryption (`shared/exchangeCrypto.js`)**:
+  - **Zero-Knowledge Security**: Encryption and decryption execute entirely inside the client browser using the Web Crypto API (`globalThis.crypto.subtle`). Passwords never travel across the network and are never stored in server memory or server logs.
+  - **Envelope Specification**:
+    - Cipher: AES-256-GCM with a random 12-byte initialization vector (IV).
+    - Key Derivation: PBKDF2 with 250,000 iterations, 16-byte random salt, and SHA-256 hash.
+    - Envelope structure: `{ version: 1, encrypted: true, algorithm: "AES-GCM-PBKDF2", kdf: { salt, iterations: 250000, hash: "SHA-256" }, iv, ciphertext, authTag }`.
+  - **Aadhaar Protection Policy**:
+    - Plain, unencrypted `.json` exchange files are strictly prohibited from containing Aadhaar numbers (`aadhar: null`).
+    - Aadhaar numbers are only included if the operator opts in, in which case the export is immediately encrypted in the browser into a `.json.enc` password-protected envelope.
+
+- **Shared Exchange & Merge Engine (`shared/passengerExchange.js`)**:
+  - Pure ESM module with zero third-party dependencies, importable by both Node.js backend and Vite React frontend.
+  - **Safety Boundaries**: Maximum file size 5 MB, maximum 500 trips, maximum 60 passengers per trip, maximum 60 payments per passenger.
+  - **Canonical Seat Mapping**: Validates against canonical sleeper layout IDs (`left-L1-1`, `right-U6-2`).
+  - **Merge Planning Algorithm (`planPassengerMerge`)**:
+    - Maps incoming passengers against existing TBS bookings on the mapped departure.
+    - Status classifications: `ADD` (empty seat, creates new booking), `MERGE` (same passenger name on seat, safely fills missing phone/city/gender without overwriting existing data), `CONFLICT` (different passenger name on occupied seat, flags conflict requiring operator resolution), `SAME` (exact match, no action), `HOLD` (seat under active hold, requires operator confirmation to proceed).
+    - Payment Deduplication: Matches payment signatures `(amount, date, mode)` and external reference keys (`xid` or `sd:` prefix) to prevent duplicate transactions.
+
+- **Backend Endpoints & Data Model Extensions**:
+  - **Endpoints**:
+    - `GET /api/exchange/departures`: Lists eligible 48-berth departures for export.
+    - `GET /api/exchange/passengers`: Exports departure passenger records. Rate limited with audit logging.
+    - `POST /api/import/passengers/preview`: Ingests parsed payload, calculates merge plan, and issues an HMAC-SHA256 signed preview token (15-minute TTL) binding user, trip mapping, and payload hash.
+    - `POST /api/import/passengers/commit`: Validates HMAC token signature, executes booking additions and fills, records seat-attributed payments, synchronizes ledgers via `syncBookingPayments`, and creates an `ImportBatch` record.
+    - `POST /api/import/batches/:id/undo`: Extended to support `type: "passengers"`, safely voiding created payments and soft-deleting added bookings.
+  - **Mongoose Schema Additions**:
+    - `Booking`: `source` ("manual" | "import" | "exchange"), `importBatchId`, `pricingOverride` (boolean, bypassing fare recalculation mismatch for imported custom fares), `externalRef` (`{ source, tripXid, seatId, importedAt }`).
+    - `Payment`: `passengerSeatId` (seat attribution string), `externalRef`.
+    - `ImportBatch`: Added `"passengers"` to `type` enum; added `createdBookingIds`, `importedPaymentIds`, `mergedBookingIds`, `summary`.
+
+- **Client UI (`src/components/data/PassengerExchange.jsx`)**:
+  - Integrated into Data Management (`#/data?tab=exchange` or `Import & Export` navigation).
+  - Features Export tab with live departure counts, Aadhaar encryption password prompt, and a 4-step interactive Import wizard:
+    1. *Choose File*: File upload and browser-side decryption.
+    2. *Trip Mapping*: Auto-matches trips by date/route and lets operator select destination departures.
+    3. *Merge Preview*: Comprehensive preview showing counts (ADD, MERGE, CONFLICT, SAME, HOLD), conflict resolution selectors, payment toggles, and financial totals.
+    4. *Commit & Batch*: Final import confirmation with direct link to batch undo.
+
+
 

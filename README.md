@@ -228,6 +228,13 @@ npm run ui:smoke
 - **Multilingual Templates**: 9 built-in polite templates (English, Hindi, Gujarati across Friendly, Due Soon, and Overdue tones) with custom template overrides in Settings.
 - **Smart Safety Nets**: 24-hour reminder warning, opt-out enforcement, 10-digit mobile validation, and batch reminder queue mode.
 
+### 10. Passenger Exchange with yatriDesk / SeatDesk (Phase 6X)
+- **Bidirectional Interchange**: Exchange passenger manifests, berth allocations, and payment ledgers in standard `yatri-passengers` v1 format for 48-berth sleeper buses (`sleeper-2x2-48`).
+- **Zero-Knowledge Encryption**: In-browser AES-256-GCM + PBKDF2 encryption/decryption via Web Crypto API. Files carrying Aadhaar numbers are automatically encrypted with an operator password; passwords never touch the server. Plain unencrypted files never contain Aadhaar numbers.
+- **Intelligent Merge & Collision Defense**: Automatically detects empty seats (`ADD`), matching passengers (`MERGE` without destructive overwriting), conflicts (`CONFLICT` with side-by-side comparison and resolution options), and active seat holds (`HOLD`).
+- **Reversible Batches**: All imported passenger bookings and payments can be undone in one click from Recent Batches.
+
+
 
 ---
 
