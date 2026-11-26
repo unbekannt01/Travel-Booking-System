@@ -49,7 +49,9 @@ export default function ShareSeatModal({
 }) {
   const { toast } = useToast()
   const modalRef = useRef(null)
-  const prevModalStateRef = useRef("")
+  const prevModalStateRef = useRef(`${booking._id || booking.invoiceNo || ""}_${initialSeatId || ""}`)
+  const generationCountRef = useRef(0)
+  const isMountedRef = useRef(true)
 
   // Selected passengers for this share card
   const [selectedPaxKeys, setSelectedPaxKeys] = useState(() => {
@@ -72,10 +74,20 @@ export default function ShareSeatModal({
   const [imageBlob, setImageBlob] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [generating, setGenerating] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
   const [customTemplate, setCustomTemplate] = useState("")
   const [isTemplateCustomized, setIsTemplateCustomized] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [isWebShareSupported, setIsWebShareSupported] = useState(false)
+
+  // Track mounted status
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   // Check Web Share API support
   useEffect(() => {
@@ -206,7 +218,7 @@ export default function ShareSeatModal({
   useEffect(() => {
     if (!isOpen) return
 
-    let isSubscribed = true
+    const currentGenId = ++generationCountRef.current
     setGenerating(true)
 
     const timer = setTimeout(async () => {
@@ -223,7 +235,7 @@ export default function ShareSeatModal({
           lang,
         })
 
-        if (!isSubscribed) return
+        if (!isMountedRef.current || currentGenId !== generationCountRef.current) return
 
         setImageBlob(blob)
         const url = URL.createObjectURL(blob)
@@ -232,21 +244,19 @@ export default function ShareSeatModal({
           return url
         })
       } catch (err) {
-        if (isSubscribed) {
+        if (isMountedRef.current && currentGenId === generationCountRef.current) {
           console.error("Failed to generate seat image:", err)
           toast.error("Failed to generate seat preview image")
         }
       } finally {
-        if (isSubscribed) {
+        if (isMountedRef.current && currentGenId === generationCountRef.current) {
           setGenerating(false)
         }
       }
-    }, 150)
+    }, 50)
 
     return () => {
-      isSubscribed = false
       clearTimeout(timer)
-      setGenerating(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -262,7 +272,6 @@ export default function ShareSeatModal({
     occupiedSeatsKey,
     showBalance,
     lang,
-    toast,
   ])
 
   // Clean up object URL on unmount
@@ -322,13 +331,38 @@ export default function ShareSeatModal({
     toast.success("Reset to default template")
   }
 
+  // Helper to ensure blob is available (generates on-demand if not ready yet)
+  const getOrGenerateBlob = async () => {
+    if (imageBlob) return imageBlob
+    const blob = await generateSeatImageBlob({
+      layoutKey,
+      busType,
+      departureInfo,
+      booking,
+      sharedSeatIds,
+      occupiedSeatsMap,
+      operatorInfo,
+      showBalance,
+      lang,
+    })
+    setImageBlob(blob)
+    const url = URL.createObjectURL(blob)
+    setPreviewUrl((prevUrl) => {
+      if (prevUrl) URL.revokeObjectURL(prevUrl)
+      return url
+    })
+    return blob
+  }
+
   // Action 1: Web Share API
   const handleWebShare = async () => {
-    if (!imageBlob) return
+    setIsSharing(true)
     try {
+      const blob = await getOrGenerateBlob()
+      const filename = `seat-confirmation-${booking.invoiceNo || "bus"}.png`
       const file = new File(
-        [imageBlob],
-        `seat-confirmation-${booking.invoiceNo || "bus"}.png`,
+        [blob],
+        filename,
         { type: "image/png" },
       )
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -339,8 +373,8 @@ export default function ShareSeatModal({
         })
         toast.success("Shared successfully via system share!")
       } else {
-        // Fallback: copy and download
-        handleDownload()
+        // Fallback: download and open chat
+        downloadSeatImage(blob, filename)
         toast.info("Image downloaded. Opening WhatsApp chat...")
         handleOpenWhatsApp()
       }
@@ -348,15 +382,24 @@ export default function ShareSeatModal({
       if (err.name !== "AbortError") {
         toast.error(err.message || "Sharing failed")
       }
+    } finally {
+      setIsSharing(false)
     }
   }
 
   // Action 2: Download PNG Image
-  const handleDownload = () => {
-    if (!imageBlob) return
-    const filename = `seat-confirmation-${booking.invoiceNo || "booking"}.png`
-    downloadSeatImage(imageBlob, filename)
-    toast.success("Seat confirmation image downloaded!")
+  const handleDownload = async () => {
+    setIsDownloading(true)
+    try {
+      const blob = await getOrGenerateBlob()
+      const filename = `seat-confirmation-${booking.invoiceNo || "booking"}.png`
+      downloadSeatImage(blob, filename)
+      toast.success("Seat confirmation image downloaded!")
+    } catch (err) {
+      toast.error(err.message || "Failed to download seat confirmation image")
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   // Action 3: Copy Message Text
@@ -564,7 +607,7 @@ export default function ShareSeatModal({
               <span className="text-xs font-bold text-ink uppercase tracking-wider">
                 Live Seat Image Preview (1080px)
               </span>
-              {generating && (
+              {generating && !previewUrl && (
                 <span className="text-xs text-brand animate-pulse font-medium">
                   Generating canvas...
                 </span>
@@ -621,7 +664,8 @@ export default function ShareSeatModal({
               size="sm"
               onClick={handleDownload}
               icon={<Download size={14} />}
-              disabled={!imageBlob}
+              loading={isDownloading}
+              loadingText="Downloading..."
             >
               Download PNG
             </Button>
@@ -633,7 +677,8 @@ export default function ShareSeatModal({
                 size="sm"
                 onClick={handleWebShare}
                 icon={<Share2 size={14} />}
-                disabled={!imageBlob}
+                loading={isSharing}
+                loadingText="Sharing..."
               >
                 Share
               </Button>

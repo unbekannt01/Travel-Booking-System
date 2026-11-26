@@ -1,0 +1,2 @@
+{"v":1,"kind":"start","episodeId":"dca9c868-70f3-4230-9145-d251876ddca5","at":1795667704961,"agent":"antigravity-client","git":{"head":"0769b70a52503bfa30cdd2033ac4deaba4403618","changed":[]}}
+{"v":1,"kind":"call","n":1,"tool":"reticle_navigate","args":{"url":"http://localhost:5173/"},"error":"could not open http://localhost:5173/ — is the app running there? (Cannot find module './lib/coreBundle')","startedAt":1795667700164,"endedAt":1795667704959,"agent":"antigravity-client"}
