@@ -17,6 +17,7 @@ import SeatMap from "../seats/SeatMap"
 import { useToast } from "../common/ToastContext"
 import { formatINR } from "../../utils/formatters"
 import { toDateInputValue } from "../../utils/date"
+import { request } from "../../data/client"
 import {
   layoutKeyForBusType,
   STANDARD_BUS_TYPES,
@@ -119,11 +120,9 @@ export default function GroupBookingModal({
       setDepartureSeatConfig(null)
       return
     }
-    const key = `${tourName}___${journeyDate}___${busType}`
-    fetch(`/api/departures/${encodeURIComponent(key)}/seat-config`, {
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-    })
-      .then((r) => (r.ok ? r.json() : null))
+    const dateStr = toDateInputValue(journeyDate)
+    const key = `${tourName}___${dateStr}___${busType}`
+    request(`/api/departures/${encodeURIComponent(key)}/seat-config`)
       .then((data) => setDepartureSeatConfig(data))
       .catch(() => setDepartureSeatConfig(null))
   }, [tourName, journeyDate, busType])
@@ -365,25 +364,16 @@ export default function GroupBookingModal({
         members: formattedMembers,
       }
 
-      const res = await fetch("/api/groups", {
+      const data = await request("/api/groups", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
         body: JSON.stringify(payload),
       })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to create group booking")
-      }
 
       toast.success(`Group '${groupName}' created with ${formattedMembers.length} bookings!`)
       if (onGroupCreated) onGroupCreated(data.group)
       onClose()
     } catch (err) {
-      setServerError(err.message)
+      setServerError(err.message || "Failed to create group booking")
     } finally {
       setIsSubmitting(false)
     }

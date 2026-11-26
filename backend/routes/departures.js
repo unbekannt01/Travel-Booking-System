@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit"
 import { z } from "zod"
 import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
+import Payment from "../models/Payment.js"
 import User from "../models/User.js"
 import { logAudit } from "../models/AuditLog.js"
 import { decryptAadhaar } from "../utils/aadhaar.js"
@@ -10,6 +11,7 @@ import { getDayBounds } from "../../shared/businessLogic.js"
 import { parseDepartureKey, getBusCondition } from "../utils/departureKey.js"
 import { getDepartureSeatMap, getDepartureSeatHolds, seatMapReadLimiter } from "./seatHolds.js"
 import seatConfigRoutes from "./seatConfig.js"
+import { maskBookingPaxAadhaar } from "./bookings.js"
 
 export { parseDepartureKey, getBusCondition }
 
@@ -155,15 +157,55 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
     const shouldDecryptAadhaar =
       wantsAadhaar && (columnsList.length === 0 || columnsList.includes("aadhaar"))
 
+    // Reconcile payments from Payment ledger collection (Rule 2: single source of truth)
+    const bookingIds = bookings.map((b) => b._id)
+    const ledgerPayments = await Payment.find({
+      userId: req.user.id,
+      bookingId: { $in: bookingIds },
+      isVoid: false,
+    })
+
+    const paidByBooking = new Map()
+    for (const pay of ledgerPayments) {
+      const bId = pay.bookingId.toString()
+      const amt = pay.type === "refund" ? -pay.amount : pay.amount
+      paidByBooking.set(bId, (paidByBooking.get(bId) || 0) + amt)
+    }
+
+    let departureTotalFare = 0
+    let departureAdvanceCollected = 0
     const passengers = []
 
     for (const b of bookings) {
       const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
-      const balance = Math.max(0, (b.totalAmount || 0) - (b.advanceReceived || 0))
+      const bTotal = Number(b.totalAmount || 0)
+      const bPaid = isCancelled
+        ? 0
+        : paidByBooking.has(b._id.toString())
+          ? Math.max(0, paidByBooking.get(b._id.toString()))
+          : (b.advanceReceived !== undefined && b.advanceReceived !== null
+            ? Number(b.advanceReceived || 0)
+            : (Array.isArray(b.payments) ? b.payments.filter((p) => !p.isVoid).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0))
+
+      const balance = Math.max(0, bTotal - bPaid)
       const isPaid = !isCancelled && (b.isPaid || balance === 0)
       const paymentStatus = isCancelled ? "Cancelled" : isPaid ? "Paid" : "Pending"
 
-      for (const p of b.passengers || []) {
+      if (!isCancelled) {
+        departureTotalFare += bTotal
+        departureAdvanceCollected += bPaid
+      }
+
+      const pList = b.passengers || []
+      const pCount = pList.length || 1
+      const baseFare = Math.floor(bTotal / pCount)
+      let fareRemainder = bTotal - (baseFare * pCount)
+
+      const basePaid = Math.floor(bPaid / pCount)
+      let paidRemainder = bPaid - (basePaid * pCount)
+
+      for (let pIdx = 0; pIdx < pList.length; pIdx++) {
+        const p = pList[pIdx]
         const aadharVal = p.aadhar !== undefined ? p.aadhar : p.aadhaar
         const aadharEnc =
           p.aadharEncrypted !== undefined ? p.aadharEncrypted : p.aadhaarEncrypted
@@ -173,9 +215,12 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           decryptedAadhaar = aadharEnc ? decryptAadhaar(aadharVal) : aadharVal
         }
 
-        const pCount = (b.passengers || []).length || 1
-        const pFare = p.fare !== undefined ? p.fare : Math.round((b.totalAmount || 0) / pCount)
-        const pPaid = p.paid !== undefined ? p.paid : Math.round((b.advanceReceived || 0) / pCount)
+        const pFare = p.fare !== undefined ? p.fare : baseFare + (fareRemainder > 0 ? 1 : 0)
+        if (p.fare === undefined && fareRemainder > 0) fareRemainder--
+
+        const pPaid = p.paid !== undefined ? p.paid : Math.min(pFare, basePaid + (paidRemainder > 0 ? 1 : 0))
+        if (p.paid === undefined && paidRemainder > 0) paidRemainder--
+
         const pBalance = Math.max(0, pFare - pPaid)
 
         passengers.push({
@@ -199,7 +244,7 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           balance: pBalance,
           balanceDue: balance,
           paymentStatus,
-          isPaid,
+          isPaid: pBalance === 0 && pFare > 0,
           aadhaar: shouldDecryptAadhaar ? decryptedAadhaar : "",
           boarded: Boolean(p.checkedIn),
           remarks: "",
@@ -235,12 +280,39 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
         companyPhone: user?.phone || "",
         companyAddress: user?.address || "",
         totalPax: passengers.length,
+        totalFare: departureTotalFare,
+        advanceCollected: departureAdvanceCollected,
+        balanceDue: Math.max(0, departureTotalFare - departureAdvanceCollected),
       },
       passengers,
     })
   } catch (err) {
     console.error("Error fetching departure manifest:", err)
     return res.status(500).json({ error: "Failed to generate departure manifest" })
+  }
+})
+
+// GET /api/departures/:key/bookings - List bookings for a specific departure (used by AddGroupMemberModal)
+router.get("/:key/bookings", verifyToken, departureReadLimiter, async (req, res) => {
+  try {
+    const dep = parseDepartureKey(req.params.key)
+    if (!dep) {
+      return res.status(400).json({ error: "Invalid departure key format." })
+    }
+    const { tourName, start, end, busType } = dep
+    const busCondition = getBusCondition(busType)
+    const bookings = await Booking.find({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+      status: { $nin: ["Cancelled", "cancelled"] },
+      deletedAt: null,
+      ...busCondition,
+    }).sort({ createdAt: 1 })
+
+    res.json({ success: true, bookings: bookings.map(maskBookingPaxAadhaar) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 

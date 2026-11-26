@@ -18,7 +18,7 @@
 
 import { escapeHtml } from "./escapeHtml.js"
 import { toPaise, fromPaise } from "./groupPayments.js"
-import { formatSeatDisplayName, resolveSeatId } from "./seatLayouts.js"
+import { formatSeatDisplayName, resolveSeatId, layoutKeyForBusType } from "./seatLayouts.js"
 import { isGroupBooking, getGroupInfo } from "./groupHelpers.js"
 
 export const PAYMENT_SUMMARY_I18N = Object.freeze({
@@ -200,22 +200,40 @@ export function calculatePassengerBreakdown({
 
       const cappedPaidPaise = Math.min(memberTotalFarePaise, Math.max(0, memberPaidPaise))
 
-      const baseFarePaise = Math.floor(memberTotalFarePaise / paxCount)
-      let fareRemainder = memberTotalFarePaise - baseFarePaise * paxCount
+      const isWholeRupees = (memberTotalFarePaise % 100 === 0) && (cappedPaidPaise % 100 === 0)
+      let baseFarePaise, fareRemainder
+      let basePaidPaise, paidRemainder
+      let step = 1
 
-      const basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
-      let paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+      if (isWholeRupees) {
+        step = 100
+        const fareRupees = Math.round(memberTotalFarePaise / 100)
+        const baseFareRupees = Math.floor(fareRupees / paxCount)
+        fareRemainder = (fareRupees - baseFareRupees * paxCount) * 100
+        baseFarePaise = baseFareRupees * 100
+
+        const paidRupees = Math.round(cappedPaidPaise / 100)
+        const basePaidRupees = Math.floor(paidRupees / paxCount)
+        paidRemainder = (paidRupees - basePaidRupees * paxCount) * 100
+        basePaidPaise = basePaidRupees * 100
+      } else {
+        baseFarePaise = Math.floor(memberTotalFarePaise / paxCount)
+        fareRemainder = memberTotalFarePaise - baseFarePaise * paxCount
+
+        basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
+        paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+      }
 
       for (let i = 0; i < mPaxList.length; i++) {
         const p = mPaxList[i]
-        const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? 1 : 0)
-        if (!p.fare && fareRemainder > 0) fareRemainder--
+        const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? step : 0)
+        if (!p.fare && fareRemainder > 0) fareRemainder -= step
 
         const pPaidPaise = Math.min(
           pFarePaise,
-          p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? 1 : 0),
+          p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? step : 0),
         )
-        if (p.paid === undefined && paidRemainder > 0) paidRemainder--
+        if (p.paid === undefined && paidRemainder > 0) paidRemainder -= step
 
         const pBalPaise = Math.max(0, pFarePaise - pPaidPaise)
         const status = pBalPaise === 0 ? "PAID" : pPaidPaise > 0 ? "PARTIAL" : "DUE"
@@ -249,22 +267,40 @@ export function calculatePassengerBreakdown({
 
     const cappedPaidPaise = Math.min(bookingTotalFarePaise, Math.max(0, bookingPaidPaise))
 
-    const baseFarePaise = Math.floor(bookingTotalFarePaise / paxCount)
-    let fareRemainder = bookingTotalFarePaise - baseFarePaise * paxCount
+    const isWholeRupees = (bookingTotalFarePaise % 100 === 0) && (cappedPaidPaise % 100 === 0)
+    let baseFarePaise, fareRemainder
+    let basePaidPaise, paidRemainder
+    let step = 1
 
-    const basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
-    let paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+    if (isWholeRupees) {
+      step = 100
+      const fareRupees = Math.round(bookingTotalFarePaise / 100)
+      const baseFareRupees = Math.floor(fareRupees / paxCount)
+      fareRemainder = (fareRupees - baseFareRupees * paxCount) * 100
+      baseFarePaise = baseFareRupees * 100
+
+      const paidRupees = Math.round(cappedPaidPaise / 100)
+      const basePaidRupees = Math.floor(paidRupees / paxCount)
+      paidRemainder = (paidRupees - basePaidRupees * paxCount) * 100
+      basePaidPaise = basePaidRupees * 100
+    } else {
+      baseFarePaise = Math.floor(bookingTotalFarePaise / paxCount)
+      fareRemainder = bookingTotalFarePaise - baseFarePaise * paxCount
+
+      basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
+      paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+    }
 
     for (let i = 0; i < bPaxList.length; i++) {
       const p = bPaxList[i]
-      const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? 1 : 0)
-      if (!p.fare && fareRemainder > 0) fareRemainder--
+      const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? step : 0)
+      if (!p.fare && fareRemainder > 0) fareRemainder -= step
 
       const pPaidPaise = Math.min(
         pFarePaise,
-        p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? 1 : 0),
+        p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? step : 0),
       )
-      if (p.paid === undefined && paidRemainder > 0) paidRemainder--
+      if (p.paid === undefined && paidRemainder > 0) paidRemainder -= step
 
       const pBalPaise = Math.max(0, pFarePaise - pPaidPaise)
       const status = pBalPaise === 0 ? "PAID" : pPaidPaise > 0 ? "PARTIAL" : "DUE"
@@ -377,6 +413,11 @@ export function renderPaymentSummaryHtml({
     group?.busType ||
     (memberBookings[0] && memberBookings[0].busType) ||
     ""
+  const layoutKey =
+    booking?.seatLayoutKey ||
+    group?.seatLayoutKey ||
+    (memberBookings[0] && memberBookings[0].seatLayoutKey) ||
+    layoutKeyForBusType(busType)
 
   const docRef = isGroup
     ? group?.groupCode || group?.name || booking?.groupName || groupInfo?.groupName || "GROUP"
@@ -394,20 +435,39 @@ export function renderPaymentSummaryHtml({
 
   // Build combined payment history transactions
   const historyList = []
-  if (group && Array.isArray(groupPayments) && groupPayments.length > 0) {
+  const recordedKeys = new Set()
+
+  // 1. Group-level payments (e.g. recorded via GroupPayment)
+  if (Array.isArray(groupPayments) && groupPayments.length > 0) {
     for (const gp of groupPayments) {
+      if (gp.status === "cancelled" || gp.isVoid) continue
+      const ref = gp.groupPaymentId || gp.reference || gp.transactionId || gp.receiptNo || ""
+      const key = `gp-${gp._id || ref || Math.random()}`
+      if (recordedKeys.has(key)) continue
+      recordedKeys.add(key)
       historyList.push({
         date: formatDate(gp.paymentDate || gp.date || gp.createdAt),
         amount: fromPaise(gp.amountPaise ?? toPaise(gp.amountRupees ?? gp.amount ?? 0)),
         mode: (gp.paymentMode || gp.mode || "Cash").toUpperCase(),
-        reference: gp.reference || gp.transactionId || gp.receiptNo || "—",
+        reference: gp.reference || gp.transactionId || gp.receiptNo || gp.groupPaymentId || "—",
         payer: gp.paidBy || gp.recordedBy || contactName,
         notes: gp.notes || "",
       })
     }
-  } else if (Array.isArray(payments) && payments.length > 0) {
+  }
+
+  // 2. Direct ledger payments passed via payments prop
+  if (Array.isArray(payments) && payments.length > 0) {
     for (const p of payments) {
       if (p.isVoid || p.type === "refund") continue
+      // Avoid duplicate if already covered by a groupPayment
+      if (p.groupPaymentId && groupPayments?.some((gp) => gp.groupPaymentId === p.groupPaymentId)) {
+        continue
+      }
+      const ref = p.receiptNo || p.reference || p.transactionId || ""
+      const key = `pay-${p._id || ref || Math.random()}`
+      if (recordedKeys.has(key)) continue
+      recordedKeys.add(key)
       historyList.push({
         date: formatDate(p.paymentDate || p.date || p.createdAt),
         amount: Number(p.amount || 0),
@@ -417,15 +477,76 @@ export function renderPaymentSummaryHtml({
         notes: p.notes || "",
       })
     }
-  } else if (booking?.advanceReceived && Number(booking.advanceReceived) > 0) {
-    historyList.push({
-      date: formatDate(booking.date || booking.createdAt),
-      amount: Number(booking.advanceReceived),
-      mode: (booking.paymentMode || "Cash").toUpperCase(),
-      reference: "Advance Booking",
-      payer: contactName,
-      notes: isGroup ? "Advance payment allocated across group members" : "Advance received at booking",
-    })
+  }
+
+  // 3. Member bookings payments / advance (when viewing group summary)
+  if (isGroup && Array.isArray(memberBookings) && memberBookings.length > 0) {
+    for (const m of memberBookings) {
+      if (Array.isArray(m.payments) && m.payments.length > 0) {
+        for (const p of m.payments) {
+          if (p.isVoid || p.type === "refund") continue
+          if (p.groupPaymentId && groupPayments?.some((gp) => gp.groupPaymentId === p.groupPaymentId)) {
+            continue
+          }
+          const ref = p.receiptNo || p.reference || p.transactionId || ""
+          const key = `pay-${p._id || ref || Math.random()}`
+          if (recordedKeys.has(key)) continue
+          recordedKeys.add(key)
+          historyList.push({
+            date: formatDate(p.paymentDate || p.date || p.createdAt),
+            amount: Number(p.amount || 0),
+            mode: (p.paymentMode || p.mode || "Cash").toUpperCase(),
+            reference: p.receiptNo || p.reference || m.invoiceNo || "—",
+            payer: p.receivedFrom || p.payerName || m.contactName || contactName,
+            notes: p.notes || (m.invoiceNo ? `Booking #${m.invoiceNo}` : ""),
+          })
+        }
+      } else if (m.advanceReceived && Number(m.advanceReceived) > 0) {
+        // If booking has advanceReceived and no granular payment was added yet for it
+        const key = `adv-${m._id || m.invoiceNo || Math.random()}`
+        if (!recordedKeys.has(key) && historyList.length === 0) {
+          recordedKeys.add(key)
+          historyList.push({
+            date: formatDate(m.createdAt || m.date),
+            amount: Number(m.advanceReceived),
+            mode: (m.paymentMode || "Cash").toUpperCase(),
+            reference: m.invoiceNo || "Advance Booking",
+            payer: m.contactName || contactName,
+            notes: `Advance payment for ${m.invoiceNo || "booking"}`,
+          })
+        }
+      }
+    }
+  }
+
+  // 4. Single booking fallback
+  if (historyList.length === 0 && booking) {
+    if (Array.isArray(booking.payments) && booking.payments.length > 0) {
+      for (const p of booking.payments) {
+        if (p.isVoid || p.type === "refund") continue
+        const ref = p.receiptNo || p.reference || p.transactionId || ""
+        const key = `pay-${p._id || ref || Math.random()}`
+        if (recordedKeys.has(key)) continue
+        recordedKeys.add(key)
+        historyList.push({
+          date: formatDate(p.paymentDate || p.date || p.createdAt),
+          amount: Number(p.amount || 0),
+          mode: (p.paymentMode || p.mode || "Cash").toUpperCase(),
+          reference: p.receiptNo || p.reference || "—",
+          payer: p.receivedFrom || p.payerName || contactName,
+          notes: p.notes || "",
+        })
+      }
+    } else if (booking.advanceReceived && Number(booking.advanceReceived) > 0) {
+      historyList.push({
+        date: formatDate(booking.date || booking.createdAt),
+        amount: Number(booking.advanceReceived),
+        mode: (booking.paymentMode || "Cash").toUpperCase(),
+        reference: booking.invoiceNo || "Advance Booking",
+        payer: contactName,
+        notes: isGroup ? "Advance payment allocated across group members" : "Advance received at booking",
+      })
+    }
   }
 
   // Passenger Rows HTML
@@ -446,7 +567,7 @@ export function renderPaymentSummaryHtml({
         ? `<span class="badge-due">${escapeHtml(statusLabel)}</span>`
         : `<span class="badge-paid">${escapeHtml(statusLabel)}</span>`
 
-      const seatDisplay = p.seat ? escapeHtml(formatSeatDisplayName(resolveSeatId(null, p.seat))) : "—"
+      const seatDisplay = p.seat ? escapeHtml(formatSeatDisplayName(layoutKey, p.seat)) : "—"
 
       return `<tr>
         <td class="text-center font-bold">${p.srNo}</td>

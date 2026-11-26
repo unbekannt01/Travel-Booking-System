@@ -4,6 +4,7 @@ import { Modal, Button, Input, Select, Textarea, Field } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { formatINR } from "../../utils/formatters"
 import { toDateInputValue } from "../../utils/date"
+import { request } from "../../data/client"
 import {
   toPaise,
   fromPaise,
@@ -137,12 +138,8 @@ export default function RecordGroupPaymentModal({
         }
       }
 
-      const res = await fetch(`/api/groups/${group._id}/payments`, {
+      const data = await request(`/api/groups/${group._id}/payments`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
         body: JSON.stringify({
           idempotencyKey: idempotencyKeyRef.current,
           amount: fromPaise(totalPaise),
@@ -155,18 +152,13 @@ export default function RecordGroupPaymentModal({
         }),
       })
 
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.message || "Failed to record group payment")
-      }
-
       toast.success(data.message || "Group payment recorded successfully!")
       if (onPaymentSuccess) {
         onPaymentSuccess(data.groupPayment)
       }
       onClose()
     } catch (err) {
-      setServerError(err.message)
+      setServerError(err.message || "Failed to record group payment")
     } finally {
       setIsSubmitting(false)
     }

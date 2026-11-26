@@ -53,12 +53,13 @@ export const syncBookingPayments = async (bookingId, userId) => {
     isVoid: false,
   })
 
-  const { totalReceived } = computeLedgerTotals(payments)
-
   const booking = await Booking.findOne({ _id: bookingId, userId })
+  const { advanceReceived, totalReceived } = computeLedgerTotals(payments, booking?.totalAmount || 0)
+  const received = advanceReceived !== undefined ? advanceReceived : (totalReceived || 0)
+
   if (booking) {
-    booking.advanceReceived = totalReceived
-    booking.isPaid = booking.advanceReceived >= booking.totalAmount
+    booking.advanceReceived = received
+    booking.isPaid = (booking.totalAmount || 0) > 0 && received >= (booking.totalAmount || 0)
     // Also keep the embedded payments array in sync for backward compatibility
     booking.payments = payments.map((p) => ({
       amount: p.type === "refund" ? -p.amount : p.amount,
@@ -69,7 +70,7 @@ export const syncBookingPayments = async (bookingId, userId) => {
     }))
     await booking.save()
   }
-  return { booking, totalReceived }
+  return { booking, totalReceived: received, advanceReceived: received }
 }
 
 // GET /api/payments?bookingId=...

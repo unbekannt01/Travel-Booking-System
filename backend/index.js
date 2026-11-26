@@ -131,6 +131,36 @@ app.use((err, req, res, _next) => {
 })
 
 import Booking from "./models/Booking.js"
+import Payment from "./models/Payment.js"
+import { computeLedgerTotals } from "../shared/businessLogic.js"
+
+// Reconcile booking advance received on startup idempotently
+async function reconcileBookingsOnStartup() {
+  try {
+    const bookings = await Booking.find({ deletedAt: null })
+    for (const b of bookings) {
+      if (b.advanceReceived === undefined || b.advanceReceived === null || b.advanceReceived === 0) {
+        const payments = await Payment.find({ bookingId: b._id, userId: b.userId, isVoid: false })
+        if (payments.length > 0) {
+          const { advanceReceived } = computeLedgerTotals(payments, b.totalAmount || 0)
+          if (advanceReceived > 0) {
+            const isPaid = (b.totalAmount || 0) > 0 && advanceReceived >= (b.totalAmount || 0)
+            await Booking.updateOne({ _id: b._id }, { $set: { advanceReceived, isPaid } })
+          }
+        } else if (Array.isArray(b.payments) && b.payments.length > 0) {
+          const nonVoid = b.payments.filter((p) => !p.isVoid)
+          const sum = nonVoid.reduce((acc, p) => acc + (Number(p.amount) || 0), 0)
+          if (sum > 0) {
+            const isPaid = (b.totalAmount || 0) > 0 && sum >= (b.totalAmount || 0)
+            await Booking.updateOne({ _id: b._id }, { $set: { advanceReceived: sum, isPaid } })
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Startup] Booking payment reconciliation notice:", err.message)
+  }
+}
 
 const PORT = process.env.PORT || 5000
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/yatrahub"
@@ -151,6 +181,7 @@ if (process.env.NODE_ENV !== "test") {
       } catch {
         // Ignore if collection does not exist yet
       }
+      await reconcileBookingsOnStartup()
       app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
     })
     .catch((err) => console.error("MongoDB connection error:", err))

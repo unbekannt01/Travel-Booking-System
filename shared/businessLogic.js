@@ -265,6 +265,7 @@ export function computeLedgerTotals(payments = [], totalAmount = 0) {
   const balanceDue = Math.max(0, round2(tot - advanceReceived))
 
   return {
+    totalReceived: advanceReceived,
     advanceReceived,
     balanceDue,
     isPaid,

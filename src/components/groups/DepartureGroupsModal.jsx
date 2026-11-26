@@ -3,6 +3,7 @@ import { Users, Plus, DollarSign, ChevronRight, AlertCircle } from "lucide-react
 import { Modal, Button, Badge, Card } from "../ui"
 import { formatINR } from "../../utils/formatters"
 import { formatDisplayDate } from "../../utils/date"
+import { request } from "../../data/client"
 
 export default function DepartureGroupsModal({
   isOpen,
@@ -20,14 +21,10 @@ export default function DepartureGroupsModal({
     setLoading(true)
     setError("")
     try {
-      const res = await fetch(`/api/groups/departure/${encodeURIComponent(departure.key)}`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      })
-      if (!res.ok) throw new Error("Failed to load departure groups")
-      const data = await res.json()
+      const data = await request(`/api/groups/departure/${encodeURIComponent(departure.key)}`)
       setGroups(data.groups || [])
     } catch (err) {
-      setError(err.message)
+      setError(err.message || "Failed to load departure groups")
     } finally {
       setLoading(false)
     }
@@ -151,7 +148,7 @@ export default function DepartureGroupsModal({
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 text-center text-xs pt-2 border-t border-border-subtle/80 bg-surface-muted/30 p-2 rounded">
+                <div className="grid grid-cols-5 gap-2 text-center text-xs pt-2 border-t border-border-subtle/80 bg-surface-muted/30 p-2 rounded">
                   <div>
                     <span className="text-[10px] text-ink-muted block uppercase">Bookings</span>
                     <strong className="text-ink">{g.memberCount}</strong>
@@ -163,6 +160,10 @@ export default function DepartureGroupsModal({
                   <div>
                     <span className="text-[10px] text-ink-muted block uppercase">Total Fare</span>
                     <strong className="text-ink">{formatINR(g.totalAmount)}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-ink-muted block uppercase">Paid</span>
+                    <strong className="text-success-text">{formatINR(g.advanceReceived || 0)}</strong>
                   </div>
                   <div>
                     <span className="text-[10px] text-ink-muted block uppercase">Balance Due</span>

@@ -15,6 +15,7 @@ import { Drawer, Button, Badge, ConfirmDialog } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { formatINR } from "../../utils/formatters"
 import { formatDisplayDate } from "../../utils/date"
+import { request } from "../../data/client"
 import RecordGroupPaymentModal from "./RecordGroupPaymentModal"
 import AddGroupMemberModal from "./AddGroupMemberModal"
 import PaymentSummaryModal from "../common/PaymentSummaryModal"
@@ -44,14 +45,10 @@ export default function GroupDetailDrawer({
     setLoading(true)
     setError("")
     try {
-      const res = await fetch(`/api/groups/${groupId}`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      })
-      if (!res.ok) throw new Error("Failed to load group details")
-      const result = await res.json()
+      const result = await request(`/api/groups/${groupId}`)
       setData(result)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || "Failed to load group details")
     } finally {
       setLoading(false)
     }
@@ -69,17 +66,15 @@ export default function GroupDetailDrawer({
     if (!memberToRemove || !groupId) return
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/groups/${groupId}/members/${memberToRemove._id}`, {
+      await request(`/api/groups/${groupId}/members/${memberToRemove._id}`, {
         method: "DELETE",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
       })
-      if (!res.ok) throw new Error("Failed to remove member")
       toast.success("Member removed from group")
       setMemberToRemove(null)
       fetchGroupDetail()
       if (onGroupUpdated) onGroupUpdated()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(err.message || "Failed to remove member")
     } finally {
       setActionLoading(false)
     }
@@ -89,17 +84,15 @@ export default function GroupDetailDrawer({
     if (!groupId) return
     setActionLoading(true)
     try {
-      const res = await fetch(`/api/groups/${groupId}/disband`, {
+      await request(`/api/groups/${groupId}/disband`, {
         method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
       })
-      if (!res.ok) throw new Error("Failed to disband group")
       toast.success("Group disbanded successfully")
       setShowDisbandConfirm(false)
       if (onGroupUpdated) onGroupUpdated()
       onClose()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(err.message || "Failed to disband group")
     } finally {
       setActionLoading(false)
     }
@@ -109,25 +102,19 @@ export default function GroupDetailDrawer({
     if (!paymentToUndo || !groupId) return
     setActionLoading(true)
     try {
-      const res = await fetch(
+      const resData = await request(
         `/api/groups/${groupId}/payments/${paymentToUndo.groupPaymentId}/undo`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-          },
           body: JSON.stringify({ reason: "Undone by operator from group drawer" }),
         }
       )
-      const resData = await res.json()
-      if (!res.ok) throw new Error(resData.message || "Failed to undo payment")
       toast.success(resData.message || "Group payment undone")
       setPaymentToUndo(null)
       fetchGroupDetail()
       if (onGroupUpdated) onGroupUpdated()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(err.message || "Failed to undo payment")
     } finally {
       setActionLoading(false)
     }
@@ -322,6 +309,7 @@ export default function GroupDetailDrawer({
                         <th className="py-2 px-2.5 font-semibold text-ink-muted">Invoice</th>
                         <th className="py-2 px-2.5 font-semibold text-ink-muted">Seats</th>
                         <th className="py-2 px-2.5 font-semibold text-ink-muted text-right">Fare</th>
+                        <th className="py-2 px-2.5 font-semibold text-ink-muted text-right">Paid</th>
                         <th className="py-2 px-2.5 font-semibold text-ink-muted text-right">Balance</th>
                         <th className="py-2 px-2.5 font-semibold text-ink-muted text-center">Action</th>
                       </tr>
@@ -354,6 +342,9 @@ export default function GroupDetailDrawer({
                             </td>
                             <td className="py-2 px-2.5 text-right tabular-nums text-ink">
                               {formatINR(m.totalAmount)}
+                            </td>
+                            <td className="py-2 px-2.5 text-right tabular-nums font-semibold text-success-text">
+                              {formatINR(m.advanceReceived || 0)}
                             </td>
                             <td className="py-2 px-2.5 text-right tabular-nums font-semibold">
                               <span className={bal > 0 ? "text-danger-text" : "text-success-text"}>
@@ -534,6 +525,7 @@ export default function GroupDetailDrawer({
           group={group}
           memberBookings={members}
           groupPayments={payments}
+          payments={data?.memberPayments || []}
           user={user}
         />
       )}

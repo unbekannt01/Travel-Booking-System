@@ -3,6 +3,8 @@ import { UserPlus, AlertCircle, Check } from "lucide-react"
 import { Modal, Button, Checkbox } from "../ui"
 import { useToast } from "../common/ToastContext"
 import { formatINR } from "../../utils/formatters"
+import { toDateInputValue } from "../../utils/date"
+import { request } from "../../data/client"
 
 export default function AddGroupMemberModal({
   isOpen,
@@ -21,17 +23,14 @@ export default function AddGroupMemberModal({
     if (!group) return
     setLoading(true)
     try {
-      const departureKey = `${group.tourName}___${group.journeyDate}___${group.busType}`
-      const res = await fetch(`/api/departures/${encodeURIComponent(departureKey)}/bookings`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      })
-      if (!res.ok) throw new Error("Failed to load departure bookings")
-      const data = await res.json()
+      const dateStr = toDateInputValue(group.journeyDate)
+      const departureKey = `${group.tourName}___${dateStr}___${group.busType}`
+      const data = await request(`/api/departures/${encodeURIComponent(departureKey)}/bookings`)
       // Filter out bookings that already have a groupId
       const unassigned = (data.bookings || []).filter((b) => !b.groupId && !b.deletedAt)
       setCandidates(unassigned)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || "Failed to load departure bookings")
     } finally {
       setLoading(false)
     }
@@ -62,23 +61,16 @@ export default function AddGroupMemberModal({
     setError("")
 
     try {
-      const res = await fetch(`/api/groups/${group._id}/members`, {
+      const data = await request(`/api/groups/${group._id}/members`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest",
-        },
         body: JSON.stringify({ bookingIds: Array.from(selectedIds) }),
       })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || "Failed to add members")
 
       toast.success(data.message || "Members added to group successfully")
       if (onMemberAdded) onMemberAdded()
       onClose()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || "Failed to add members")
     } finally {
       setIsSubmitting(false)
     }

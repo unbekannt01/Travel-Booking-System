@@ -37,16 +37,62 @@ export function getBusCondition(busType) {
     normalizedBus === "2x1 Sleeper Luxury (38 berths)" ||
     normalizedBus === "2x1 Sleeper Luxury" ||
     normalizedBus === "2x1"
-  return is2x1Default
-    ? {
-        $or: [
-          { busType: "2x1 Sleeper Luxury (38 berths)" },
-          { busType: "2x1 Sleeper Luxury" },
-          { busType: "2x1" },
-          { busType: { $exists: false } },
-          { busType: null },
-          { busType: "" },
-        ],
-      }
-    : { busType: normalizedBus }
+  if (is2x1Default) {
+    return {
+      $or: [
+        { busType: "2x1 Sleeper Luxury (38 berths)" },
+        { busType: "2x1 Sleeper Luxury" },
+        { busType: "2x1" },
+        { busType: { $exists: false } },
+        { busType: null },
+        { busType: "" },
+      ],
+    }
+  }
+
+  const is2x2_48 =
+    normalizedBus === "2x2 Sleeper Luxury (48 berths)" ||
+    normalizedBus === "2x2 Sleeper Luxury" ||
+    normalizedBus === "2x2" ||
+    normalizedBus === "2x2 Sleeper"
+  if (is2x2_48) {
+    return {
+      $or: [
+        { busType: "2x2 Sleeper Luxury (48 berths)" },
+        { busType: "2x2 Sleeper Luxury" },
+        { busType: "2x2" },
+        { busType: "2x2 Sleeper" },
+      ],
+    }
+  }
+
+  const is2x2_40 =
+    normalizedBus === "2x2 Sleeper Standard (40 berths)" ||
+    normalizedBus === "2x2 Sleeper (40 berths)" ||
+    normalizedBus === "2x2 Sleeper 40"
+  if (is2x2_40) {
+    return {
+      $or: [
+        { busType: "2x2 Sleeper Standard (40 berths)" },
+        { busType: "2x2 Sleeper (40 berths)" },
+        { busType: "2x2 Sleeper 40" },
+      ],
+    }
+  }
+
+  const is2x3_60 =
+    normalizedBus === "2x3 Seater Express (60 seats)" ||
+    normalizedBus === "2x3 Seater" ||
+    normalizedBus === "2x3"
+  if (is2x3_60) {
+    return {
+      $or: [
+        { busType: "2x3 Seater Express (60 seats)" },
+        { busType: "2x3 Seater" },
+        { busType: "2x3" },
+      ],
+    }
+  }
+
+  return { busType: normalizedBus }
 }

@@ -266,7 +266,7 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       status: "active",
     }).sort({ createdAt: -1 })
 
-    // Lazily bridge multi-passenger bookings (2+ pax) into real BookingGroup records idempotently
+    // Lazily bridge multi-passenger bookings (2+ pax or with groupName) into real BookingGroup records idempotently
     try {
       const standaloneMultiPax = await Booking.find({
         userId: req.user.id,
@@ -274,30 +274,41 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
         journeyDate: { $gte: start, $lte: end },
         ...busCondition,
         deletedAt: null,
-        $or: [{ groupId: null }, { groupId: { $exists: false } }],
-        "passengers.1": { $exists: true },
+        $and: [
+          { $or: [{ groupId: null }, { groupId: { $exists: false } }] },
+          {
+            $or: [
+              { "passengers.1": { $exists: true } },
+              { groupName: { $exists: true, $nin: ["", null] } },
+            ],
+          },
+        ],
       })
 
       for (const b of standaloneMultiPax) {
         const pCount = b.passengers?.length || 1
         const leadName = b.passengers?.[0]?.name || b.contactName || "Traveler"
         const grpName = b.groupName?.trim() || `${leadName} + ${pCount - 1}`
-        const newGroup = new BookingGroup({
-          userId: req.user.id,
-          name: grpName,
-          leaderName: leadName,
-          leaderPhone: b.contactPhone || "",
-          tourName: b.tourName,
-          journeyDate: b.journeyDate,
-          busType: b.busType || "2x1 Sleeper Luxury",
-          note: "Auto group from multi-passenger booking",
-          status: "active",
-        })
-        await newGroup.save()
-        b.groupId = newGroup._id
+
+        let targetGroup = groups.find((g) => g.name.toLowerCase() === grpName.toLowerCase())
+        if (!targetGroup) {
+          targetGroup = new BookingGroup({
+            userId: req.user.id,
+            name: grpName,
+            leaderName: leadName,
+            leaderPhone: b.contactPhone || "",
+            tourName: b.tourName,
+            journeyDate: b.journeyDate,
+            busType: b.busType || "2x1 Sleeper Luxury",
+            note: "Auto group from multi-passenger booking",
+            status: "active",
+          })
+          await targetGroup.save()
+          groups.push(targetGroup)
+        }
+        b.groupId = targetGroup._id
         if (!b.groupName) b.groupName = grpName
         await b.save()
-        groups.push(newGroup)
       }
     } catch (lazyErr) {
       console.warn("[GroupsDeparture] Non-blocking lazy group bridging error:", lazyErr.message)
@@ -320,6 +331,20 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       status: "recorded",
     })
 
+    // Authoritative payment ledger lookup for all member bookings
+    const memberBookingIds = memberBookings.map((b) => b._id)
+    const ledgerPayments = await Payment.find({
+      userId: req.user.id,
+      bookingId: { $in: memberBookingIds },
+      isVoid: false,
+    })
+    const paidByMemberBooking = new Map()
+    for (const pay of ledgerPayments) {
+      const bId = pay.bookingId.toString()
+      const amt = pay.type === "refund" ? -pay.amount : pay.amount
+      paidByMemberBooking.set(bId, (paidByMemberBooking.get(bId) || 0) + amt)
+    }
+
     const enrichedGroups = groups.map((g) => {
       const members = memberBookings.filter((b) => b.groupId && b.groupId.toString() === g._id.toString())
       const payments = groupPayments.filter((p) => p.groupId && p.groupId.toString() === g._id.toString())
@@ -331,7 +356,12 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       for (const m of members) {
         seatCount += m.passengers?.length || 0
         totalAmount += m.totalAmount || 0
-        advanceReceived += m.advanceReceived || 0
+        const mPaid = paidByMemberBooking.has(m._id.toString())
+          ? Math.max(0, paidByMemberBooking.get(m._id.toString()))
+          : (m.advanceReceived !== undefined && m.advanceReceived !== null
+            ? Number(m.advanceReceived || 0)
+            : (Array.isArray(m.payments) ? m.payments.filter((p) => !p.isVoid).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0))
+        advanceReceived += mPaid
       }
 
       totalAmount = Math.round(totalAmount * 100) / 100
@@ -368,7 +398,7 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
     if (!group) {
       try {
         const b = await Booking.findOne({ _id: req.params.id, userId: req.user.id, deletedAt: null })
-        if (b && (b.groupId || (b.passengers && b.passengers.length > 1))) {
+        if (b && (b.groupId || (b.passengers && b.passengers.length > 1) || b.groupName)) {
           if (b.groupId) {
             group = await BookingGroup.findOne({ _id: b.groupId, userId: req.user.id })
           } else {
@@ -412,15 +442,43 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
       groupId: group._id,
     }).sort({ date: -1, createdAt: -1 })
 
+    // Authoritative payment ledger lookup for all member bookings
+    const memberIds = members.map((b) => b._id)
+    const ledgerPayments = await Payment.find({
+      userId: req.user.id,
+      bookingId: { $in: memberIds },
+      isVoid: false,
+    })
+    const paidByMemberBooking = new Map()
+    for (const pay of ledgerPayments) {
+      const bId = pay.bookingId.toString()
+      const amt = pay.type === "refund" ? -pay.amount : pay.amount
+      paidByMemberBooking.set(bId, (paidByMemberBooking.get(bId) || 0) + amt)
+    }
+
     let seatCount = 0
     let totalAmount = 0
     let advanceReceived = 0
 
-    for (const m of members) {
+    const enrichedMembers = members.map((m) => {
+      const masked = maskBookingPaxAadhaar(m)
+      const mPaid = paidByMemberBooking.has(m._id.toString())
+        ? Math.max(0, paidByMemberBooking.get(m._id.toString()))
+        : (m.advanceReceived !== undefined && m.advanceReceived !== null
+          ? Number(m.advanceReceived || 0)
+          : (Array.isArray(m.payments) ? m.payments.filter((p) => !p.isVoid).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0))
+
+      const mTotal = Number(m.totalAmount || 0)
+      masked.advanceReceived = mPaid
+      masked.balanceDue = Math.max(0, Math.round((mTotal - mPaid) * 100) / 100)
+      masked.isPaid = masked.balanceDue === 0 && mTotal > 0
+      masked.payments = ledgerPayments.filter((p) => p.bookingId.toString() === m._id.toString())
+
       seatCount += m.passengers?.length || 0
-      totalAmount += m.totalAmount || 0
-      advanceReceived += m.advanceReceived || 0
-    }
+      totalAmount += mTotal
+      advanceReceived += mPaid
+      return masked
+    })
 
     totalAmount = Math.round(totalAmount * 100) / 100
     advanceReceived = Math.round(advanceReceived * 100) / 100
@@ -428,8 +486,9 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
 
     res.json({
       group,
-      members: members.map(maskBookingPaxAadhaar),
+      members: enrichedMembers,
       payments,
+      memberPayments: ledgerPayments,
       totals: {
         memberCount: members.length,
         seatCount,
