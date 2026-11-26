@@ -10,6 +10,7 @@ const bookingGroupSchema = new mongoose.Schema(
     journeyDate: { type: Date, required: true },
     busType: { type: String, required: true },
     note: { type: String, maxlength: 200, default: "" },
+    discount: { type: Number, default: 0, min: 0 },
     status: {
       type: String,
       enum: ["active", "disbanded"],

@@ -40,6 +40,9 @@ export default function GroupDetailDrawer({
   const [showDisbandConfirm, setShowDisbandConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
+  const [editingDiscount, setEditingDiscount] = useState(false)
+  const [discountVal, setDiscountVal] = useState(0)
+
   const fetchGroupDetail = useCallback(async () => {
     if (!groupId) return
     setLoading(true)
@@ -206,7 +209,7 @@ export default function GroupDetailDrawer({
             </div>
 
             {/* Financial Totals Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
               <div className="p-2.5 bg-surface border border-border-subtle rounded-[var(--yh-radius-md)]">
                 <p className="text-[10px] text-ink-muted uppercase font-bold">Members / Seats</p>
                 <p className="text-sm font-bold text-ink tabular-nums mt-0.5">
@@ -218,6 +221,67 @@ export default function GroupDetailDrawer({
                 <p className="text-sm font-bold text-ink tabular-nums mt-0.5">
                   {formatINR(totals.totalAmount)}
                 </p>
+              </div>
+              <div className="p-2.5 bg-surface border border-border-subtle rounded-[var(--yh-radius-md)]">
+                <div className="flex items-center justify-center gap-1 text-[10px] text-ink-muted uppercase font-bold">
+                  <span>Discount</span>
+                  {!editingDiscount && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountVal(group.discount || 0)
+                        setEditingDiscount(true)
+                      }}
+                      className="text-brand hover:underline cursor-pointer"
+                      title="Edit group discount"
+                    >
+                      (Edit)
+                    </button>
+                  )}
+                </div>
+                {editingDiscount ? (
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={discountVal}
+                      onChange={(e) => setDiscountVal(e.target.value)}
+                      className="w-16 text-xs px-1 py-0.5 border border-brand rounded text-center font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await request(`/api/groups/${groupId}`, {
+                            method: "PATCH",
+                            body: JSON.stringify({ discount: Math.max(0, Number(discountVal) || 0) }),
+                          })
+                          toast.success("Discount updated")
+                          setEditingDiscount(false)
+                          fetchGroupDetail()
+                          if (onGroupUpdated) onGroupUpdated()
+                        } catch (err) {
+                          toast.error(err.message || "Failed to update discount")
+                        }
+                      }}
+                      className="px-1.5 py-0.5 bg-brand text-brand-fg text-[10px] font-bold rounded cursor-pointer"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingDiscount(false)}
+                      className="px-1.5 py-0.5 bg-surface-muted text-ink text-[10px] rounded cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-bold text-emerald-600 tabular-nums mt-0.5">
+                    {group.discount > 0 ? `-${formatINR(group.discount)}` : "₹0"}
+                  </p>
+                )}
               </div>
               <div className="p-2.5 bg-surface border border-border-subtle rounded-[var(--yh-radius-md)]">
                 <p className="text-[10px] text-ink-muted uppercase font-bold">Paid</p>
@@ -527,6 +591,7 @@ export default function GroupDetailDrawer({
           groupPayments={payments}
           payments={data?.memberPayments || []}
           user={user}
+          onGroupUpdated={fetchGroupDetail}
         />
       )}
     </>

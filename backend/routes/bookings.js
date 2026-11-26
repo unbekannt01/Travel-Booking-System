@@ -1303,9 +1303,10 @@ router.put("/:bookingId/passengers/:passengerIdentifier", verifyToken, async (re
       return res.status(404).json({ message: "Passenger not found" })
     }
 
-    const { name, age, gender, city, seatId, contact, aadhar, checkedIn } = req.body
+    const { name, nameGu, age, gender, city, seatId, contact, aadhar, checkedIn } = req.body
 
     if (name !== undefined) passenger.name = name
+    if (nameGu !== undefined) passenger.nameGu = nameGu
     if (age !== undefined) passenger.age = Number(age)
     if (gender !== undefined) passenger.gender = gender
     if (city !== undefined) passenger.city = city

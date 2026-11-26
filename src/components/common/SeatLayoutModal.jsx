@@ -3,8 +3,11 @@ import {
   Printer,
   Download,
   Bus,
-  Layers,
-  LayoutGrid,
+  Languages,
+  Edit3,
+  Check,
+  RotateCcw,
+  X,
 } from "lucide-react"
 import {
   mapCoachSeatManifest,
@@ -12,10 +15,13 @@ import {
   groupSeatsIntoBerthColumns,
   formatShortPassengerName,
 } from "../../utils/seatLayout"
+import { getPassengerScriptDisplayName, transliterateToGujarati } from "../../../shared/gujaratiTransliteration.js"
 import { downloadCsv } from "../../utils/csv"
 import { formatDisplayDate } from "../../utils/date"
 import { formatSeatLabel } from "../../utils/seatFormatting"
 import { Modal, Button, Badge } from "../ui"
+import { useToast } from "./ToastContext"
+import { request } from "../../data/client"
 import { cn } from "../../utils/cn"
 
 export default function SeatLayoutModal({
@@ -25,12 +31,18 @@ export default function SeatLayoutModal({
   onClose,
   isOpen = true,
 }) {
-  // Layout views: 'unified' (4-column yatriDesk reference) | 'decks' (classic lower/upper deck tabs)
-  const [layoutMode, setLayoutMode] = useState("unified")
+  const { toast } = useToast()
+
   // Berth display format: 'combined' (both names separated by &) | 'slots' (separate slot 1 & 2 boxes)
   const [berthFormat, setBerthFormat] = useState("combined")
-  // Deck filter for classic deck view: 'both' | 'lower' | 'upper'
-  const [deckFilter, setDeckFilter] = useState("both")
+  // Name script: 'gu' (ગુજરાતી) | 'en' (English) | 'both' (English + ગુજરાતી)
+  const [nameScript, setNameScript] = useState("gu")
+
+  // Gujarati name editor dialog state
+  const [showEditNamesModal, setShowEditNamesModal] = useState(false)
+  const [editedNames, setEditedNames] = useState({})
+  const [savingNames, setSavingNames] = useState(false)
+  const [nameOverrides, setNameOverrides] = useState({})
 
   const companyName = user?.companyName || "Yatra Tours"
   const companyPhone = user?.companyPhone || ""
@@ -41,28 +53,126 @@ export default function SeatLayoutModal({
   const busNumber = departure?.busNumber || "AC Sleeper Coach"
   const busType = departure?.busType || "2x1 Luxury Sleeper"
 
-  // Compute manifest mapping for the coach
+  // Compute manifest mapping for the coach, applying any in-memory name overrides
   const manifestData = useMemo(() => {
-    return mapCoachSeatManifest({
+    const raw = mapCoachSeatManifest({
       departure,
       bookings,
       layoutType: busType.startsWith("2x2") ? "2x2" : "2x1",
     })
-  }, [departure, bookings, busType])
+
+    if (Object.keys(nameOverrides).length === 0) return raw
+
+    // Apply manual Gujarati name corrections to the mapped seats
+    const applyOverrides = (seatList) =>
+      seatList.map((s) => {
+        if (!s.passenger) return s
+        const key = `${s.passenger.bookingId}-${s.passenger.passengerIndex}`
+        const ov = nameOverrides[key]
+        if (ov !== undefined) {
+          return {
+            ...s,
+            passenger: {
+              ...s.passenger,
+              nameGu: ov,
+            },
+          }
+        }
+        return s
+      })
+
+    return {
+      ...raw,
+      lowerDeck: {
+        ...raw.lowerDeck,
+        seats: applyOverrides(raw.lowerDeck.seats),
+      },
+      upperDeck: {
+        ...raw.upperDeck,
+        seats: applyOverrides(raw.upperDeck.seats),
+      },
+    }
+  }, [departure, bookings, busType, nameOverrides])
 
   // Group physical seats into 4 vertical berth columns (Left Lower, Left Upper, Right Lower, Right Upper)
   const berthColumns = useMemo(() => {
     return groupSeatsIntoBerthColumns(manifestData)
   }, [manifestData])
 
+  // Extract all booked passengers for the Gujarati Name Editor
+  const bookedPassengers = useMemo(() => {
+    const list = []
+    const seen = new Set()
+    const checkSeat = (s) => {
+      if (s.status === "booked" && s.passenger) {
+        const p = s.passenger
+        const key = `${p.bookingId}-${p.passengerIndex}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          list.push({
+            key,
+            seatId: s.id,
+            bookingId: p.bookingId,
+            passengerIndex: p.passengerIndex,
+            invoiceNo: p.invoiceNo,
+            contactName: p.contactName,
+            name: p.name,
+            nameGu: nameOverrides[key] ?? p.nameGu ?? transliterateToGujarati(p.name),
+          })
+        }
+      }
+    }
+    manifestData.lowerDeck.seats.forEach(checkSeat)
+    manifestData.upperDeck.seats.forEach(checkSeat)
+    return list
+  }, [manifestData, nameOverrides])
+
+  // Open Gujarati Name Editor modal
+  const handleOpenEditNames = () => {
+    const initialMap = {}
+    bookedPassengers.forEach((p) => {
+      initialMap[p.key] = p.nameGu || transliterateToGujarati(p.name)
+    })
+    setEditedNames(initialMap)
+    setShowEditNamesModal(true)
+  }
+
+  // Save Gujarati name corrections to backend
+  const handleSaveEditedNames = async () => {
+    setSavingNames(true)
+    try {
+      let savedCount = 0
+      for (const p of bookedPassengers) {
+        const newVal = (editedNames[p.key] || "").trim()
+        if (newVal !== (p.nameGu || "")) {
+          // Persist to backend
+          await request(`/api/bookings/${p.bookingId}/passengers/${p.passengerIndex}`, {
+            method: "PUT",
+            body: JSON.stringify({ nameGu: newVal }),
+          })
+          savedCount++
+        }
+      }
+
+      setNameOverrides((prev) => ({ ...prev, ...editedNames }))
+      toast.success(savedCount > 0 ? `Updated ${savedCount} Gujarati names successfully!` : "No changes were made.")
+      setShowEditNamesModal(false)
+    } catch (err) {
+      console.error("Save Gujarati names error:", err)
+      toast.error(err.message || "Failed to save Gujarati name corrections")
+    } finally {
+      setSavingNames(false)
+    }
+  }
+
   const handlePrint = () => {
     const html = buildSeatLayoutPrintHTML({
       manifestData,
       departure,
       user,
-      deckFilter: layoutMode === "decks" ? deckFilter : "both",
-      layoutMode,
+      layoutMode: "unified",
       berthFormat,
+      nameScript,
     })
     const win = window.open("", "_blank", "width=1000,height=800")
     if (!win) {
@@ -82,8 +192,9 @@ export default function SeatLayoutModal({
       "Deck",
       "Seat Number",
       "Status",
-      "Passenger Name",
-      "Display Name (First + Middle)",
+      "Passenger Name (English)",
+      "Passenger Name (Gujarati)",
+      "Display Name (Last + First)",
       "Age",
       "Gender",
       "Contact Phone",
@@ -107,7 +218,8 @@ export default function SeatLayoutModal({
         formatSeatLabel(seat.id),
         isBooked ? "BOOKED" : "AVAILABLE",
         isBooked ? p.name : "Available",
-        isBooked ? formatShortPassengerName(p.name) : "",
+        isBooked ? p.nameGu || transliterateToGujarati(p.name) : "",
+        isBooked ? getPassengerScriptDisplayName(p, nameScript) : "",
         isBooked && p.age ? p.age : "",
         isBooked && p.gender ? p.gender : "",
         isBooked ? p.contactPhone || p.contact || "" : "",
@@ -133,12 +245,13 @@ export default function SeatLayoutModal({
       return (
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-medium text-ink-muted bg-surface-muted border border-dashed border-border-subtle">
           {slotNum ? <span className="opacity-60 text-[9px] font-bold">{slotNum}:</span> : null}
-          <span className="italic">Available</span>
+          <span className="italic">ખાલી</span>
         </span>
       )
     }
 
-    const shortName = formatShortPassengerName(p.name)
+    // Last Name + First Name in selected script (middle omitted)
+    const displayName = getPassengerScriptDisplayName(p, nameScript) || formatShortPassengerName(p.name)
     const g = String(p.gender || "").toLowerCase().trim()
     let colorClass = "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800"
     if (g === "female" || g === "f" || g === "woman" || g.includes("સ્ત્રી")) {
@@ -156,7 +269,7 @@ export default function SeatLayoutModal({
         title={`${p.name} (${p.gender || "Gender unspecified"})`}
       >
         {slotNum ? <span className="opacity-75 text-[9.5px] font-bold">{slotNum}:</span> : null}
-        <span className="truncate">{shortName}</span>
+        <span className="truncate">{displayName}</span>
       </span>
     )
   }
@@ -420,176 +533,10 @@ export default function SeatLayoutModal({
     )
   }
 
-  // Render a visual deck preview card (Classic Deck View)
-  const renderDeckPreview = (deckObj) => {
-    const isLower = deckObj.deck === "lower"
-    const rows = {}
-    deckObj.seats.forEach((s) => {
-      if (!rows[s.row]) rows[s.row] = { left: [], right: [] }
-      if (s.side === "left") rows[s.row].left.push(s)
-      else rows[s.row].right.push(s)
-    })
-
-    const rowNumbers = Object.keys(rows)
-      .map(Number)
-      .sort((a, b) => a - b)
-
-    return (
-      <div className="rounded-[var(--yh-radius-xl)] border border-border-subtle bg-surface shadow-xs overflow-hidden flex flex-col">
-        {/* Deck Header */}
-        <div className="px-4 py-3 bg-surface-muted border-b border-border-subtle flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "w-2.5 h-2.5 rounded-full shrink-0",
-                isLower ? "bg-[var(--yh-success)]" : "bg-[var(--yh-brand)]",
-              )}
-            />
-            <h4 className="text-sm font-bold text-ink">
-              {isLower ? "Lower Deck" : "Upper Deck"}
-            </h4>
-            <Badge variant="neutral" size="sm">
-              {deckObj.bookedCount}/{deckObj.capacity} Booked
-            </Badge>
-          </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handlePrint}
-            title="Print Coach Layout"
-            aria-label={`Print ${isLower ? "Lower" : "Upper"} Deck`}
-          >
-            <Printer size={13} className="mr-1" />
-            <span>Print</span>
-          </Button>
-        </div>
-
-        {/* Coach Diagram Body */}
-        <div className="p-3 sm:p-4 flex-1 bg-canvas/60">
-          <div className="max-w-md mx-auto bg-surface rounded-[var(--yh-radius-lg)] border border-border-subtle p-3 shadow-xs">
-            {/* Driver cabin indicator */}
-            <div className="bg-amber-500 text-amber-950 font-bold rounded-[var(--yh-radius-md)] py-1.5 px-3 mb-3 flex items-center justify-between text-[11px] uppercase tracking-wider">
-              <span>▲ આગળ / Driver Cabin (Front)</span>
-              <span className="bg-surface/90 text-ink px-1.5 py-0.5 rounded text-[10px]">
-                Entry
-              </span>
-            </div>
-
-            {/* Grid */}
-            <div className="space-y-2">
-              {rowNumbers.map((rowNum) => {
-                const rowData = rows[rowNum]
-                return (
-                  <div key={rowNum} className="grid grid-cols-12 gap-1.5 items-center">
-                    {/* Left seats */}
-                    <div className="col-span-5 flex gap-1.5">
-                      {rowData.left.map((seat) => {
-                        const isBooked = seat.status === "booked"
-                        const p = seat.passenger
-                        const shortName = isBooked ? formatShortPassengerName(p.name) : ""
-                        return (
-                          <div
-                            key={seat.id}
-                            className={cn(
-                              "flex-1 min-h-12 rounded-[var(--yh-radius-md)] p-1.5 border flex flex-col justify-between transition-colors",
-                              isBooked
-                                ? "bg-brand-soft/70 border-brand/30 text-ink"
-                                : "bg-surface border-dashed border-border-subtle text-ink-muted",
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[11px] font-bold text-ink">
-                                {formatSeatLabel(seat.id)}
-                              </span>
-                              {isBooked ? (
-                                <span role="img" className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
-                              ) : (
-                                <span className="text-[9px] font-medium text-ink-muted">Free</span>
-                              )}
-                            </div>
-                            {isBooked ? (
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-semibold truncate leading-tight text-ink" title={p.name}>
-                                  {shortName}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] font-medium text-ink-muted text-center py-0.5">
-                                Available
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Central Aisle */}
-                    <div className="col-span-2 text-center text-[10px] font-bold text-ink-muted uppercase tracking-wider py-1 border-x border-dashed border-border-subtle">
-                      R{rowNum}
-                    </div>
-
-                    {/* Right seats */}
-                    <div className="col-span-5 flex gap-1.5">
-                      {rowData.right.map((seat) => {
-                        const isBooked = seat.status === "booked"
-                        const p = seat.passenger
-                        const shortName = isBooked ? formatShortPassengerName(p.name) : ""
-                        return (
-                          <div
-                            key={seat.id}
-                            className={cn(
-                              "flex-1 min-h-12 rounded-[var(--yh-radius-md)] p-1.5 border flex flex-col justify-between transition-colors",
-                              isBooked
-                                ? "bg-brand-soft/70 border-brand/30 text-ink"
-                                : "bg-surface border-dashed border-border-subtle text-ink-muted",
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[11px] font-bold text-ink">
-                                {formatSeatLabel(seat.id)}
-                              </span>
-                              {isBooked ? (
-                                <span role="img" className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" aria-label="Booked" />
-                              ) : (
-                                <span className="text-[9px] font-medium text-ink-muted">Free</span>
-                              )}
-                            </div>
-                            {isBooked ? (
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-semibold truncate leading-tight text-ink" title={p.name}>
-                                  {shortName}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] font-medium text-ink-muted text-center py-0.5">
-                                Available
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Rear */}
-            <div className="bg-surface-muted rounded-[var(--yh-radius-md)] py-1 mt-3 text-center text-[10px] font-semibold text-ink-muted uppercase tracking-wider">
-              Rear of Bus / Emergency Exit
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   const modalFooter = (
     <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
       <div className="text-xs text-ink-muted">
-        <strong>Conductor Instructions:</strong> Clean layout formatted with passenger First + Middle name. Print creates a high-res boarding chart.
+        <strong>Conductor Instructions:</strong> Clean layout formatted with Last + First name. Print creates a high-res boarding chart.
       </div>
       <div className="flex items-center gap-2 justify-end shrink-0">
         <Button type="button" variant="outline" size="sm" onClick={handleExportCsv}>
@@ -608,75 +555,84 @@ export default function SeatLayoutModal({
   )
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      size="xl"
-      className="max-w-5xl max-h-[94vh]"
-      title={
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand-soft text-brand shrink-0">
-            <Bus size={20} />
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="xl"
+        className="max-w-5xl max-h-[94vh]"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-[var(--yh-radius-md)] bg-brand-soft text-brand shrink-0">
+              <Bus size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-base sm:text-lg font-bold text-ink">
+                  Passenger Seat Layout & Boarding Chart
+                </span>
+                <Badge variant="brand" size="sm">
+                  {manifestData.layoutType} Sleeper
+                </Badge>
+              </div>
+              <p className="text-xs text-ink-muted font-normal mt-0.5 truncate">
+                {tourName} • 📅 {journeyDateFormatted} • 🚌 {busNumber}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
+        }
+        footer={modalFooter}
+      >
+        <div className="space-y-4">
+          {/* Controls & Metrics Strip */}
+          <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-lg)] border border-border-subtle flex flex-wrap items-center justify-between gap-3">
+            {/* Left Controls: Language Script & Name Editor */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-base sm:text-lg font-bold text-ink">
-                Passenger Seat Layout & Boarding Chart
-              </span>
-              <Badge variant="brand" size="sm">
-                {manifestData.layoutType} Sleeper
-              </Badge>
-            </div>
-            <p className="text-xs text-ink-muted font-normal mt-0.5 truncate">
-              {tourName} • 📅 {journeyDateFormatted} • 🚌 {busNumber}
-            </p>
-          </div>
-        </div>
-      }
-      footer={modalFooter}
-    >
-      <div className="space-y-4">
-        {/* Controls & Metrics Strip */}
-        <div className="p-3 bg-surface-muted/60 rounded-[var(--yh-radius-lg)] border border-border-subtle flex flex-wrap items-center justify-between gap-3">
-          {/* Layout Mode Selector */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div role="tablist" aria-label="Layout view selector" className="flex items-center bg-surface p-1 rounded-[var(--yh-radius-md)] border border-border-subtle">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={layoutMode === "unified"}
-                onClick={() => setLayoutMode("unified")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer min-h-8",
-                  layoutMode === "unified"
-                    ? "bg-brand text-brand-fg shadow-xs"
-                    : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
-                )}
-                title="Unified 4-column coach view matching yatriDesk reference"
-              >
-                <LayoutGrid size={13} />
-                Unified Coach (Reference)
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={layoutMode === "decks"}
-                onClick={() => setLayoutMode("decks")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer min-h-8",
-                  layoutMode === "decks"
-                    ? "bg-brand text-brand-fg shadow-xs"
-                    : "text-ink-secondary hover:text-ink hover:bg-surface-hover",
-                )}
-                title="Classic deck-by-deck preview tabs"
-              >
-                <Layers size={13} />
-                Deck Tabs
-              </button>
-            </div>
+              {/* Language Script Selector */}
+              <div className="flex items-center bg-surface p-1 rounded-[var(--yh-radius-md)] border border-border-subtle">
+                <Languages size={14} className="text-ink-muted ml-1 mr-1.5 shrink-0" />
+                <button
+                  type="button"
+                  onClick={() => setNameScript("gu")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
+                    nameScript === "gu"
+                      ? "bg-brand text-brand-fg shadow-2xs font-bold"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                  title="Display names in Gujarati script (અટક + નામ)"
+                >
+                  ગુજરાતી
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNameScript("en")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
+                    nameScript === "en"
+                      ? "bg-brand text-brand-fg shadow-2xs font-bold"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                  title="Display names in English (Last Name + First Name)"
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNameScript("both")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
+                    nameScript === "both"
+                      ? "bg-brand text-brand-fg shadow-2xs font-bold"
+                      : "text-ink-muted hover:text-ink",
+                  )}
+                  title="Display English + Gujarati"
+                >
+                  Both
+                </button>
+              </div>
 
-            {/* If in Unified mode: Format selector (& vs Slots) */}
-            {layoutMode === "unified" ? (
+              {/* Berth Display Format (& vs Slots) */}
               <div className="flex items-center bg-surface p-1 rounded-[var(--yh-radius-md)] border border-border-subtle">
                 <button
                   type="button"
@@ -705,95 +661,161 @@ export default function SeatLayoutModal({
                   Slot Boxes (1 & 2)
                 </button>
               </div>
-            ) : (
-              /* If in Decks mode: Deck switcher */
-              <div role="tablist" aria-label="Deck switcher" className="flex items-center bg-surface p-1 rounded-[var(--yh-radius-md)] border border-border-subtle">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={deckFilter === "both"}
-                  onClick={() => setDeckFilter("both")}
-                  className={cn(
-                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
-                    deckFilter === "both"
-                      ? "bg-surface-muted text-ink font-bold"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  Both
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={deckFilter === "lower"}
-                  onClick={() => setDeckFilter("lower")}
-                  className={cn(
-                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
-                    deckFilter === "lower"
-                      ? "bg-surface-muted text-ink font-bold"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  Lower
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={deckFilter === "upper"}
-                  onClick={() => setDeckFilter("upper")}
-                  className={cn(
-                    "px-2.5 py-1 rounded-[var(--yh-radius-sm)] text-xs font-semibold transition-colors cursor-pointer",
-                    deckFilter === "upper"
-                      ? "bg-surface-muted text-ink font-bold"
-                      : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  Upper
-                </button>
+
+              {/* Edit Gujarati Names button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleOpenEditNames}
+                title="Review and manually correct transliterated Gujarati passenger names"
+              >
+                <Edit3 size={13} className="mr-1.5 text-brand" />
+                <span>નામો સુધારો (Edit Gujarati)</span>
+              </Button>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="flex items-center gap-3 text-xs flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
+                <span className="text-ink-muted">Booked:</span>
+                <span className="font-semibold text-ink tabular-nums">
+                  {manifestData.totalBooked} Berths
+                </span>
               </div>
-            )}
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-border-strong shrink-0" />
+                <span className="text-ink-muted">Available:</span>
+                <span className="font-semibold text-ink tabular-nums">
+                  {manifestData.totalAvailable} Berths
+                </span>
+              </div>
+              <Badge variant="brand" size="sm">
+                {manifestData.occupancyPercentage}% Occupancy
+              </Badge>
+            </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="flex items-center gap-3 text-xs flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand shrink-0" />
-              <span className="text-ink-muted">Booked:</span>
-              <span className="font-semibold text-ink tabular-nums">
-                {manifestData.totalBooked} Berths
-              </span>
+          {/* Content Body: Unified Coach View (Reference Layout) */}
+          {renderUnifiedCoachView()}
+
+          {companyHQ || companyPhone ? (
+            <div className="text-[11px] text-ink-muted text-right">
+              {companyName} {companyHQ ? `• ${companyHQ}` : ""} {companyPhone ? `• ${companyPhone}` : ""}
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-border-strong shrink-0" />
-              <span className="text-ink-muted">Available:</span>
-              <span className="font-semibold text-ink tabular-nums">
-                {manifestData.totalAvailable} Berths
-              </span>
-            </div>
-            <Badge variant="brand" size="sm">
-              {manifestData.occupancyPercentage}% Occupancy
-            </Badge>
-          </div>
+          ) : null}
         </div>
+      </Modal>
 
-        {/* Content Body: Unified Coach View or Decks Layout */}
-        {layoutMode === "unified" ? (
-          renderUnifiedCoachView()
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {(deckFilter === "both" || deckFilter === "lower") &&
-              renderDeckPreview(manifestData.lowerDeck)}
-            {(deckFilter === "both" || deckFilter === "upper") &&
-              renderDeckPreview(manifestData.upperDeck)}
-          </div>
-        )}
+      {/* Manual Gujarati Names Correction Modal */}
+      {showEditNamesModal && (
+        <Modal
+          isOpen={showEditNamesModal}
+          onClose={() => setShowEditNamesModal(false)}
+          size="lg"
+          title={
+            <div className="flex items-center gap-2">
+              <Edit3 size={18} className="text-brand" />
+              <span className="font-bold text-ink">ગુજરાતી નામો સુધારો / Edit Gujarati Names</span>
+            </div>
+          }
+          footer={
+            <div className="w-full flex items-center justify-between gap-3">
+              <span className="text-xs text-ink-muted">
+                {bookedPassengers.length} મુસાફરો (Passengers)
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowEditNamesModal(false)}
+                  disabled={savingNames}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveEditedNames}
+                  loading={savingNames}
+                >
+                  <Check size={14} className="mr-1.5" />
+                  Save Corrections
+                </Button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+            <p className="text-xs text-ink-muted">
+              અંગ્રેજી નામો આપમેળે ગુજરાતીમાં ટ્રાન્સલેટ થયેલ છે. જો કોઈ નામમાં ભૂલ હોય તો અહી સુધારી લો:
+            </p>
 
-        {companyHQ || companyPhone ? (
-          <div className="text-[11px] text-ink-muted text-right">
-            {companyName} {companyHQ ? `• ${companyHQ}` : ""} {companyPhone ? `• ${companyPhone}` : ""}
+            <div className="border border-border-subtle rounded-[var(--yh-radius-md)] overflow-hidden">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-surface-muted border-b border-border-subtle">
+                  <tr>
+                    <th className="py-2 px-3 font-bold text-ink-muted w-16">Seat</th>
+                    <th className="py-2 px-3 font-bold text-ink-muted">English Name</th>
+                    <th className="py-2 px-3 font-bold text-ink-muted">ગુજરાતી નામ (Last + First)</th>
+                    <th className="py-2 px-2 text-center w-12 font-bold text-ink-muted">Reset</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {bookedPassengers.map((p) => {
+                    const currentVal = editedNames[p.key] !== undefined ? editedNames[p.key] : p.nameGu || ""
+                    return (
+                      <tr key={p.key} className="hover:bg-surface-hover">
+                        <td className="py-2 px-3 font-mono font-bold text-ink whitespace-nowrap">
+                          {formatSeatLabel(p.seatId)}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-ink">{p.name}</span>
+                          {p.invoiceNo ? (
+                            <span className="block text-[10px] text-ink-muted">#{p.invoiceNo}</span>
+                          ) : null}
+                        </td>
+                        <td className="py-1.5 px-3">
+                          <input
+                            type="text"
+                            value={currentVal}
+                            onChange={(e) =>
+                              setEditedNames((prev) => ({
+                                ...prev,
+                                [p.key]: e.target.value,
+                              }))
+                            }
+                            className="w-full text-xs font-semibold px-2.5 py-1 rounded border border-border-subtle focus:border-brand focus:ring-1 focus:ring-brand bg-surface text-ink outline-none"
+                            placeholder="અટક નામ"
+                          />
+                        </td>
+                        <td className="py-1.5 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditedNames((prev) => ({
+                                ...prev,
+                                [p.key]: transliterateToGujarati(p.name),
+                              }))
+                            }
+                            className="p-1 rounded text-ink-muted hover:text-brand hover:bg-surface-muted transition-colors"
+                            title="Auto-transliterate from English"
+                          >
+                            <RotateCcw size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        ) : null}
-      </div>
-    </Modal>
+        </Modal>
+      )}
+    </>
   )
 }

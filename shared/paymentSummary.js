@@ -26,6 +26,7 @@ import {
   isUpperBerthSeat,
 } from "./seatLayouts.js"
 import { isGroupBooking, getGroupInfo } from "./groupHelpers.js"
+import { getPassengerScriptDisplayName } from "./gujaratiTransliteration.js"
 
 export const PAYMENT_SUMMARY_I18N = Object.freeze({
   en: {
@@ -176,10 +177,12 @@ export function calculatePassengerBreakdown({
   memberBookings = [],
   lowerPrice = 0,
   upperPrice = 0,
+  discount = 0,
 }) {
   const paxList = []
   const lPrice = Number(lowerPrice || group?.lowerPrice || booking?.lowerPrice || memberBookings[0]?.lowerPrice || 0)
   const uPrice = Number(upperPrice || group?.upperPrice || booking?.upperPrice || memberBookings[0]?.upperPrice || 0)
+  const groupDiscount = Math.max(0, Number(discount || group?.discount || booking?.discount || 0))
 
   // Case A: Explicit Group Booking breakdown
   if (group || memberBookings.length > 0) {
@@ -496,19 +499,31 @@ export function calculatePassengerBreakdown({
 
   const lowerFarePaise = lowerPax.reduce((sum, p) => sum + p.farePaise, 0)
   const lowerPaidPaise = lowerPax.reduce((sum, p) => sum + p.paidPaise, 0)
-  const lowerBalPaise = lowerPax.reduce((sum, p) => sum + p.balancePaise, 0)
+  let lowerBalPaise = lowerPax.reduce((sum, p) => sum + p.balancePaise, 0)
 
   const upperFarePaise = upperPax.reduce((sum, p) => sum + p.farePaise, 0)
   const upperPaidPaise = upperPax.reduce((sum, p) => sum + p.paidPaise, 0)
-  const upperBalPaise = upperPax.reduce((sum, p) => sum + p.balancePaise, 0)
+  let upperBalPaise = upperPax.reduce((sum, p) => sum + p.balancePaise, 0)
 
   const totalFarePaise = paxList.reduce((sum, p) => sum + p.farePaise, 0)
   const totalPaidPaise = paxList.reduce((sum, p) => sum + p.paidPaise, 0)
-  const totalBalancePaise = Math.max(0, totalFarePaise - totalPaidPaise)
+  const discountPaise = toPaise(groupDiscount)
+  const netFarePaise = Math.max(0, totalFarePaise - discountPaise)
+  const totalBalancePaise = Math.max(0, netFarePaise - totalPaidPaise)
+
+  // Attribute discount proportionally to deck dues
+  if (discountPaise > 0 && totalFarePaise > 0) {
+    const lowerDisc = Math.floor((discountPaise * lowerFarePaise) / totalFarePaise)
+    const upperDisc = discountPaise - lowerDisc
+    lowerBalPaise = Math.max(0, lowerBalPaise - lowerDisc)
+    upperBalPaise = Math.max(0, upperBalPaise - upperDisc)
+  }
 
   return {
     passengers: paxList,
     totalFarePaise,
+    discountPaise,
+    netFarePaise,
     totalPaidPaise,
     totalBalancePaise,
     deckBreakdown: {
@@ -528,6 +543,8 @@ export function calculatePassengerBreakdown({
       overall: {
         count: paxList.length,
         farePaise: totalFarePaise,
+        discountPaise,
+        netFarePaise,
         paidPaise: totalPaidPaise,
         balancePaise: totalBalancePaise,
       },
@@ -576,6 +593,10 @@ export function renderPaymentSummaryHtml({
   groupPayments = [],
   companyInfo = {},
   language = "en",
+  nameScript = "en",
+  showDeckBreakdown = true,
+  showTotalsSummary = true,
+  discount = 0,
 }) {
   const lang = ["en", "hi", "gu"].includes(language) ? language : "en"
   const t = PAYMENT_SUMMARY_I18N[lang] || PAYMENT_SUMMARY_I18N.en
@@ -589,6 +610,7 @@ export function renderPaymentSummaryHtml({
   const isGroup = Boolean(group || memberBookings.length > 0 || isMultiPax || isGroupBooking(booking))
 
   const groupInfo = booking ? getGroupInfo(booking) : null
+  const effectiveDiscount = Number(discount || group?.discount || booking?.discount || 0)
 
   const breakdown = calculatePassengerBreakdown({
     booking,
@@ -598,6 +620,7 @@ export function renderPaymentSummaryHtml({
     groupPayments,
     lowerPrice: group?.lowerPrice || booking?.lowerPrice || memberBookings[0]?.lowerPrice || 0,
     upperPrice: group?.upperPrice || booking?.upperPrice || memberBookings[0]?.upperPrice || 0,
+    discount: effectiveDiscount,
   })
 
   // Header metadata
@@ -762,10 +785,26 @@ export function renderPaymentSummaryHtml({
   const passengerRowsHtml = breakdown.passengers
     .map((p) => {
       const fareRupees = fromPaise(p.farePaise)
+      const isUp = isUpperBerthSeat(p.seat)
+      const seatDisplay = p.seat ? escapeHtml(formatSeatDisplayName(layoutKey, p.seat)) : "—"
+      const deckTag = isUp
+        ? `<span class="seat-deck-tag tag-upper">UPPER</span>`
+        : `<span class="seat-deck-tag tag-lower">LOWER</span>`
+      const displayName = getPassengerScriptDisplayName(p, nameScript) || p.name || "Traveler"
+
+      if (isGroup) {
+        return `<tr>
+        <td class="text-center font-bold">${p.srNo}</td>
+        <td class="cell-wrap"><strong>${escapeHtml(displayName)}</strong>${hasMultipleBookings && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
+        <td class="seat-cell">${seatDisplay}</td>
+        <td class="text-center">${deckTag}</td>
+        <td class="text-right font-bold">₹${formatRupees(fareRupees)}</td>
+      </tr>`
+      }
+
       const paidRupees = fromPaise(p.paidPaise)
       const balanceRupees = fromPaise(p.balancePaise)
       const isDue = p.balancePaise > 0
-      const isUp = isUpperBerthSeat(p.seat)
 
       const balanceCellHtml = isDue
         ? `<strong class="text-due">₹${formatRupees(balanceRupees)}</strong>`
@@ -777,17 +816,10 @@ export function renderPaymentSummaryHtml({
         ? `<span class="badge-due">${escapeHtml(statusLabel)}</span>`
         : `<span class="badge-paid">${escapeHtml(statusLabel)}</span>`
 
-      const seatDisplay = p.seat ? escapeHtml(formatSeatDisplayName(layoutKey, p.seat)) : "—"
-      const deckTag = p.seat
-        ? ` <span class="seat-deck-tag ${isUp ? "tag-upper" : "tag-lower"}">${isUp ? "UPPER" : "LOWER"}</span>`
-        : ""
-
-      const displayName = formatShortPassengerName(p.name) || p.name || "Traveler"
-
       return `<tr>
         <td class="text-center font-bold">${p.srNo}</td>
-        <td class="cell-wrap"><strong>${escapeHtml(displayName)}</strong>${hasMultipleBookings && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
-        <td class="seat-cell">${seatDisplay}${deckTag}</td>
+        <td class="cell-wrap"><strong>${escapeHtml(displayName)}</strong></td>
+        <td class="seat-cell">${seatDisplay} ${deckTag}</td>
         <td class="text-right font-medium">₹${formatRupees(fareRupees)}</td>
         <td class="text-right font-bold text-paid">₹${formatRupees(paidRupees)}</td>
         <td class="text-right">${balanceCellHtml}</td>
@@ -801,40 +833,55 @@ export function renderPaymentSummaryHtml({
   const totalBalance = fromPaise(breakdown.totalBalancePaise)
   const hasTotalDue = breakdown.totalBalancePaise > 0
 
-  // Passenger Table tfoot with Upper vs Lower subtotal rows when applicable
+  // Passenger Table tfoot with Upper vs Lower subtotal rows and full group settlement
   let passengerTfootHtml = ""
-  if (breakdown.deckBreakdown?.hasDecks) {
-    const l = breakdown.deckBreakdown.lower
-    const u = breakdown.deckBreakdown.upper
-    passengerTfootHtml += `<tr class="deck-subtotal-row">
-      <td colspan="3" class="text-right font-bold totals-label">🛏️ Lower Berths (${l.count} pax):</td>
-      <td class="text-right font-bold">₹${formatRupees(fromPaise(l.farePaise))}</td>
-      <td class="text-right font-bold text-paid">₹${formatRupees(fromPaise(l.paidPaise))}</td>
+  if (isGroup) {
+    if (showDeckBreakdown && breakdown.deckBreakdown?.hasDecks) {
+      const l = breakdown.deckBreakdown.lower
+      const u = breakdown.deckBreakdown.upper
+      passengerTfootHtml += `<tr class="deck-subtotal-row">
+      <td colspan="4" class="text-right font-bold totals-label">🛏️ Lower Berths (${l.count} pax) — Fare ₹${formatRupees(fromPaise(l.farePaise))} | Paid ₹${formatRupees(fromPaise(l.paidPaise))} | Balance Due:</td>
       <td class="text-right font-bold ${l.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(l.balancePaise))}</td>
-      <td class="text-center font-bold">${l.balancePaise > 0 ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
     </tr>`
-    passengerTfootHtml += `<tr class="deck-subtotal-row">
-      <td colspan="3" class="text-right font-bold totals-label">🛏️ Upper Berths (${u.count} pax):</td>
-      <td class="text-right font-bold">₹${formatRupees(fromPaise(u.farePaise))}</td>
-      <td class="text-right font-bold text-paid">₹${formatRupees(fromPaise(u.paidPaise))}</td>
+      passengerTfootHtml += `<tr class="deck-subtotal-row">
+      <td colspan="4" class="text-right font-bold totals-label">🛏️ Upper Berths (${u.count} pax) — Fare ₹${formatRupees(fromPaise(u.farePaise))} | Paid ₹${formatRupees(fromPaise(u.paidPaise))} | Balance Due:</td>
       <td class="text-right font-bold ${u.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(u.balancePaise))}</td>
-      <td class="text-center font-bold">${u.balancePaise > 0 ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
     </tr>`
-    passengerTfootHtml += `<tr class="grand-totals-row">
-      <td colspan="3" class="text-right font-bold totals-label font-black" style="white-space: nowrap; padding-right: 8px;">👥 ${escapeHtml(t.totals)} (${totalPaxCount} pax):</td>
-      <td class="text-right font-bold font-black">₹${formatRupees(totalFare)}</td>
-      <td class="text-right font-bold font-black text-paid">₹${formatRupees(totalPaid)}</td>
-      <td class="text-right font-bold font-black ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</td>
-      <td class="text-center font-bold font-black">${hasTotalDue ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
+    }
+    if (showTotalsSummary) {
+      passengerTfootHtml += `<tr>
+      <td colspan="4" class="text-right font-bold totals-label">Total Group Berth Fare (${totalPaxCount} pax):</td>
+      <td class="text-right font-bold">₹${formatRupees(totalFare)}</td>
     </tr>`
+      if (breakdown.discountPaise > 0) {
+        passengerTfootHtml += `<tr>
+        <td colspan="4" class="text-right font-bold totals-label" style="color: #16a34a;">Group Discount:</td>
+        <td class="text-right font-bold" style="color: #16a34a;">-₹${formatRupees(fromPaise(breakdown.discountPaise))}</td>
+      </tr>`
+        passengerTfootHtml += `<tr>
+        <td colspan="4" class="text-right font-bold totals-label">Net Payable Amount:</td>
+        <td class="text-right font-bold">₹${formatRupees(fromPaise(breakdown.netFarePaise))}</td>
+      </tr>`
+      }
+      passengerTfootHtml += `<tr>
+      <td colspan="4" class="text-right font-bold totals-label text-paid">Total Group Advance Paid:</td>
+      <td class="text-right font-bold text-paid">₹${formatRupees(totalPaid)}</td>
+    </tr>`
+      passengerTfootHtml += `<tr class="grand-totals-row">
+      <td colspan="4" class="text-right font-black totals-label" style="white-space: nowrap; font-size: 11px;">👥 REMAINING GROUP BALANCE DUE:</td>
+      <td class="text-right font-black ${hasTotalDue ? "text-due" : "text-paid"}" style="font-size: 13px;">₹${formatRupees(totalBalance)}</td>
+    </tr>`
+    }
   } else {
-    passengerTfootHtml = `<tr>
+    if (showTotalsSummary) {
+      passengerTfootHtml = `<tr>
       <td colspan="3" class="text-right font-bold totals-label" style="white-space: nowrap; padding-right: 8px;">${escapeHtml(t.totals)}:</td>
       <td class="text-right font-bold">₹${formatRupees(totalFare)}</td>
       <td class="text-right font-bold text-paid">₹${formatRupees(totalPaid)}</td>
       <td class="text-right font-bold ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</td>
       <td class="text-center font-bold">${hasTotalDue ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
     </tr>`
+    }
   }
 
   // Payment History Rows HTML
@@ -1303,14 +1350,14 @@ export function renderPaymentSummaryHtml({
   </div>
 
   ${
-    breakdown.deckBreakdown?.hasDecks
+    showDeckBreakdown && breakdown.deckBreakdown?.hasDecks
       ? `<!-- Upper & Lower Berth Pricing Breakdown -->
   <div class="deck-pricing-box">
     <div class="deck-pricing-header">
       <span class="deck-pricing-title">🛏️ UPPER &amp; LOWER BERTH PRICING BREAKDOWN</span>
       <span class="deck-pricing-subtitle">Independent Deck Collections &amp; Group Balances</span>
     </div>
-    <div class="deck-cards-grid">
+    <div class="deck-cards-grid" style="${showTotalsSummary ? "" : "grid-template-columns: 1fr 1fr;"}">
       <!-- Lower Deck Card -->
       <div class="deck-card deck-card-lower">
         <div class="deck-card-top">
@@ -1355,7 +1402,9 @@ export function renderPaymentSummaryHtml({
         </div>
       </div>
 
-      <!-- Combined Group Total Card -->
+      ${
+        showTotalsSummary
+          ? `<!-- Combined Group Total Card -->
       <div class="deck-card deck-card-total">
         <div class="deck-card-top">
           <span class="deck-pill deck-pill-total">GROUP OVERALL</span>
@@ -1366,6 +1415,18 @@ export function renderPaymentSummaryHtml({
             <span class="stat-lbl">Total Fare:</span>
             <span class="stat-val font-bold">₹${formatRupees(totalFare)}</span>
           </div>
+          ${
+            breakdown.discountPaise > 0
+              ? `<div class="deck-stat-row">
+            <span class="stat-lbl" style="color: #16a34a;">Discount:</span>
+            <span class="stat-val font-bold" style="color: #16a34a;">-₹${formatRupees(fromPaise(breakdown.discountPaise))}</span>
+          </div>
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Net Fare:</span>
+            <span class="stat-val font-bold">₹${formatRupees(fromPaise(breakdown.netFarePaise))}</span>
+          </div>`
+              : ""
+          }
           <div class="deck-stat-row">
             <span class="stat-lbl">Total Paid:</span>
             <span class="stat-val font-bold text-paid">₹${formatRupees(totalPaid)}</span>
@@ -1375,7 +1436,9 @@ export function renderPaymentSummaryHtml({
             <span class="stat-val font-black ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</span>
           </div>
         </div>
-      </div>
+      </div>`
+          : ""
+      }
     </div>
   </div>`
       : ""
@@ -1386,7 +1449,36 @@ export function renderPaymentSummaryHtml({
     <span>👤 ${escapeHtml(t.subtitle)} (${totalPaxCount} ${escapeHtml(t.totalSeats)})</span>
   </div>
 
-  <table class="data-table">
+  ${
+    isGroup
+      ? `<table class="data-table">
+    <colgroup>
+      <col style="width: 36px;"/>
+      <col style="width: auto;"/>
+      <col style="width: 105px;"/>
+      <col style="width: 95px;"/>
+      <col style="width: 115px;"/>
+    </colgroup>
+    <thead>
+      <tr class="running-header-row">
+        <th colspan="5" class="text-left">
+          ${escapeHtml(tourName)} | ${escapeHtml(journeyDate)} | ${escapeHtml(documentHeading)}
+        </th>
+      </tr>
+      <tr>
+        <th class="text-center">${escapeHtml(t.srNo)}</th>
+        <th class="text-left">${escapeHtml(t.passengerName)}</th>
+        <th class="text-center" style="white-space: nowrap;">${escapeHtml(t.seatNo)}</th>
+        <th class="text-center">Berth Deck</th>
+        <th class="text-right">${escapeHtml(t.fare)}</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${passengerRowsHtml}
+    </tbody>
+    ${passengerTfootHtml ? `<tfoot>${passengerTfootHtml}</tfoot>` : ""}
+  </table>`
+      : `<table class="data-table">
     <colgroup>
       <col style="width: 32px;"/>
       <col style="width: auto;"/>
@@ -1415,10 +1507,9 @@ export function renderPaymentSummaryHtml({
     <tbody>
       ${passengerRowsHtml}
     </tbody>
-    <tfoot>
-      ${passengerTfootHtml}
-    </tfoot>
-  </table>
+    ${passengerTfootHtml ? `<tfoot>${passengerTfootHtml}</tfoot>` : ""}
+  </table>`
+  }
 
   <!-- Payment Transactions History Section -->
   <div class="section-title" style="margin-top: 14px;">

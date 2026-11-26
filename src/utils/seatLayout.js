@@ -1,6 +1,7 @@
 import { escapeHtml, sanitizeHexColor } from "./escapeHtml.js"
 import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
 import { formatShortPassengerName } from "./seatFormatting.js"
+import { getPassengerScriptDisplayName } from "../../shared/gujaratiTransliteration.js"
 
 export { formatShortPassengerName }
 /**
@@ -292,6 +293,7 @@ export const buildUnifiedCoachPrintHTML = ({
   departure,
   user,
   berthFormat = "combined", // 'combined' | 'slots'
+  nameScript = "gu",
 }) => {
   const companyName = escapeHtml(user?.companyName || "Yatra Tours")
   const companyPhone = escapeHtml(user?.companyPhone || "")
@@ -316,7 +318,7 @@ export const buildUnifiedCoachPrintHTML = ({
       const p = s.passenger
       const isBooked = s.status === "booked" && p
       const gType = isBooked ? getPassengerGenderType(p.gender) : "avail"
-      const name = isBooked ? escapeHtml(formatShortPassengerName(p.name)) : "ખાલી (Available)"
+      const name = isBooked ? escapeHtml(getPassengerScriptDisplayName(p, nameScript)) : "ખાલી (Available)"
 
       return `
         <div class="berth-card ${isBooked ? `booked border-${gType}` : "available"}">
@@ -339,8 +341,8 @@ export const buildUnifiedCoachPrintHTML = ({
     if (berthFormat === "slots") {
       const g1 = p1 ? getPassengerGenderType(p1.gender) : "avail"
       const g2 = p2 ? getPassengerGenderType(p2.gender) : "avail"
-      const name1 = p1 ? escapeHtml(formatShortPassengerName(p1.name)) : `<span class="avail-text">ખાલી</span>`
-      const name2 = p2 ? escapeHtml(formatShortPassengerName(p2.name)) : `<span class="avail-text">ખાલી</span>`
+      const name1 = p1 ? escapeHtml(getPassengerScriptDisplayName(p1, nameScript)) : `<span class="avail-text">ખાલી</span>`
+      const name2 = p2 ? escapeHtml(getPassengerScriptDisplayName(p2, nameScript)) : `<span class="avail-text">ખાલી</span>`
 
       return `
         <div class="berth-card ${p1 || p2 ? "has-booking" : "available"}">
@@ -363,8 +365,8 @@ export const buildUnifiedCoachPrintHTML = ({
     if (p1 && p2) {
       const g1 = getPassengerGenderType(p1.gender)
       const g2 = getPassengerGenderType(p2.gender)
-      const name1 = escapeHtml(formatShortPassengerName(p1.name))
-      const name2 = escapeHtml(formatShortPassengerName(p2.name))
+      const name1 = escapeHtml(getPassengerScriptDisplayName(p1, nameScript))
+      const name2 = escapeHtml(getPassengerScriptDisplayName(p2, nameScript))
 
       return `
         <div class="berth-card booked">
@@ -383,7 +385,7 @@ export const buildUnifiedCoachPrintHTML = ({
       const slotNum = p1 ? 1 : 2
       const freeNum = p1 ? 2 : 1
       const g = getPassengerGenderType(bookedP.gender)
-      const name = escapeHtml(formatShortPassengerName(bookedP.name))
+      const name = escapeHtml(getPassengerScriptDisplayName(bookedP, nameScript))
 
       return `
         <div class="berth-card partial">
@@ -825,6 +827,7 @@ export const buildSeatLayoutPrintHTML = ({
   deckFilter = "both", // 'both' | 'lower' | 'upper'
   layoutMode = "unified", // 'unified' | 'decks'
   berthFormat = "combined", // 'combined' | 'slots'
+  nameScript = "gu",
 }) => {
   // If unified coach view is selected (and not specifically filtering lower/upper only), print reference coach layout
   if (layoutMode === "unified" && deckFilter === "both") {
@@ -833,6 +836,7 @@ export const buildSeatLayoutPrintHTML = ({
       departure,
       user,
       berthFormat,
+      nameScript,
     })
   }
 

@@ -36,6 +36,9 @@ const DEFAULT_SETTINGS = {
   orientation: "auto",
   language: "en",
   showCompanyHeader: true,
+  nameScript: "en",
+  showDeckBreakdown: true,
+  showTotalsSummary: true,
 }
 
 function loadSavedPreferences() {
@@ -52,6 +55,11 @@ function loadSavedPreferences() {
       language: ["en", "hi", "gu"].includes(parsed.language) ? parsed.language : "en",
       showCompanyHeader:
         typeof parsed.showCompanyHeader === "boolean" ? parsed.showCompanyHeader : true,
+      nameScript: ["en", "gu", "both"].includes(parsed.nameScript) ? parsed.nameScript : "en",
+      showDeckBreakdown:
+        typeof parsed.showDeckBreakdown === "boolean" ? parsed.showDeckBreakdown : true,
+      showTotalsSummary:
+        typeof parsed.showTotalsSummary === "boolean" ? parsed.showTotalsSummary : true,
     }
   } catch {
     return DEFAULT_SETTINGS
@@ -66,6 +74,9 @@ function savePreferences(settings) {
       orientation: settings.orientation,
       language: settings.language,
       showCompanyHeader: settings.showCompanyHeader,
+      nameScript: settings.nameScript,
+      showDeckBreakdown: settings.showDeckBreakdown,
+      showTotalsSummary: settings.showTotalsSummary,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   } catch {
@@ -91,6 +102,9 @@ export default function PaymentSheetModal({
   const [orientation, setOrientation] = useState(saved.orientation)
   const [language, setLanguage] = useState(saved.language)
   const [showCompanyHeader, setShowCompanyHeader] = useState(saved.showCompanyHeader)
+  const [nameScript, setNameScript] = useState(saved.nameScript)
+  const [showDeckBreakdown, setShowDeckBreakdown] = useState(saved.showDeckBreakdown)
+  const [showTotalsSummary, setShowTotalsSummary] = useState(saved.showTotalsSummary)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -131,8 +145,20 @@ export default function PaymentSheetModal({
       orientation,
       language,
       showCompanyHeader,
+      nameScript,
+      showDeckBreakdown,
+      showTotalsSummary,
     })
-  }, [columns, sort, orientation, language, showCompanyHeader])
+  }, [
+    columns,
+    sort,
+    orientation,
+    language,
+    showCompanyHeader,
+    nameScript,
+    showDeckBreakdown,
+    showTotalsSummary,
+  ])
 
   // Fetch departure passenger data when selected departure key changes
   useEffect(() => {
@@ -178,6 +204,9 @@ export default function PaymentSheetModal({
     setOrientation(DEFAULT_SETTINGS.orientation)
     setLanguage(DEFAULT_SETTINGS.language)
     setShowCompanyHeader(DEFAULT_SETTINGS.showCompanyHeader)
+    setNameScript(DEFAULT_SETTINGS.nameScript)
+    setShowDeckBreakdown(DEFAULT_SETTINGS.showDeckBreakdown)
+    setShowTotalsSummary(DEFAULT_SETTINGS.showTotalsSummary)
     toast.success("Reset to default columns and settings.")
   }
 
@@ -202,6 +231,9 @@ export default function PaymentSheetModal({
       language,
       showCompanyHeader,
       companyInfo,
+      nameScript,
+      showDeckBreakdown,
+      showTotalsSummary,
     })
   }, [
     isOpen,
@@ -213,6 +245,9 @@ export default function PaymentSheetModal({
     language,
     showCompanyHeader,
     companyInfo,
+    nameScript,
+    showDeckBreakdown,
+    showTotalsSummary,
   ])
 
   // Update preview iframe
@@ -388,13 +423,59 @@ export default function PaymentSheetModal({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-semibold text-ink">Show Company Header</span>
-                <Switch
-                  checked={showCompanyHeader}
-                  onChange={setShowCompanyHeader}
-                  size="sm"
-                />
+              {/* Name Script Selector */}
+              <div>
+                <span className="text-[11px] font-bold text-ink uppercase tracking-wider block mb-1">
+                  Passenger Names
+                </span>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-surface-muted rounded-lg border border-border-subtle text-xs">
+                  {[
+                    { id: "en", label: "English" },
+                    { id: "gu", label: "ગુજરાતી" },
+                    { id: "both", label: "Both" },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setNameScript(s.id)}
+                      className={`py-1 px-1 rounded-md font-bold text-center text-[11px] transition-all cursor-pointer ${
+                        nameScript === s.id
+                          ? "bg-brand text-brand-fg shadow-xs"
+                          : "text-ink-muted hover:text-ink"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-2 pt-1 border-t border-border-subtle">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink">Company Header</span>
+                  <Switch
+                    checked={showCompanyHeader}
+                    onChange={setShowCompanyHeader}
+                    size="sm"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink">🛏️ Upper/Lower Breakdown</span>
+                  <Switch
+                    checked={showDeckBreakdown}
+                    onChange={setShowDeckBreakdown}
+                    size="sm"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink">👥 Totals Summary</span>
+                  <Switch
+                    checked={showTotalsSummary}
+                    onChange={setShowTotalsSummary}
+                    size="sm"
+                  />
+                </div>
               </div>
             </div>
 

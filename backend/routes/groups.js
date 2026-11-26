@@ -379,15 +379,19 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
         advanceReceived += mPaid
       }
 
+      const gDiscount = Number(g.discount || 0)
       totalAmount = Math.round(totalAmount * 100) / 100
       advanceReceived = Math.round(advanceReceived * 100) / 100
-      const balanceDue = Math.max(0, Math.round((totalAmount - advanceReceived) * 100) / 100)
+      const netPayable = Math.max(0, Math.round((totalAmount - gDiscount) * 100) / 100)
+      const balanceDue = Math.max(0, Math.round((netPayable - advanceReceived) * 100) / 100)
 
       return {
         ...g.toObject(),
         memberCount: members.length,
         seatCount,
         totalAmount,
+        discount: gDiscount,
+        netPayable,
         advanceReceived,
         balanceDue,
         lowerPrice,
@@ -594,11 +598,15 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
 
     totalAmount = Math.round(totalAmount * 100) / 100
     advanceReceived = Math.round(advanceReceived * 100) / 100
-    const balanceDue = Math.max(0, Math.round((totalAmount - advanceReceived) * 100) / 100)
+    const groupDiscount = Math.max(0, Number(group.discount || 0))
+    const netPayable = Math.max(0, Math.round((totalAmount - groupDiscount) * 100) / 100)
+    const balanceDue = Math.max(0, Math.round((netPayable - advanceReceived) * 100) / 100)
 
     res.json({
       group: {
         ...group.toObject(),
+        discount: groupDiscount,
+        netPayable,
         lowerPrice,
         upperPrice,
       },
@@ -611,6 +619,8 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
         memberCount: members.length,
         seatCount,
         totalAmount,
+        discount: groupDiscount,
+        netPayable,
         advanceReceived,
         balanceDue,
         lowerPrice,
@@ -622,7 +632,7 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
   }
 })
 
-// PATCH /api/groups/:id - Update group metadata
+// PATCH /api/groups/:id - Update group metadata & discount
 router.patch("/:id", verifyToken, groupWriteLimiter, async (req, res) => {
   try {
     const group = await BookingGroup.findOne({ _id: req.params.id, userId: req.user.id })
@@ -630,7 +640,7 @@ router.patch("/:id", verifyToken, groupWriteLimiter, async (req, res) => {
       return res.status(404).json({ message: "Group not found." })
     }
 
-    const { name, leaderName, leaderPhone, note } = req.body
+    const { name, leaderName, leaderPhone, note, discount } = req.body
     if (name !== undefined) {
       const cleanName = String(name).trim()
       if (!cleanName) return res.status(400).json({ message: "Group name cannot be empty." })
@@ -648,6 +658,9 @@ router.patch("/:id", verifyToken, groupWriteLimiter, async (req, res) => {
     }
     if (note !== undefined) {
       group.note = String(note).slice(0, 200)
+    }
+    if (discount !== undefined) {
+      group.discount = Math.max(0, Number(discount) || 0)
     }
 
     await group.save()

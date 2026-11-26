@@ -3,6 +3,7 @@ import { isValidBusType, STANDARD_BUS_TYPES } from "../../shared/seatLayouts.js"
 
 const passengerSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  nameGu: { type: String, default: "" },
   age: { type: Number, required: true, min: 1 },
   gender: { type: String, required: true },
   city: { type: String, required: true },
