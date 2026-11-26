@@ -18,6 +18,26 @@ export const DEFAULT_FONT_STACK =
   '"Noto Sans Gujarati", "Noto Sans Devanagari", "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 
 /**
+ * Converts a base64 dataURL to a Blob instance
+ * @param {string} dataUrl
+ * @returns {Blob}
+ */
+export function dataUrlToBlob(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== "string") {
+    throw new Error("Invalid dataURL provided")
+  }
+  const parts = dataUrl.split(",")
+  const mime = parts[0].match(/:(.*?);/)?.[1] || "image/png"
+  const bstr = atob(parts[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new Blob([u8arr], { type: mime })
+}
+
+/**
  * Normalizes Indian phone number to 12 digits (with 91 country code) or null if invalid.
  * Rules:
  * - 10 digits: prefix 91
@@ -202,21 +222,9 @@ function formatDisplayDate(dateVal) {
 }
 
 /**
- * Pure Canvas 2D seat map generator
- *
- * @param {Object} options
- * @param {string} [options.layoutKey]
- * @param {string} [options.busType]
- * @param {Object} [options.departureInfo]
- * @param {Object} [options.booking]
- * @param {string[]} [options.sharedSeatIds=[]] - The specific seat IDs to highlight for this passenger
- * @param {Object} [options.occupiedSeatsMap={}] - Map of seatId -> { status: 'booked'|'held'|'blocked' }
- * @param {Object} [options.operatorInfo={}]
- * @param {boolean} [options.showBalance=false]
- * @param {string} [options.lang='en']
- * @returns {Promise<Blob>}
+ * Pure Canvas 2D seat map generator (Internal implementation)
  */
-export async function generateSeatImageBlob({
+async function generateSeatImageBlobInternal({
   layoutKey,
   busType,
   departureInfo = {},
@@ -227,15 +235,15 @@ export async function generateSeatImageBlob({
   showBalance = false,
   lang = "en",
 }) {
-  // Wait for web fonts if document.fonts is available (with safety timeout)
+  // Wait for web fonts if document.fonts is available (with safety timeout of 1.5s)
   if (typeof document !== "undefined" && document.fonts?.ready && document.fonts.status !== "loaded") {
     try {
       await Promise.race([
         document.fonts.ready,
-        new Promise((resolve) => setTimeout(resolve, 150)),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
       ])
     } catch {
-      // Non-blocking font wait fallback
+      // Non-blocking font wait fallback: proceed with system fonts
     }
   }
 
@@ -893,20 +901,115 @@ export async function generateSeatImageBlob({
   }
 
   // ==========================================
-  // Export to Blob
+  // Export to Blob with toDataURL fallback & safety
   // ==========================================
   return new Promise((resolve, reject) => {
-    if (canvas.toBlob) {
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob)
-        else reject(new Error("Canvas toBlob failed"))
-      }, "image/png")
-    } else if (canvas.convertToBlob) {
-      canvas.convertToBlob({ type: "image/png" }).then(resolve, reject)
-    } else {
-      reject(new Error("Canvas export not supported in this runtime"))
+    let settled = false
+
+    // 4-second safety fallback: if toBlob hangs, fall back to toDataURL
+    const fallbackTimer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      try {
+        if (canvas.toDataURL) {
+          const dataUrl = canvas.toDataURL("image/png")
+          resolve(dataUrlToBlob(dataUrl))
+        } else {
+          reject(new Error("Canvas blob export timed out (4s)"))
+        }
+      } catch (err) {
+        reject(err)
+      }
+    }, 4000)
+
+    try {
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (settled) return
+          settled = true
+          clearTimeout(fallbackTimer)
+          if (blob) {
+            resolve(blob)
+          } else {
+            // toBlob produced null - fallback immediately to toDataURL
+            try {
+              if (canvas.toDataURL) {
+                const dataUrl = canvas.toDataURL("image/png")
+                resolve(dataUrlToBlob(dataUrl))
+              } else {
+                reject(new Error("Canvas toBlob returned null and toDataURL is unavailable"))
+              }
+            } catch (fallbackErr) {
+              reject(fallbackErr)
+            }
+          }
+        }, "image/png")
+      } else if (canvas.convertToBlob) {
+        canvas
+          .convertToBlob({ type: "image/png" })
+          .then((b) => {
+            if (settled) return
+            settled = true
+            clearTimeout(fallbackTimer)
+            resolve(b)
+          })
+          .catch((e) => {
+            if (settled) return
+            settled = true
+            clearTimeout(fallbackTimer)
+            try {
+              if (canvas.toDataURL) {
+                const dataUrl = canvas.toDataURL("image/png")
+                resolve(dataUrlToBlob(dataUrl))
+              } else {
+                reject(e)
+              }
+            } catch {
+              reject(e)
+            }
+          })
+      } else if (canvas.toDataURL) {
+        settled = true
+        clearTimeout(fallbackTimer)
+        const dataUrl = canvas.toDataURL("image/png")
+        resolve(dataUrlToBlob(dataUrl))
+      } else {
+        settled = true
+        clearTimeout(fallbackTimer)
+        reject(new Error("Canvas export not supported in this runtime"))
+      }
+    } catch (err) {
+      if (!settled) {
+        settled = true
+        clearTimeout(fallbackTimer)
+        try {
+          if (canvas.toDataURL) {
+            const dataUrl = canvas.toDataURL("image/png")
+            resolve(dataUrlToBlob(dataUrl))
+          } else {
+            reject(err)
+          }
+        } catch {
+          reject(err)
+        }
+      }
     }
   })
+}
+
+/**
+ * Pure Canvas 2D seat map generator with 8-second watchdog timer
+ *
+ * @param {Object} options
+ * @returns {Promise<Blob>}
+ */
+export async function generateSeatImageBlob(options = {}) {
+  return Promise.race([
+    generateSeatImageBlobInternal(options),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Seat image generation timed out (8s watchdog)")), 8000),
+    ),
+  ])
 }
 
 /**

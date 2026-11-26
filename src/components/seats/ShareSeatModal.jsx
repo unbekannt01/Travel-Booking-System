@@ -74,6 +74,8 @@ export default function ShareSeatModal({
   const [imageBlob, setImageBlob] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [generating, setGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState(null)
+  const [retryKey, setRetryKey] = useState(0)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
   const [customTemplate, setCustomTemplate] = useState("")
@@ -218,8 +220,10 @@ export default function ShareSeatModal({
   useEffect(() => {
     if (!isOpen) return
 
+    isMountedRef.current = true
     const currentGenId = ++generationCountRef.current
     setGenerating(true)
+    setGenerationError(null)
 
     const timer = setTimeout(async () => {
       try {
@@ -238,6 +242,7 @@ export default function ShareSeatModal({
         if (!isMountedRef.current || currentGenId !== generationCountRef.current) return
 
         setImageBlob(blob)
+        setGenerationError(null)
         const url = URL.createObjectURL(blob)
         setPreviewUrl((prevUrl) => {
           if (prevUrl) URL.revokeObjectURL(prevUrl)
@@ -246,6 +251,7 @@ export default function ShareSeatModal({
       } catch (err) {
         if (isMountedRef.current && currentGenId === generationCountRef.current) {
           console.error("Failed to generate seat image:", err)
+          setGenerationError(err?.message || "Failed to generate seat preview image")
           toast.error("Failed to generate seat preview image")
         }
       } finally {
@@ -272,6 +278,7 @@ export default function ShareSeatModal({
     occupiedSeatsKey,
     showBalance,
     lang,
+    retryKey,
   ])
 
   // Clean up object URL on unmount
@@ -334,24 +341,34 @@ export default function ShareSeatModal({
   // Helper to ensure blob is available (generates on-demand if not ready yet)
   const getOrGenerateBlob = async () => {
     if (imageBlob) return imageBlob
-    const blob = await generateSeatImageBlob({
-      layoutKey,
-      busType,
-      departureInfo,
-      booking,
-      sharedSeatIds,
-      occupiedSeatsMap,
-      operatorInfo,
-      showBalance,
-      lang,
-    })
-    setImageBlob(blob)
-    const url = URL.createObjectURL(blob)
-    setPreviewUrl((prevUrl) => {
-      if (prevUrl) URL.revokeObjectURL(prevUrl)
-      return url
-    })
-    return blob
+    setGenerating(true)
+    setGenerationError(null)
+    try {
+      const blob = await generateSeatImageBlob({
+        layoutKey,
+        busType,
+        departureInfo,
+        booking,
+        sharedSeatIds,
+        occupiedSeatsMap,
+        operatorInfo,
+        showBalance,
+        lang,
+      })
+      setImageBlob(blob)
+      setGenerationError(null)
+      const url = URL.createObjectURL(blob)
+      setPreviewUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl)
+        return url
+      })
+      return blob
+    } catch (err) {
+      setGenerationError(err?.message || "Failed to generate seat image")
+      throw err
+    } finally {
+      setGenerating(false)
+    }
   }
 
   // Action 1: Web Share API
@@ -365,7 +382,7 @@ export default function ShareSeatModal({
         filename,
         { type: "image/png" },
       )
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: "Seat Confirmation",
           text: messageText,
@@ -373,9 +390,9 @@ export default function ShareSeatModal({
         })
         toast.success("Shared successfully via system share!")
       } else {
-        // Fallback: download and open chat
+        // Fallback: download and open chat with clear toast
         downloadSeatImage(blob, filename)
-        toast.info("Image downloaded. Opening WhatsApp chat...")
+        toast.info("Image downloaded (system file share not supported). Opening WhatsApp...")
         handleOpenWhatsApp()
       }
     } catch (err) {
@@ -612,6 +629,11 @@ export default function ShareSeatModal({
                   Generating canvas...
                 </span>
               )}
+              {generationError && !previewUrl && !generating && (
+                <span className="text-xs text-rose-600 font-medium">
+                  Generation failed
+                </span>
+              )}
             </div>
 
             <div className="relative flex-1 min-h-[360px] max-h-[500px] rounded-2xl border-2 border-border-subtle bg-surface-muted/30 p-2 overflow-auto flex items-center justify-center shadow-inner">
@@ -621,6 +643,23 @@ export default function ShareSeatModal({
                   alt="Seat Confirmation Card Preview"
                   className="max-w-full h-auto max-h-[460px] rounded-xl shadow-md object-contain border border-border-subtle transition-opacity duration-200"
                 />
+              ) : generationError ? (
+                <div className="text-center text-xs p-6 space-y-3">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+                    <AlertCircle size={20} />
+                  </div>
+                  <p className="font-semibold text-rose-600 dark:text-rose-400">{generationError}</p>
+                  <p className="text-ink-muted text-[11px]">Could not generate the canvas seat card preview.</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => setRetryKey((k) => k + 1)}
+                    icon={<RotateCcw size={13} />}
+                  >
+                    Retry Generation
+                  </Button>
+                </div>
               ) : (
                 <div className="text-center text-ink-muted text-xs p-6 space-y-2">
                   <div className="inline-block animate-spin text-brand">
