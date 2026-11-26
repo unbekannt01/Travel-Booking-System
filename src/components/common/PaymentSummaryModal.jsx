@@ -40,7 +40,7 @@ export default function PaymentSummaryModal({
 
   const [language, setLanguage] = useState(() => user?.documentLanguage || "en")
   const [nameScript, setNameScript] = useState("en") // 'en' | 'gu' | 'both'
-  const [showDeckBreakdown, setShowDeckBreakdown] = useState(true)
+  const [showDeckBreakdown, setShowDeckBreakdown] = useState(false)
   const [showTotalsSummary, setShowTotalsSummary] = useState(true)
 
   const initialDiscount = Number(group?.discount || booking?.discount || 0)

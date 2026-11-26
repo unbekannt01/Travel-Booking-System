@@ -9,7 +9,12 @@ import { getDayBounds } from "../../shared/businessLogic.js"
  */
 export function parseDepartureKey(rawKey) {
   if (!rawKey || typeof rawKey !== "string") return null
-  const decoded = decodeURIComponent(rawKey)
+  let decoded = rawKey
+  try {
+    decoded = decodeURIComponent(rawKey)
+  } catch {
+    decoded = rawKey
+  }
   const parts = decoded.split("___")
   if (parts.length < 3) return null
 

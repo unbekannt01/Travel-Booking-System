@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS = {
   language: "en",
   showCompanyHeader: true,
   nameScript: "en",
-  showDeckBreakdown: true,
+  showDeckBreakdown: false,
   showTotalsSummary: true,
 }
 
@@ -57,7 +57,7 @@ function loadSavedPreferences() {
         typeof parsed.showCompanyHeader === "boolean" ? parsed.showCompanyHeader : true,
       nameScript: ["en", "gu", "both"].includes(parsed.nameScript) ? parsed.nameScript : "en",
       showDeckBreakdown:
-        typeof parsed.showDeckBreakdown === "boolean" ? parsed.showDeckBreakdown : true,
+        typeof parsed.showDeckBreakdown === "boolean" ? parsed.showDeckBreakdown : false,
       showTotalsSummary:
         typeof parsed.showTotalsSummary === "boolean" ? parsed.showTotalsSummary : true,
     }
@@ -456,6 +456,7 @@ export default function PaymentSheetModal({
                   <span className="text-xs font-semibold text-ink">Company Header</span>
                   <Switch
                     checked={showCompanyHeader}
+                    onCheckedChange={setShowCompanyHeader}
                     onChange={setShowCompanyHeader}
                     size="sm"
                   />
@@ -464,6 +465,7 @@ export default function PaymentSheetModal({
                   <span className="text-xs font-semibold text-ink">🛏️ Upper/Lower Breakdown</span>
                   <Switch
                     checked={showDeckBreakdown}
+                    onCheckedChange={setShowDeckBreakdown}
                     onChange={setShowDeckBreakdown}
                     size="sm"
                   />
@@ -472,6 +474,7 @@ export default function PaymentSheetModal({
                   <span className="text-xs font-semibold text-ink">👥 Totals Summary</span>
                   <Switch
                     checked={showTotalsSummary}
+                    onCheckedChange={setShowTotalsSummary}
                     onChange={setShowTotalsSummary}
                     size="sm"
                   />

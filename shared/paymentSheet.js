@@ -485,17 +485,19 @@ export function renderPaymentSheetHtml({
   } else {
     for (const cluster of clusters) {
       const isGroup = cluster.type === "group"
+      const clusterFareSum = cluster.passengers.reduce((s, p) => s + Number(p.fare || 0), 0)
+      const clusterPaidSum = cluster.passengers.reduce(
+        (s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0),
+        0,
+      )
+      const clusterDueSum = Math.max(0, clusterFareSum - clusterPaidSum)
 
       if (isGroup) {
-        // Group sub-header row spanning ALL columns
+        // Group sub-header row spanning ALL columns: Group name, pax, Total Fare, Advance Paid, Remaining Balance
         bodyRows.push(
-          `<tr class="group-header-row"><td colspan="${activeCols.length}" class="group-sub-header">👥 ${escapeHtml(t.groupLabel)}: ${escapeHtml(cluster.groupName)} (${cluster.passengers.length} pax)</td></tr>`,
+          `<tr class="group-header-row"><td colspan="${activeCols.length}" class="group-sub-header">👥 ${escapeHtml(t.groupLabel)}: ${escapeHtml(cluster.groupName)} (${cluster.passengers.length} pax) • Total Fare: ₹${formatRupees(clusterFareSum)} • Advance Paid: ₹${formatRupees(clusterPaidSum)} • Remaining Balance: ₹${formatRupees(clusterDueSum)}</td></tr>`,
         )
       }
-
-      let clusterPaidSum = 0
-      let clusterFareSum = 0
-      let clusterDueSum = 0
 
       for (const p of cluster.passengers) {
         const fare = Number(p.fare || 0)
@@ -508,10 +510,6 @@ export function renderPaymentSheetHtml({
               : Math.max(0, fare - paid),
         )
         const hasDue = balance > 0
-
-        clusterFareSum += fare
-        clusterPaidSum += paid
-        clusterDueSum += balance
 
         const cells = activeCols.map((colId) => {
           switch (colId) {
@@ -538,14 +536,14 @@ export function renderPaymentSheetHtml({
             case "group":
               return `<td class="text-left text-xs cell-wrap">${escapeHtml(cluster.groupName || p.groupName || "—")}</td>`
             case "paid": {
-              if (isGroup && p.paid === undefined && p.advanceReceived === undefined) {
+              if (isGroup) {
                 return `<td class="text-center text-muted font-bold">—</td>`
               }
               const marker = !hasBalanceColumn && hasDue ? ` <strong class="due-star" title="Due ₹${formatRupees(balance)}">*</strong>` : ""
               return `<td class="text-right ${hasDue && !hasBalanceColumn ? "font-bold text-due" : "font-medium"}">₹${formatRupees(paid)}${marker}</td>`
             }
             case "balance": {
-              if (isGroup && p.balance === undefined && p.balanceDue === undefined) {
+              if (isGroup) {
                 return `<td class="text-center text-muted font-bold">—</td>`
               }
               if (hasDue) {
@@ -554,6 +552,9 @@ export function renderPaymentSheetHtml({
               return `<td class="text-right font-medium text-paid">₹0</td>`
             }
             case "fare":
+              if (isGroup) {
+                return `<td class="text-center text-muted font-bold">—</td>`
+              }
               return `<td class="text-right font-medium">₹${formatRupees(fare)}</td>`
             case "pickup":
               return `<td class="text-left text-xs cell-wrap">${escapeHtml(p.pickup || p.pickupPoint || "—")}</td>`
@@ -606,18 +607,17 @@ export function renderPaymentSheetHtml({
         if (hasBothDecks && showDeckBreakdown) {
           const gLowerFare = gLowerPax.reduce((s, p) => s + Number(p.fare || 0), 0)
           const gLowerPaid = gLowerPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
-          const gLowerDue = gLowerPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
+          const gLowerDue = Math.max(0, gLowerFare - gLowerPaid)
 
           const gUpperFare = gUpperPax.reduce((s, p) => s + Number(p.fare || 0), 0)
           const gUpperPaid = gUpperPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
-          const gUpperDue = gUpperPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
+          const gUpperDue = Math.max(0, gUpperFare - gUpperPaid)
 
           bodyRows.push(renderSubtotalRow(`🛏️ Lower Berths (${gLowerPax.length} pax)`, gLowerPaid, gLowerDue, gLowerFare, `${gLowerPax.length} LOWER`))
           bodyRows.push(renderSubtotalRow(`🛏️ Upper Berths (${gUpperPax.length} pax)`, gUpperPaid, gUpperDue, gUpperFare, `${gUpperPax.length} UPPER`))
-          bodyRows.push(renderSubtotalRow(`👥 ${t.groupTotal} (${cluster.passengers.length} pax)`, clusterPaidSum, clusterDueSum, clusterFareSum, `${cluster.passengers.length} PAX`, true))
+          bodyRows.push(renderSubtotalRow(`👥 ${t.groupTotal} (${cluster.passengers.length} pax) — Fare: ₹${formatRupees(clusterFareSum)}`, clusterPaidSum, clusterDueSum, clusterFareSum, `Due: ₹${formatRupees(clusterDueSum)}`, true))
         } else {
-          const deckLabel = gUpperPax.length > 0 ? " (UPPER)" : gLowerPax.length > 0 ? " (LOWER)" : ""
-          bodyRows.push(renderSubtotalRow(`${t.groupTotal} (${cluster.passengers.length} pax${deckLabel})`, clusterPaidSum, clusterDueSum, clusterFareSum, `${cluster.passengers.length} PAX`, true))
+          bodyRows.push(renderSubtotalRow(`👥 ${t.groupTotal} (${cluster.passengers.length} pax) — Fare: ₹${formatRupees(clusterFareSum)}`, clusterPaidSum, clusterDueSum, clusterFareSum, `Due: ₹${formatRupees(clusterDueSum)}`, true))
         }
       }
     }
@@ -657,9 +657,9 @@ export function renderPaymentSheetHtml({
     if (hasDecks && showDeckBreakdown) {
       tfootHtml += renderTfootRow(`🛏️ Lower Berths (${depLowerPax.length} pax)`, depLowerPaid, depLowerDue, depLowerFare, `${depLowerPax.length} LOWER`)
       tfootHtml += renderTfootRow(`🛏️ Upper Berths (${depUpperPax.length} pax)`, depUpperPaid, depUpperDue, depUpperFare, `${depUpperPax.length} UPPER`)
-      tfootHtml += renderTfootRow(`👥 ${t.totals} (${sortedPax.length} pax)`, totalPaidSum, totalDueSum, totalFareSum, `TOTAL PAX: ${sortedPax.length}`, true)
+      tfootHtml += renderTfootRow(`👥 ${t.totals} (${sortedPax.length} pax) — Fare: ₹${formatRupees(totalFareSum)}`, totalPaidSum, totalDueSum, totalFareSum, `Total Due: ₹${formatRupees(totalDueSum)}`, true)
     } else {
-      tfootHtml = renderTfootRow(`${t.totals}`, totalPaidSum, totalDueSum, totalFareSum, `TOTAL PAX: ${sortedPax.length}`, true)
+      tfootHtml = renderTfootRow(`👥 ${t.totals} (${sortedPax.length} pax) — Fare: ₹${formatRupees(totalFareSum)}`, totalPaidSum, totalDueSum, totalFareSum, `Total Due: ₹${formatRupees(totalDueSum)}`, true)
     }
   }
 

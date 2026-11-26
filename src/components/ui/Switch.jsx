@@ -19,6 +19,7 @@ export const Switch = forwardRef(function Switch(
   {
     checked = false,
     onCheckedChange,
+    onChange,
     disabled = false,
     label,
     description,
@@ -34,9 +35,11 @@ export const Switch = forwardRef(function Switch(
   const labelId = `${switchId}-label`
   const descId = `${switchId}-desc`
 
-  const handleClick = () => {
+  const handleClick = (e) => {
     if (disabled) return
-    if (onCheckedChange) onCheckedChange(!checked)
+    const nextChecked = !checked
+    if (typeof onCheckedChange === "function") onCheckedChange(nextChecked)
+    if (typeof onChange === "function") onChange(nextChecked, e)
   }
 
   return (

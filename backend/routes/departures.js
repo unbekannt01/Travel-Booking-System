@@ -4,6 +4,8 @@ import { z } from "zod"
 import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
 import Payment from "../models/Payment.js"
+import GroupPayment from "../models/GroupPayment.js"
+import BookingGroup from "../models/BookingGroup.js"
 import User from "../models/User.js"
 import Tour from "../models/Tour.js"
 import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
@@ -159,7 +161,7 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
     const shouldDecryptAadhaar =
       wantsAadhaar && (columnsList.length === 0 || columnsList.includes("aadhaar"))
 
-    // Reconcile payments from Payment ledger collection (Rule 2: single source of truth)
+    // Reconcile payments from Payment ledger collection & GroupPayment (Rule 2: single source of truth)
     const bookingIds = bookings.map((b) => b._id)
     const ledgerPayments = await Payment.find({
       userId: req.user.id,
@@ -167,11 +169,35 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
       isVoid: false,
     })
 
+    const groupIds = bookings.map((b) => b.groupId).filter(Boolean)
+    const groupPayments = await GroupPayment.find({
+      userId: req.user.id,
+      status: "recorded",
+      $or: [
+        { "allocations.bookingId": { $in: bookingIds } },
+        { groupId: { $in: groupIds } },
+      ],
+    })
+
     const paidByBooking = new Map()
     for (const pay of ledgerPayments) {
       const bId = pay.bookingId.toString()
       const amt = pay.type === "refund" ? -pay.amount : pay.amount
       paidByBooking.set(bId, (paidByBooking.get(bId) || 0) + amt)
+    }
+
+    for (const gp of groupPayments) {
+      for (const alloc of gp.allocations || []) {
+        if (!alloc.bookingId) continue
+        const bId = alloc.bookingId.toString()
+        const amt = Number(alloc.amount || (alloc.amountPaise ? alloc.amountPaise / 100 : 0) || 0)
+        const alreadyInLedger = ledgerPayments.some(
+          (lp) => lp._id && alloc.paymentId && lp._id.toString() === alloc.paymentId.toString(),
+        )
+        if (!alreadyInLedger) {
+          paidByBooking.set(bId, (paidByBooking.get(bId) || 0) + amt)
+        }
+      }
     }
 
     // Fetch Tour & DepartureSeatConfig to resolve Lower & Upper berth pricing
@@ -207,13 +233,27 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
     for (const b of bookings) {
       const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
       const bTotal = Number(b.totalAmount || 0)
-      const bPaid = isCancelled
+      const ledgerPaid = paidByBooking.get(b._id.toString()) || 0
+      let bPaid = isCancelled
         ? 0
-        : paidByBooking.has(b._id.toString())
-          ? Math.max(0, paidByBooking.get(b._id.toString()))
-          : (b.advanceReceived !== undefined && b.advanceReceived !== null
-            ? Number(b.advanceReceived || 0)
+        : ledgerPaid > 0
+          ? ledgerPaid
+          : (b.advanceReceived !== undefined && b.advanceReceived !== null && Number(b.advanceReceived) > 0
+            ? Number(b.advanceReceived)
             : (Array.isArray(b.payments) ? b.payments.filter((p) => !p.isVoid).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0))
+
+      if (!isCancelled && bPaid === 0 && b.groupId) {
+        const gpForGroup = groupPayments.filter(
+          (gp) => gp.groupId && gp.groupId.toString() === b.groupId.toString(),
+        )
+        const gpSum = gpForGroup.reduce(
+          (sum, gp) => sum + (Number(gp.totalAmount) || (gp.totalPaise ? gp.totalPaise / 100 : 0) || 0),
+          0,
+        )
+        if (gpSum > 0) {
+          bPaid = Math.min(bTotal, gpSum)
+        }
+      }
 
       const balance = Math.max(0, bTotal - bPaid)
       const isPaid = !isCancelled && (b.isPaid || balance === 0)

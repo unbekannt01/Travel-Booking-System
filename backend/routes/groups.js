@@ -250,10 +250,11 @@ router.post("/", verifyToken, groupWriteLimiter, async (req, res) => {
   }
 })
 
-// GET /api/departures/:key/groups - List groups for a specific departure with authoritative totals
-router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) => {
+// GET /api/groups/departure/:key - List groups for a specific departure with authoritative totals
+router.get(["/departure/:key", "/departure/:key(*)"], verifyToken, groupReadLimiter, async (req, res) => {
   try {
-    const parsed = parseDepartureKey(req.params.key)
+    const rawKey = req.params.key || req.params[0] || ""
+    const parsed = parseDepartureKey(rawKey)
     if (!parsed) {
       return res.status(400).json({ message: "Invalid departure key format." })
     }
@@ -264,53 +265,61 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       userId: req.user.id,
       tourName,
       journeyDate: { $gte: start, $lte: end },
-      ...busCondition,
       status: "active",
     }).sort({ createdAt: -1 })
 
+    // Find all bookings for this departure to guarantee every group member booking is captured
+    const departureBookings = await Booking.find({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+      status: { $nin: ["Cancelled", "cancelled"] },
+      deletedAt: null,
+      ...busCondition,
+    })
+
+    // If any booking has a groupId not in groups, fetch those groups too
+    const existingGroupIds = departureBookings
+      .map((b) => b.groupId)
+      .filter((id) => id && !groups.some((g) => g._id.toString() === id.toString()))
+
+    if (existingGroupIds.length > 0) {
+      const extraGroups = await BookingGroup.find({
+        _id: { $in: existingGroupIds },
+        userId: req.user.id,
+        status: "active",
+      })
+      groups.push(...extraGroups)
+    }
+
     // Lazily bridge multi-passenger bookings (2+ pax or with groupName) into real BookingGroup records idempotently
     try {
-      const standaloneMultiPax = await Booking.find({
-        userId: req.user.id,
-        tourName,
-        journeyDate: { $gte: start, $lte: end },
-        ...busCondition,
-        deletedAt: null,
-        $and: [
-          { $or: [{ groupId: null }, { groupId: { $exists: false } }] },
-          {
-            $or: [
-              { "passengers.1": { $exists: true } },
-              { groupName: { $exists: true, $nin: ["", null] } },
-            ],
-          },
-        ],
-      })
+      for (const b of departureBookings) {
+        if (!b.groupId && ((b.passengers && b.passengers.length > 1) || (b.groupName && b.groupName.trim()))) {
+          const pCount = b.passengers?.length || 1
+          const leadName = b.passengers?.[0]?.name || b.contactName || "Traveler"
+          const grpName = b.groupName?.trim() || `${leadName} + ${pCount - 1}`
 
-      for (const b of standaloneMultiPax) {
-        const pCount = b.passengers?.length || 1
-        const leadName = b.passengers?.[0]?.name || b.contactName || "Traveler"
-        const grpName = b.groupName?.trim() || `${leadName} + ${pCount - 1}`
-
-        let targetGroup = groups.find((g) => g.name.toLowerCase() === grpName.toLowerCase())
-        if (!targetGroup) {
-          targetGroup = new BookingGroup({
-            userId: req.user.id,
-            name: grpName,
-            leaderName: leadName,
-            leaderPhone: b.contactPhone || "",
-            tourName: b.tourName,
-            journeyDate: b.journeyDate,
-            busType: b.busType || "2x1 Sleeper Luxury",
-            note: "Auto group from multi-passenger booking",
-            status: "active",
-          })
-          await targetGroup.save()
-          groups.push(targetGroup)
+          let targetGroup = groups.find((g) => g.name.toLowerCase() === grpName.toLowerCase())
+          if (!targetGroup) {
+            targetGroup = new BookingGroup({
+              userId: req.user.id,
+              name: grpName,
+              leaderName: leadName,
+              leaderPhone: b.contactPhone || "",
+              tourName: b.tourName,
+              journeyDate: b.journeyDate,
+              busType: b.busType || busType || "2x1 Sleeper Luxury",
+              note: "Auto group from multi-passenger booking",
+              status: "active",
+            })
+            await targetGroup.save()
+            groups.push(targetGroup)
+          }
+          b.groupId = targetGroup._id
+          if (!b.groupName) b.groupName = grpName
+          await b.save()
         }
-        b.groupId = targetGroup._id
-        if (!b.groupName) b.groupName = grpName
-        await b.save()
       }
     } catch (lazyErr) {
       console.warn("[GroupsDeparture] Non-blocking lazy group bridging error:", lazyErr.message)
@@ -377,6 +386,14 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
             ? Number(m.advanceReceived || 0)
             : (Array.isArray(m.payments) ? m.payments.filter((p) => !p.isVoid).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0))
         advanceReceived += mPaid
+      }
+
+      const directGpSum = payments.reduce(
+        (sum, p) => sum + (Number(p.totalAmount) || (p.totalPaise ? p.totalPaise / 100 : 0) || 0),
+        0,
+      )
+      if (advanceReceived === 0 && directGpSum > 0) {
+        advanceReceived = directGpSum
       }
 
       const gDiscount = Number(g.discount || 0)
