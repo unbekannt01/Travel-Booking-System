@@ -6,6 +6,8 @@ import Booking from "../models/Booking.js"
 import Payment from "../models/Payment.js"
 import GroupPayment from "../models/GroupPayment.js"
 import User from "../models/User.js"
+import Tour from "../models/Tour.js"
+import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
 import verifyToken from "../middleware/auth.js"
 import { assertBooksOpen } from "../utils/booksLock.js"
 import { getNextReceiptNo, syncBookingPayments } from "./payments.js"
@@ -19,7 +21,7 @@ import {
   calculateEqualAllocation,
   validateManualAllocation,
 } from "../../shared/groupPayments.js"
-import { getSeatLayout, layoutKeyForBusType, isValidBusType, normalizeBusType } from "../../shared/seatLayouts.js"
+import { getSeatLayout, layoutKeyForBusType, isValidBusType, normalizeBusType, isUpperBerthSeat } from "../../shared/seatLayouts.js"
 import { validateIndianPhone, getDayBounds } from "../../shared/businessLogic.js"
 
 const router = express.Router()
@@ -345,6 +347,19 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
       paidByMemberBooking.set(bId, (paidByMemberBooking.get(bId) || 0) + amt)
     }
 
+    const tourDoc =
+      (await Tour.findOne({ userId: req.user.id, name: tourName })) ||
+      (await Tour.findOne({ name: tourName }))
+
+    const seatConfig = await DepartureSeatConfig.findOne({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+    })
+
+    const lowerPrice = seatConfig?.fares?.lower || tourDoc?.lowerPrice || 0
+    const upperPrice = seatConfig?.fares?.upper || tourDoc?.upperPrice || 0
+
     const enrichedGroups = groups.map((g) => {
       const members = memberBookings.filter((b) => b.groupId && b.groupId.toString() === g._id.toString())
       const payments = groupPayments.filter((p) => p.groupId && p.groupId.toString() === g._id.toString())
@@ -375,6 +390,8 @@ router.get("/departure/:key", verifyToken, groupReadLimiter, async (req, res) =>
         totalAmount,
         advanceReceived,
         balanceDue,
+        lowerPrice,
+        upperPrice,
         groupPaymentCount: payments.length,
       }
     })
@@ -431,6 +448,20 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
       return res.status(404).json({ message: "Group not found." })
     }
 
+    const { start, end } = getDayBounds(group.journeyDate)
+    const tourDoc =
+      (await Tour.findOne({ userId: req.user.id, name: group.tourName })) ||
+      (await Tour.findOne({ name: group.tourName }))
+
+    const seatConfig = await DepartureSeatConfig.findOne({
+      userId: req.user.id,
+      tourName: group.tourName,
+      journeyDate: { $gte: start, $lte: end },
+    })
+
+    const lowerPrice = seatConfig?.fares?.lower || tourDoc?.lowerPrice || 0
+    const upperPrice = seatConfig?.fares?.upper || tourDoc?.upperPrice || 0
+
     const members = await Booking.find({
       userId: req.user.id,
       groupId: group._id,
@@ -473,6 +504,87 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
       masked.balanceDue = Math.max(0, Math.round((mTotal - mPaid) * 100) / 100)
       masked.isPaid = masked.balanceDue === 0 && mTotal > 0
       masked.payments = ledgerPayments.filter((p) => p.bookingId.toString() === m._id.toString())
+      masked.lowerPrice = lowerPrice
+      masked.upperPrice = upperPrice
+
+      // Enrich individual passengers with Upper/Lower berth pricing and proportional payment
+      const pList = masked.passengers || []
+      const pCount = Math.max(1, pList.length)
+      const expectedFares = pList.map((p) => {
+        if (p.fare !== undefined && p.fare !== null && Number(p.fare) > 0) {
+          return Number(p.fare)
+        }
+        const isUp = isUpperBerthSeat(p.seatId)
+        if (isUp && upperPrice > 0) return upperPrice
+        if (!isUp && lowerPrice > 0) return lowerPrice
+        return 0
+      })
+      const sumExpected = expectedFares.reduce((a, c) => a + c, 0)
+      let pFares = []
+
+      if (sumExpected > 0 && sumExpected === mTotal) {
+        pFares = expectedFares
+      } else if (sumExpected > 0 && mTotal > 0) {
+        let assignedSum = 0
+        pFares = expectedFares.map((f) => {
+          const scaled = Math.floor((mTotal * f) / sumExpected)
+          assignedSum += scaled
+          return scaled
+        })
+        let rem = mTotal - assignedSum
+        let idx = 0
+        while (rem > 0 && idx < pFares.length * 2) {
+          pFares[idx % pFares.length] += 1
+          rem -= 1
+          idx++
+        }
+      } else {
+        const baseFare = Math.floor(mTotal / pCount)
+        let fareRemainder = mTotal - (baseFare * pCount)
+        pFares = pList.map(() => {
+          const f = baseFare + (fareRemainder > 0 ? 1 : 0)
+          if (fareRemainder > 0) fareRemainder--
+          return f
+        })
+      }
+
+      let pPaids = []
+      if (mPaid >= mTotal && mTotal > 0) {
+        pPaids = pFares.slice()
+      } else if (mPaid > 0 && mTotal > 0) {
+        let paidSum = 0
+        pPaids = pFares.map((f) => {
+          const pd = Math.min(f, Math.floor((mPaid * f) / mTotal))
+          paidSum += pd
+          return pd
+        })
+        let remPaid = mPaid - paidSum
+        let pIdx = 0
+        while (remPaid > 0 && pIdx < pPaids.length * 2) {
+          const currIdx = pIdx % pPaids.length
+          if (pPaids[currIdx] < pFares[currIdx]) {
+            pPaids[currIdx] += 1
+            remPaid -= 1
+          }
+          pIdx++
+        }
+      } else {
+        pPaids = pList.map(() => 0)
+      }
+
+      masked.passengers = pList.map((p, idx) => {
+        const isUp = isUpperBerthSeat(p.seatId)
+        const fare = pFares[idx] || 0
+        const paid = pPaids[idx] || 0
+        const bal = Math.max(0, fare - paid)
+        return {
+          ...p,
+          fare,
+          paid,
+          balance: bal,
+          deck: isUp ? "Upper" : "Lower",
+        }
+      })
 
       seatCount += m.passengers?.length || 0
       totalAmount += mTotal
@@ -485,16 +597,24 @@ router.get("/:id", verifyToken, groupReadLimiter, async (req, res) => {
     const balanceDue = Math.max(0, Math.round((totalAmount - advanceReceived) * 100) / 100)
 
     res.json({
-      group,
+      group: {
+        ...group.toObject(),
+        lowerPrice,
+        upperPrice,
+      },
       members: enrichedMembers,
       payments,
       memberPayments: ledgerPayments,
+      lowerPrice,
+      upperPrice,
       totals: {
         memberCount: members.length,
         seatCount,
         totalAmount,
         advanceReceived,
         balanceDue,
+        lowerPrice,
+        upperPrice,
       },
     })
   } catch (error) {

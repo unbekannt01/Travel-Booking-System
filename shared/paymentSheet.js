@@ -21,7 +21,7 @@
  */
 
 import { escapeHtml } from "./escapeHtml.js"
-import { formatSeatDisplayName, resolveSeatId } from "./seatLayouts.js"
+import { formatSeatDisplayName, resolveSeatId, formatShortPassengerName, isUpperBerthSeat } from "./seatLayouts.js"
 import { isGroupBooking, getGroupInfo } from "./groupHelpers.js"
 
 export const PAYMENT_SHEET_COLUMNS = Object.freeze([
@@ -374,8 +374,9 @@ export function renderPaymentSheetHtml({
   showCompanyHeader = true,
   companyInfo = {},
 }) {
+  const rawPax = Array.isArray(passengers) && passengers.length > 0 ? passengers : departure.passengers || []
   const activeCols = normalizePaymentSheetColumns(columns)
-  const sortedPax = sortPaymentSheetPassengers(passengers, sort)
+  const sortedPax = sortPaymentSheetPassengers(rawPax, sort)
   const clusters = clusterPassengersByGroup(sortedPax)
 
   const lang = ["en", "hi", "gu"].includes(language) ? language : "en"
@@ -421,6 +422,19 @@ export function renderPaymentSheetHtml({
     totalPaidSum += pd
     totalDueSum += b
   })
+
+  // Upper vs Lower berth departure-wide accumulations
+  const depLowerPax = sortedPax.filter((p) => !isUpperBerthSeat(p.seat || p.seatId))
+  const depUpperPax = sortedPax.filter((p) => isUpperBerthSeat(p.seat || p.seatId))
+  const hasDecks = depLowerPax.length > 0 && depUpperPax.length > 0
+
+  const depLowerFare = depLowerPax.reduce((s, p) => s + Number(p.fare || 0), 0)
+  const depLowerPaid = depLowerPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
+  const depLowerDue = depLowerPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
+
+  const depUpperFare = depUpperPax.reduce((s, p) => s + Number(p.fare || 0), 0)
+  const depUpperPaid = depUpperPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
+  const depUpperDue = depUpperPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
 
   // Has balance column in view?
   const hasBalanceColumn = activeCols.includes("balance")
@@ -498,12 +512,18 @@ export function renderPaymentSheetHtml({
           switch (colId) {
             case "srNo":
               return `<td class="text-center font-bold">${globalSrNo++}</td>`
-            case "name":
-              return `<td class="text-left font-bold text-dark cell-wrap">${escapeHtml(p.name || "—")}</td>`
+            case "name": {
+              const shortName = formatShortPassengerName(p.name)
+              return `<td class="text-left font-bold text-dark cell-wrap">${escapeHtml(shortName || p.name || "—")}</td>`
+            }
             case "city":
               return `<td class="text-left cell-wrap">${escapeHtml(p.city || "—")}</td>`
-            case "seat":
-              return `<td class="text-center font-mono font-bold">${p.seat || p.seatId ? escapeHtml(formatSeatDisplayName(resolveSeatId(null, p.seat || p.seatId))) : "—"}</td>`
+            case "seat": {
+              const isUp = isUpperBerthSeat(p.seat || p.seatId)
+              const seatLabel = p.seat || p.seatId ? formatSeatDisplayName(resolveSeatId(null, p.seat || p.seatId)) : "—"
+              const tag = p.seat || p.seatId ? ` <span class="seat-deck-tag ${isUp ? "tag-upper" : "tag-lower"}">${isUp ? "U" : "L"}</span>` : ""
+              return `<td class="text-center font-mono font-bold" style="white-space: nowrap;">${escapeHtml(seatLabel)}${tag}</td>`
+            }
             case "mobile":
               return `<td class="text-center font-mono">${escapeHtml(p.mobile || "—")}</td>`
             case "gender":
@@ -542,70 +562,94 @@ export function renderPaymentSheetHtml({
       }
 
       if (isGroup) {
-        // FIX 1: Group subtotal row
-        // 1. Spanned label cell covering ALL columns before Paid
-        // Wrapped, overflow hidden, concise "Group total (N pax)" label
-        const subtotalCells = []
-        subtotalCells.push(
-          `<td colspan="${colsBeforePaid}" class="group-subtotal-label">${escapeHtml(t.groupTotal)} (${cluster.passengers.length} pax):</td>`,
-        )
+        const gLowerPax = cluster.passengers.filter((p) => !isUpperBerthSeat(p.seat || p.seatId))
+        const gUpperPax = cluster.passengers.filter((p) => isUpperBerthSeat(p.seat || p.seatId))
+        const hasBothDecks = gLowerPax.length > 0 && gUpperPax.length > 0
 
-        // 2. Paid cell under Paid column
-        if (paidColIdx >= 0) {
-          subtotalCells.push(`<td class="text-right font-bold">₹${formatRupees(clusterPaidSum)}</td>`)
-        }
-
-        // 3. Every column after Paid gets its own cell with consistent borders
-        const startAfterPaid = paidColIdx >= 0 ? paidColIdx + 1 : colsBeforePaid
-        for (let idx = startAfterPaid; idx < activeCols.length; idx++) {
-          const colId = activeCols[idx]
-          if (colId === "balance") {
-            subtotalCells.push(
-              `<td class="text-right font-bold ${clusterDueSum > 0 ? "text-due" : "text-paid"}">₹${formatRupees(clusterDueSum)}</td>`,
-            )
-          } else if (colId === "fare") {
-            subtotalCells.push(`<td class="text-right font-bold">₹${formatRupees(clusterFareSum)}</td>`)
-          } else if (colId === "note") {
-            subtotalCells.push(`<td class="text-center font-bold text-xs" style="white-space: nowrap;">${cluster.passengers.length} PAX</td>`)
-          } else {
-            subtotalCells.push(`<td>&nbsp;</td>`)
+        const renderSubtotalRow = (label, paidSum, dueSum, fareSum, noteText, isMain = false) => {
+          const cells = []
+          cells.push(
+            `<td colspan="${colsBeforePaid}" class="group-subtotal-label ${isMain ? "font-black" : ""}">${escapeHtml(label)}:</td>`,
+          )
+          if (paidColIdx >= 0) {
+            cells.push(`<td class="text-right font-bold ${isMain ? "font-black" : ""}">₹${formatRupees(paidSum)}</td>`)
           }
+          const startAfter = paidColIdx >= 0 ? paidColIdx + 1 : colsBeforePaid
+          for (let idx = startAfter; idx < activeCols.length; idx++) {
+            const colId = activeCols[idx]
+            if (colId === "balance") {
+              cells.push(
+                `<td class="text-right font-bold ${isMain ? "font-black" : ""} ${dueSum > 0 ? "text-due" : "text-paid"}">₹${formatRupees(dueSum)}</td>`,
+              )
+            } else if (colId === "fare") {
+              cells.push(`<td class="text-right font-bold ${isMain ? "font-black" : ""}">₹${formatRupees(fareSum)}</td>`)
+            } else if (colId === "note") {
+              cells.push(`<td class="text-center font-bold text-xs" style="white-space: nowrap;">${noteText}</td>`)
+            } else {
+              cells.push(`<td>&nbsp;</td>`)
+            }
+          }
+          return `<tr class="group-subtotal-row ${isMain ? "group-main-subtotal" : "group-deck-subtotal"}">${cells.join("")}</tr>`
         }
 
-        bodyRows.push(`<tr class="group-subtotal-row">${subtotalCells.join("")}</tr>`)
+        if (hasBothDecks) {
+          const gLowerFare = gLowerPax.reduce((s, p) => s + Number(p.fare || 0), 0)
+          const gLowerPaid = gLowerPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
+          const gLowerDue = gLowerPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
+
+          const gUpperFare = gUpperPax.reduce((s, p) => s + Number(p.fare || 0), 0)
+          const gUpperPaid = gUpperPax.reduce((s, p) => s + Number(p.paid !== undefined ? p.paid : p.isPaid ? p.fare || 0 : 0), 0)
+          const gUpperDue = gUpperPax.reduce((s, p) => s + Number(p.balance !== undefined ? p.balance : p.balanceDue !== undefined ? p.balanceDue : Math.max(0, (p.fare || 0) - (p.paid || 0))), 0)
+
+          bodyRows.push(renderSubtotalRow(`🛏️ Lower Berths (${gLowerPax.length} pax)`, gLowerPaid, gLowerDue, gLowerFare, `${gLowerPax.length} LOWER`))
+          bodyRows.push(renderSubtotalRow(`🛏️ Upper Berths (${gUpperPax.length} pax)`, gUpperPaid, gUpperDue, gUpperFare, `${gUpperPax.length} UPPER`))
+          bodyRows.push(renderSubtotalRow(`👥 ${t.groupTotal} (${cluster.passengers.length} pax)`, clusterPaidSum, clusterDueSum, clusterFareSum, `${cluster.passengers.length} PAX`, true))
+        } else {
+          const deckLabel = gUpperPax.length > 0 ? " (UPPER)" : gLowerPax.length > 0 ? " (LOWER)" : ""
+          bodyRows.push(renderSubtotalRow(`${t.groupTotal} (${cluster.passengers.length} pax${deckLabel})`, clusterPaidSum, clusterDueSum, clusterFareSum, `${cluster.passengers.length} PAX`, true))
+        }
       }
     }
   }
 
-  // FIX 1: Totals Row in tfoot using colspan for all columns before Paid
-  const tfootCells = []
-  tfootCells.push(
-    `<td colspan="${colsBeforePaid}" class="totals-label">${escapeHtml(t.totals)}:</td>`,
-  )
-
-  if (paidColIdx >= 0) {
-    tfootCells.push(`<td class="text-right font-bold">₹${formatRupees(totalPaidSum)}</td>`)
-  }
-
-  const startAfterPaidTfoot = paidColIdx >= 0 ? paidColIdx + 1 : colsBeforePaid
-  for (let idx = startAfterPaidTfoot; idx < activeCols.length; idx++) {
-    const colId = activeCols[idx]
-    if (colId === "balance") {
-      tfootCells.push(
-        `<td class="text-right font-bold ${totalDueSum > 0 ? "text-due" : "text-paid"}">₹${formatRupees(totalDueSum)}</td>`,
-      )
-    } else if (colId === "fare") {
-      tfootCells.push(`<td class="text-right font-bold">₹${formatRupees(totalFareSum)}</td>`)
-    } else if (colId === "note") {
-      tfootCells.push(
-        `<td class="note-footer font-bold text-center" style="white-space: nowrap;">TOTAL PAX: ${sortedPax.length}</td>`,
-      )
-    } else {
-      tfootCells.push(`<td>&nbsp;</td>`)
+  // Totals Rows in tfoot using colspan for all columns before Paid
+  const renderTfootRow = (label, paidSum, dueSum, fareSum, noteText, isGrand = false) => {
+    const cells = []
+    cells.push(
+      `<td colspan="${colsBeforePaid}" class="totals-label ${isGrand ? "font-black" : ""}">${escapeHtml(label)}:</td>`,
+    )
+    if (paidColIdx >= 0) {
+      cells.push(`<td class="text-right font-bold ${isGrand ? "font-black" : ""}">₹${formatRupees(paidSum)}</td>`)
     }
+    const startAfter = paidColIdx >= 0 ? paidColIdx + 1 : colsBeforePaid
+    for (let idx = startAfter; idx < activeCols.length; idx++) {
+      const colId = activeCols[idx]
+      if (colId === "balance") {
+        cells.push(
+          `<td class="text-right font-bold ${isGrand ? "font-black" : ""} ${dueSum > 0 ? "text-due" : "text-paid"}">₹${formatRupees(dueSum)}</td>`,
+        )
+      } else if (colId === "fare") {
+        cells.push(`<td class="text-right font-bold ${isGrand ? "font-black" : ""}">₹${formatRupees(fareSum)}</td>`)
+      } else if (colId === "note") {
+        cells.push(
+          `<td class="note-footer font-bold text-center" style="white-space: nowrap;">${noteText}</td>`,
+        )
+      } else {
+        cells.push(`<td>&nbsp;</td>`)
+      }
+    }
+    return `<tr class="totals-row ${isGrand ? "grand-totals-row" : "deck-totals-row"}">${cells.join("")}</tr>`
   }
 
-  const tfootHtml = `<tr class="totals-row">${tfootCells.join("")}</tr>`
+  let tfootHtml = ""
+  if (hasDecks) {
+    tfootHtml += renderTfootRow(`🛏️ Lower Berths (${depLowerPax.length} pax)`, depLowerPaid, depLowerDue, depLowerFare, `${depLowerPax.length} LOWER`)
+    tfootHtml += renderTfootRow(`🛏️ Upper Berths (${depUpperPax.length} pax)`, depUpperPaid, depUpperDue, depUpperFare, `${depUpperPax.length} UPPER`)
+    tfootHtml += renderTfootRow(`👥 ${t.totals} (${sortedPax.length} pax)`, totalPaidSum, totalDueSum, totalFareSum, `TOTAL PAX: ${sortedPax.length}`, true)
+  } else {
+    tfootHtml = renderTfootRow(`${t.totals}`, totalPaidSum, totalDueSum, totalFareSum, `TOTAL PAX: ${sortedPax.length}`, true)
+  }
+
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(lang)}">
@@ -924,6 +968,77 @@ export function renderPaymentSheetHtml({
     font-weight: 800;
   }
 
+  .seat-deck-tag {
+    display: inline-block;
+    font-size: 7.5px;
+    font-weight: 800;
+    padding: 0 3px;
+    border-radius: 2px;
+    border: 1px solid #000000;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+  .tag-lower {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  .tag-upper {
+    background: #ede9fe;
+    color: #6d28d9;
+  }
+  .summary-strip-deck {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 6px;
+  }
+  .deck-breakdown-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    border-bottom: 1px dashed #cbd5e1;
+    padding-bottom: 5px;
+  }
+  .deck-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    border: 1px solid #000000;
+    font-size: 9.5px;
+  }
+  .deck-pill-lower {
+    background: #f0f9ff;
+  }
+  .deck-pill-upper {
+    background: #faf5ff;
+  }
+  .pill-label {
+    font-weight: 900;
+    color: #000000;
+  }
+  .group-main-subtotal td {
+    background: #e2e8f0 !important;
+    font-weight: 900;
+  }
+  .group-deck-subtotal td {
+    background: #f8fafc !important;
+    font-size: 9px;
+  }
+  .deck-totals-row td {
+    background: #f1f5f9 !important;
+    font-size: 9.5px;
+  }
+  .grand-totals-row td {
+    background: #e2e8f0 !important;
+    font-weight: 900;
+  }
+  .font-black {
+    font-weight: 900 !important;
+  }
+
   /* Clean Small Footer */
   .sheet-footer {
     margin-top: 10px;
@@ -979,14 +1094,34 @@ export function renderPaymentSheetHtml({
   </div>
 
   <!-- Outstanding Collection Quick Strip -->
-  <div class="summary-strip">
-    <div>
-      <span>${escapeHtml(t.totalFare)}: <strong>₹${formatRupees(totalFareSum)}</strong></span> • 
-      <span>${escapeHtml(t.totalCollected)}: <strong style="color: #15803d;">₹${formatRupees(totalPaidSum)}</strong></span>
-    </div>
-    <div>
-      <span>${escapeHtml(t.totalOutstanding)}:</span>
-      <span class="stat-badge">₹${formatRupees(totalDueSum)}</span>
+  <div class="summary-strip ${hasDecks ? "summary-strip-deck" : ""}">
+    ${
+      hasDecks
+        ? `<div class="deck-breakdown-row">
+      <div class="deck-pill deck-pill-lower">
+        <span class="pill-label">🛏️ Lower Berths (${depLowerPax.length}):</span>
+        <span>Fare: <strong>₹${formatRupees(depLowerFare)}</strong></span> • 
+        <span>Paid: <strong style="color: #15803d;">₹${formatRupees(depLowerPaid)}</strong></span> • 
+        <span>Due: <strong style="color: #b91c1c;">₹${formatRupees(depLowerDue)}</strong></span>
+      </div>
+      <div class="deck-pill deck-pill-upper">
+        <span class="pill-label">🛏️ Upper Berths (${depUpperPax.length}):</span>
+        <span>Fare: <strong>₹${formatRupees(depUpperFare)}</strong></span> • 
+        <span>Paid: <strong style="color: #15803d;">₹${formatRupees(depUpperPaid)}</strong></span> • 
+        <span>Due: <strong style="color: #b91c1c;">₹${formatRupees(depUpperDue)}</strong></span>
+      </div>
+    </div>`
+        : ""
+    }
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+      <div>
+        <span>${escapeHtml(t.totalFare)}: <strong>₹${formatRupees(totalFareSum)}</strong></span> • 
+        <span>${escapeHtml(t.totalCollected)}: <strong style="color: #15803d;">₹${formatRupees(totalPaidSum)}</strong></span>
+      </div>
+      <div>
+        <span>${escapeHtml(t.totalOutstanding)}:</span>
+        <span class="stat-badge">₹${formatRupees(totalDueSum)}</span>
+      </div>
     </div>
   </div>
 

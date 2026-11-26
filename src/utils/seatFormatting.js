@@ -78,3 +78,23 @@ export function formatSeatList(seatIds, { max = 3, layoutKey, busType, fallback 
   }
   return formatted.join(", ")
 }
+
+/**
+ * Formats a passenger name to show Last Name + First Name (e.g. "Ghetiya Bipinbhai").
+ * Does NOT use the middle name.
+ * e.g., "Ghetiya Bipinchandra Devrajbhai" -> "Ghetiya Bipinchandra"
+ * e.g., "Hansaliya Sarojben Gandubhai"   -> "Hansaliya Sarojben"
+ * e.g., "Ghetiya Bipinbhai"              -> "Ghetiya Bipinbhai"
+ *
+ * @param {string | null | undefined} fullName
+ * @returns {string}
+ */
+export function formatShortPassengerName(fullName) {
+  if (!fullName || typeof fullName !== "string") return ""
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return parts[0] || ""
+  // Display Last Name (parts[0]) + First Name (parts[1]), omitting middle name
+  return `${parts[0]} ${parts[1]}`
+}
+
+

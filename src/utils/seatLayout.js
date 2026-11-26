@@ -1,5 +1,8 @@
 import { escapeHtml, sanitizeHexColor } from "./escapeHtml.js"
 import { getSeatLayout, layoutKeyForBusType, resolveSeatId } from "../../shared/seatLayouts.js"
+import { formatShortPassengerName } from "./seatFormatting.js"
+
+export { formatShortPassengerName }
 /**
  * Bus Seat Layout and Manifest Generation Utilities
  * Supports standard Indian sleeper coaches and seater layouts
@@ -199,15 +202,640 @@ export const mapCoachSeatManifest = ({
 }
 
 /**
+ * Normalizes gender string for styling and badge classification.
+ */
+export function getPassengerGenderType(gender) {
+  if (!gender) return "unknown"
+  const g = String(gender).toLowerCase().trim()
+  if (g === "female" || g === "f" || g === "woman" || g.includes("સ્ત્રી")) return "female"
+  if (g === "male" || g === "m" || g === "man" || g.includes("પુરુષ")) return "male"
+  return "other"
+}
+
+/**
+ * Groups coach seats into 4 vertical berth columns:
+ * 1. Left Lower (L1..L6)
+ * 2. Left Upper (U1..U6)
+ * 3. Right Lower (L1..L6)
+ * 4. Right Upper (U1..U6)
+ * Plus rear seats if present (for 2x1 sleeper B1/B2).
+ */
+export function groupSeatsIntoBerthColumns(manifestData) {
+  const is2x1 = manifestData?.layoutType?.startsWith("2x1")
+  const lowerSeats = manifestData?.lowerDeck?.seats || []
+  const upperSeats = manifestData?.upperDeck?.seats || []
+
+  const groupDeckSide = (seats, side) => {
+    const map = new Map()
+    seats.forEach((s) => {
+      if (s.side !== side) return
+      const row = s.row || 1
+      if (!map.has(row)) {
+        map.set(row, {
+          row,
+          box: s.box || `${s.deck === "lower" ? "L" : "U"}${row}`,
+          deck: s.deck,
+          side: s.side,
+          seats: [],
+        })
+      }
+      map.get(row).seats.push(s)
+    })
+    const arr = Array.from(map.values()).sort((a, b) => a.row - b.row)
+    arr.forEach((item) => {
+      item.seats.sort((a, b) => {
+        const slotA = parseInt(String(a.id).split("-").pop(), 10) || a.slot || 1
+        const slotB = parseInt(String(b.id).split("-").pop(), 10) || b.slot || 1
+        return slotA - slotB
+      })
+    })
+    return arr
+  }
+
+  const leftLower = groupDeckSide(lowerSeats, "left")
+  const leftUpper = groupDeckSide(upperSeats, "left")
+  const rightLower = groupDeckSide(lowerSeats, "right")
+  const rightUpper = groupDeckSide(upperSeats, "right")
+
+  const rearLower = lowerSeats.filter((s) => s.side === "rear")
+  const rearUpper = upperSeats.filter((s) => s.side === "rear")
+
+  const maxRows = Math.max(
+    leftLower.length,
+    leftUpper.length,
+    rightLower.length,
+    rightUpper.length,
+    6
+  )
+
+  return {
+    is2x1,
+    maxRows,
+    leftLower,
+    leftUpper,
+    rightLower,
+    rightUpper,
+    rearLower,
+    rearUpper,
+  }
+}
+
+/**
+ * Builds printable HTML document for unified coach layout matching the yatriDesk reference:
+ * - 4 columns: Left Lower, Left Upper, SLEEPER aisle, Right Lower, Right Upper
+ * - Driver front banner: ▲ આગળ on left, ડ્રાઇવર on right
+ * - Berth boxes with passenger names (first+middle only, no ticket numbers)
+ * - Gender coding and compact layout fitting cleanly on a single page
+ */
+export const buildUnifiedCoachPrintHTML = ({
+  manifestData,
+  departure,
+  user,
+  berthFormat = "combined", // 'combined' | 'slots'
+}) => {
+  const companyName = escapeHtml(user?.companyName || "Yatra Tours")
+  const companyPhone = escapeHtml(user?.companyPhone || "")
+  const companyHQ = escapeHtml(user?.companyHeadquarters || "")
+  const tourName = escapeHtml(departure?.tourName || "All Tours")
+  const rawDateFormatted = departure?.journeyDate
+    ? new Date(departure.journeyDate).toLocaleDateString("en-GB").replace(/\//g, "-")
+    : "—"
+  const totalBooked = manifestData.totalBooked || 0
+  const totalCapacity = manifestData.totalCapacity || 0
+  const cols = groupSeatsIntoBerthColumns(manifestData)
+
+  const renderBerthCardHTML = (berthItem) => {
+    if (!berthItem) {
+      return `<div class="berth-card empty"><div class="berth-head">—</div><div class="pax-avail">ખાલી</div></div>`
+    }
+    const boxName = escapeHtml(berthItem.box || (berthItem.deck === "lower" ? `L${berthItem.row}` : `U${berthItem.row}`))
+    const seats = berthItem.seats || []
+
+    if (seats.length === 1) {
+      const s = seats[0]
+      const p = s.passenger
+      const isBooked = s.status === "booked" && p
+      const gType = isBooked ? getPassengerGenderType(p.gender) : "avail"
+      const name = isBooked ? escapeHtml(formatShortPassengerName(p.name)) : "ખાલી (Available)"
+
+      return `
+        <div class="berth-card ${isBooked ? `booked border-${gType}` : "available"}">
+          <div class="berth-head">${boxName}</div>
+          <div class="berth-body single">
+            <span class="pax-pill ${isBooked ? `pill-${gType}` : "pill-avail"}">
+              ${name}
+            </span>
+          </div>
+        </div>
+      `
+    }
+
+    // Double berth (2 seats: slot 1 and slot 2)
+    const s1 = seats[0]
+    const s2 = seats[1]
+    const p1 = s1?.status === "booked" ? s1.passenger : null
+    const p2 = s2?.status === "booked" ? s2.passenger : null
+
+    if (berthFormat === "slots") {
+      const g1 = p1 ? getPassengerGenderType(p1.gender) : "avail"
+      const g2 = p2 ? getPassengerGenderType(p2.gender) : "avail"
+      const name1 = p1 ? escapeHtml(formatShortPassengerName(p1.name)) : `<span class="avail-text">ખાલી</span>`
+      const name2 = p2 ? escapeHtml(formatShortPassengerName(p2.name)) : `<span class="avail-text">ખાલી</span>`
+
+      return `
+        <div class="berth-card ${p1 || p2 ? "has-booking" : "available"}">
+          <div class="berth-head">${boxName}</div>
+          <div class="slots-container">
+            <div class="slot-row">
+              <span class="slot-idx">1</span>
+              <span class="slot-content pill-${g1}">${name1}</span>
+            </div>
+            <div class="slot-row">
+              <span class="slot-idx">2</span>
+              <span class="slot-content pill-${g2}">${name2}</span>
+            </div>
+          </div>
+        </div>
+      `
+    }
+
+    // Combined with "&" (User Request)
+    if (p1 && p2) {
+      const g1 = getPassengerGenderType(p1.gender)
+      const g2 = getPassengerGenderType(p2.gender)
+      const name1 = escapeHtml(formatShortPassengerName(p1.name))
+      const name2 = escapeHtml(formatShortPassengerName(p2.name))
+
+      return `
+        <div class="berth-card booked">
+          <div class="berth-head">${boxName}</div>
+          <div class="berth-body pair">
+            <span class="pax-pill pill-${g1}">${name1}</span>
+            <span class="amp">&</span>
+            <span class="pax-pill pill-${g2}">${name2}</span>
+          </div>
+        </div>
+      `
+    }
+
+    if (p1 || p2) {
+      const bookedP = p1 || p2
+      const slotNum = p1 ? 1 : 2
+      const freeNum = p1 ? 2 : 1
+      const g = getPassengerGenderType(bookedP.gender)
+      const name = escapeHtml(formatShortPassengerName(bookedP.name))
+
+      return `
+        <div class="berth-card partial">
+          <div class="berth-head">${boxName}</div>
+          <div class="berth-body pair">
+            <span class="pax-pill pill-${g}">${slotNum}: ${name}</span>
+            <span class="amp">&</span>
+            <span class="pax-pill pill-avail">${freeNum}: ખાલી</span>
+          </div>
+        </div>
+      `
+    }
+
+    return `
+      <div class="berth-card available">
+        <div class="berth-head">${boxName}</div>
+        <div class="berth-body empty">
+          <span class="pax-empty">ખાલી</span>
+        </div>
+      </div>
+    `
+  }
+
+  // Generate rows
+  const rowsHTML = []
+  for (let r = 1; r <= cols.maxRows; r++) {
+    const ll = cols.leftLower.find((b) => b.row === r)
+    const lu = cols.leftUpper.find((b) => b.row === r)
+    const rl = cols.rightLower.find((b) => b.row === r)
+    const ru = cols.rightUpper.find((b) => b.row === r)
+
+    rowsHTML.push(`
+      <div class="coach-row">
+        <div class="coach-col">${renderBerthCardHTML(ll)}</div>
+        <div class="coach-col">${renderBerthCardHTML(lu)}</div>
+        <div class="coach-aisle-divider"></div>
+        <div class="coach-col">${renderBerthCardHTML(rl)}</div>
+        <div class="coach-col">${renderBerthCardHTML(ru)}</div>
+      </div>
+    `)
+  }
+
+  // Rear section if 2x1 sleeper
+  let rearHTML = ""
+  if (cols.is2x1 && (cols.rearLower.length > 0 || cols.rearUpper.length > 0)) {
+    const rl = cols.rearLower[0]
+    const ru = cols.rearUpper[0]
+    rearHTML = `
+      <div class="rear-section">
+        <div class="rear-title">REAR BERTHS</div>
+        <div class="coach-row">
+          <div class="coach-col col-span-2">
+            ${renderBerthCardHTML(rl ? { box: "Rear B1 (Lower)", row: 7, deck: "lower", seats: [rl] } : null)}
+          </div>
+          <div class="coach-aisle-divider"></div>
+          <div class="coach-col col-span-2">
+            ${renderBerthCardHTML(ru ? { box: "Rear B2 (Upper)", row: 7, deck: "upper", seats: [ru] } : null)}
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  return `<!DOCTYPE html>
+<html lang="gu">
+<head>
+<meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:; script-src 'none';"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Seat Layout - ${tourName}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Gujarati", "Gujarati MT", Arial, sans-serif;
+    background: #f8fafc;
+    color: #0f172a;
+    padding: 16px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .print-page {
+    max-width: 760px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 18px 22px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  /* Top Trip Title */
+  .trip-header {
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .trip-title {
+    font-size: 20px;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+  }
+  .trip-sub {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    margin-top: 3px;
+  }
+  /* Driver Front Banner (Orange bar matching reference) */
+  .driver-banner {
+    background: #f59e0b;
+    color: #111827;
+    font-weight: 900;
+    font-size: 12px;
+    padding: 6px 16px;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 0.05em;
+  }
+  /* Coach Box Container */
+  .coach-box {
+    border: 1.5px solid #94a3b8;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    background: #ffffff;
+    overflow: hidden;
+    padding-bottom: 8px;
+  }
+  /* Column Headers */
+  .columns-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr 34px 1fr 1fr;
+    background: #f1f5f9;
+    border-bottom: 1.5px solid #cbd5e1;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #1e3a8a;
+  }
+  .col-head-cell {
+    padding: 6px 2px;
+  }
+  .aisle-head {
+    background: #e2e8f0;
+    border-left: 1px dashed #cbd5e1;
+    border-right: 1px dashed #cbd5e1;
+  }
+  /* Grid rows */
+  .coach-body {
+    position: relative;
+    padding: 4px 0;
+  }
+  .coach-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 34px 1fr 1fr;
+    align-items: stretch;
+    padding: 3px 6px;
+  }
+  .coach-col {
+    padding: 0 3px;
+  }
+  .col-span-2 {
+    grid-column: span 2;
+  }
+  /* Central Sleeper Aisle */
+  .coach-aisle-divider {
+    border-left: 1px dashed #cbd5e1;
+    border-right: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    min-height: 100%;
+  }
+  .aisle-text-vertical {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    letter-spacing: 0.35em;
+    font-weight: 900;
+    color: #94a3b8;
+    font-size: 11px;
+    text-align: center;
+    margin: 0 auto;
+    padding: 10px 0;
+  }
+  /* Berth Card */
+  .berth-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 4px 6px;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .berth-card.booked {
+    border-color: #93c5fd;
+    background: #f8fafc;
+  }
+  .berth-head {
+    font-size: 11px;
+    font-weight: 900;
+    text-align: center;
+    color: #1e293b;
+    margin-bottom: 2px;
+  }
+  .berth-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    flex: 1;
+    text-align: center;
+  }
+  .berth-body.pair {
+    line-height: 1.25;
+  }
+  .amp {
+    font-weight: 900;
+    color: #4f46e5;
+    margin: 0 2px;
+    font-size: 10px;
+  }
+  /* Passenger Badges / Pills */
+  .pax-pill {
+    display: inline-block;
+    padding: 1.5px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+  }
+  .pill-male {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+  .pill-female {
+    background: #fdf2f8;
+    color: #be185d;
+    border: 1px solid #fbcfe8;
+  }
+  .pill-other {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  .pill-avail {
+    background: #f8fafc;
+    color: #94a3b8;
+    border: 1px dashed #cbd5e1;
+    font-style: italic;
+  }
+  .pax-empty {
+    font-size: 9.5px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+  /* Slot boxes format */
+  .slots-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 1px;
+  }
+  .slot-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .slot-idx {
+    font-size: 9px;
+    font-weight: 900;
+    color: #64748b;
+    width: 10px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .slot-content {
+    flex: 1;
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .avail-text {
+    color: #94a3b8;
+    font-size: 8.5px;
+    font-style: italic;
+  }
+  /* Rear Section */
+  .rear-section {
+    margin-top: 6px;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 6px;
+  }
+  .rear-title {
+    text-align: center;
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #94a3b8;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  /* Legend Strip */
+  .legend-strip {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 14px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .legend-avail {
+    border: 1.5px solid #94a3b8;
+    background: #ffffff;
+  }
+  .legend-male {
+    border: 1.5px solid #3b82f6;
+    background: #eff6ff;
+  }
+  .legend-female {
+    border: 1.5px solid #ec4899;
+    background: #fdf2f8;
+  }
+  .legend-other {
+    border: 1.5px solid #f59e0b;
+    background: #fffbeb;
+  }
+  .footer-meta {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 8.5px;
+    color: #94a3b8;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 6mm;
+  }
+  @media print {
+    body { background: #ffffff; padding: 0; }
+    .print-page {
+      box-shadow: none;
+      border: none;
+      padding: 0;
+      margin: 0 auto;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="print-page">
+    <div class="trip-header">
+      <div class="trip-title">${tourName}</div>
+      <div class="trip-sub">${rawDateFormatted} | કુલ પેસેન્જર: ${totalBooked} / ${totalCapacity}</div>
+    </div>
+
+    <div class="driver-banner">
+      <span>▲ આગળ</span>
+      <span>ડ્રાઇવર</span>
+    </div>
+
+    <div class="coach-box">
+      <div class="columns-head">
+        <div class="col-head-cell">( ડાબી નીચે )</div>
+        <div class="col-head-cell">( ડાબી ઉપર )</div>
+        <div class="col-head-cell aisle-head"></div>
+        <div class="col-head-cell">( જમણી નીચે )</div>
+        <div class="col-head-cell">( જમણી ઉપર )</div>
+      </div>
+
+      <div class="coach-body">
+        <div style="position: absolute; left: 50%; transform: translateX(-50%); top: 0; bottom: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 1;">
+          <div class="aisle-text-vertical">SLEEPER</div>
+        </div>
+        ${rowsHTML.join("")}
+        ${rearHTML}
+      </div>
+    </div>
+
+    <div class="legend-strip">
+      <div class="legend-item">
+        <span class="legend-box legend-avail"></span>
+        <span>ખાલી</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-box legend-male"></span>
+        <span>પુરુષ</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-box legend-female"></span>
+        <span>સ્ત્રી</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-box legend-other"></span>
+        <span>અન્ય</span>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      ${companyName} ${companyHQ ? `• ${companyHQ}` : ""} ${companyPhone ? `• ${companyPhone}` : ""}
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+/**
  * Builds printable HTML document for conductor passenger seat layout.
- * Generates separate dedicated pages for Lower Deck and Upper Deck.
+ * Supports both unified coach layout (yatriDesk style) and separate deck layouts.
  */
 export const buildSeatLayoutPrintHTML = ({
   manifestData,
   departure,
   user,
   deckFilter = "both", // 'both' | 'lower' | 'upper'
+  layoutMode = "unified", // 'unified' | 'decks'
+  berthFormat = "combined", // 'combined' | 'slots'
 }) => {
+  // If unified coach view is selected (and not specifically filtering lower/upper only), print reference coach layout
+  if (layoutMode === "unified" && deckFilter === "both") {
+    return buildUnifiedCoachPrintHTML({
+      manifestData,
+      departure,
+      user,
+      berthFormat,
+    })
+  }
+
   const companyName = escapeHtml(user?.companyName || "YATRA TOURS")
   const companyPhone = escapeHtml(user?.companyPhone || "")
   const companyHQ = escapeHtml(user?.companyHeadquarters || "")
@@ -298,9 +926,8 @@ export const buildSeatLayoutPrintHTML = ({
                           ${
                             isBooked
                               ? `
-                            <div class="pax-name">${escapeHtml(p.name || "Passenger")}</div>
-                            <div class="pax-meta">${p.age ? escapeHtml(p.age) + "y" : ""} ${escapeHtml(p.gender || "")} • Inv #${escapeHtml(p.invoiceNo)}</div>
-                            <div class="pax-phone">📞 ${escapeHtml(p.contactPhone || p.contact || "—")}</div>
+                            <div class="pax-name">${escapeHtml(formatShortPassengerName(p.name || "Passenger"))}</div>
+                            <div class="pax-meta">${p.age ? escapeHtml(p.age) + "y" : ""} ${escapeHtml(p.gender || "")}</div>
                           `
                               : `
                             <div class="pax-available-label">AVAILABLE</div>

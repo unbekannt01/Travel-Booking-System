@@ -5,6 +5,8 @@ import verifyToken from "../middleware/auth.js"
 import Booking from "../models/Booking.js"
 import Payment from "../models/Payment.js"
 import User from "../models/User.js"
+import Tour from "../models/Tour.js"
+import DepartureSeatConfig from "../models/DepartureSeatConfig.js"
 import { logAudit } from "../models/AuditLog.js"
 import { decryptAadhaar } from "../utils/aadhaar.js"
 import { getDayBounds } from "../../shared/businessLogic.js"
@@ -172,9 +174,35 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
       paidByBooking.set(bId, (paidByBooking.get(bId) || 0) + amt)
     }
 
+    // Fetch Tour & DepartureSeatConfig to resolve Lower & Upper berth pricing
+    const tourDoc =
+      (await Tour.findOne({ userId: req.user.id, name: tourName })) ||
+      (await Tour.findOne({ name: tourName }))
+
+    const seatConfig = await DepartureSeatConfig.findOne({
+      userId: req.user.id,
+      tourName,
+      journeyDate: { $gte: start, $lte: end },
+    })
+
+    const lowerPrice = seatConfig?.fares?.lower || tourDoc?.lowerPrice || 0
+    const upperPrice = seatConfig?.fares?.upper || tourDoc?.upperPrice || 0
+
     let departureTotalFare = 0
     let departureAdvanceCollected = 0
     const passengers = []
+
+    const isSeatUpper = (seatId) => {
+      if (!seatId) return false
+      const s = String(seatId).toLowerCase()
+      return (
+        s.startsWith("upper") ||
+        s.startsWith("u") ||
+        s.includes("-u") ||
+        s === "rear-b2" ||
+        s === "b2"
+      )
+    }
 
     for (const b of bookings) {
       const isCancelled = b.status === "Cancelled" || b.status === "cancelled"
@@ -198,11 +226,71 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
 
       const pList = b.passengers || []
       const pCount = pList.length || 1
-      const baseFare = Math.floor(bTotal / pCount)
-      let fareRemainder = bTotal - (baseFare * pCount)
 
-      const basePaid = Math.floor(bPaid / pCount)
-      let paidRemainder = bPaid - (basePaid * pCount)
+      // 1. Calculate fare per passenger based on Upper vs Lower pricing
+      const expectedFares = pList.map((p) => {
+        if (p.fare !== undefined && p.fare !== null && Number(p.fare) > 0) {
+          return Number(p.fare)
+        }
+        const isUp = isSeatUpper(p.seatId)
+        if (isUp && upperPrice > 0) return upperPrice
+        if (!isUp && lowerPrice > 0) return lowerPrice
+        return 0
+      })
+
+      const sumExpected = expectedFares.reduce((a, c) => a + c, 0)
+      let pFares = []
+
+      if (sumExpected > 0 && sumExpected === bTotal) {
+        pFares = expectedFares
+      } else if (sumExpected > 0 && bTotal > 0) {
+        let assignedSum = 0
+        pFares = expectedFares.map((f) => {
+          const scaled = Math.floor((bTotal * f) / sumExpected)
+          assignedSum += scaled
+          return scaled
+        })
+        let rem = bTotal - assignedSum
+        let idx = 0
+        while (rem > 0 && idx < pFares.length * 2) {
+          pFares[idx % pFares.length] += 1
+          rem -= 1
+          idx++
+        }
+      } else {
+        const baseFare = Math.floor(bTotal / pCount)
+        let fareRemainder = bTotal - (baseFare * pCount)
+        pFares = pList.map(() => {
+          const f = baseFare + (fareRemainder > 0 ? 1 : 0)
+          if (fareRemainder > 0) fareRemainder--
+          return f
+        })
+      }
+
+      // 2. Allocate payment (bPaid) proportionally based on passenger fare
+      let pPaids = []
+      if (bPaid >= bTotal && bTotal > 0) {
+        pPaids = pFares.slice()
+      } else if (bPaid > 0 && bTotal > 0) {
+        let paidSum = 0
+        pPaids = pFares.map((f) => {
+          const pd = Math.min(f, Math.floor((bPaid * f) / bTotal))
+          paidSum += pd
+          return pd
+        })
+        let paidRem = bPaid - paidSum
+        let idx = 0
+        while (paidRem > 0 && idx < pPaids.length * 2) {
+          const pTarget = idx % pPaids.length
+          if (pPaids[pTarget] < pFares[pTarget]) {
+            pPaids[pTarget] += 1
+            paidRem -= 1
+          }
+          idx++
+        }
+      } else {
+        pPaids = pList.map(() => 0)
+      }
 
       for (let pIdx = 0; pIdx < pList.length; pIdx++) {
         const p = pList[pIdx]
@@ -215,13 +303,11 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           decryptedAadhaar = aadharEnc ? decryptAadhaar(aadharVal) : aadharVal
         }
 
-        const pFare = p.fare !== undefined ? p.fare : baseFare + (fareRemainder > 0 ? 1 : 0)
-        if (p.fare === undefined && fareRemainder > 0) fareRemainder--
-
-        const pPaid = p.paid !== undefined ? p.paid : Math.min(pFare, basePaid + (paidRemainder > 0 ? 1 : 0))
-        if (p.paid === undefined && paidRemainder > 0) paidRemainder--
-
+        const pFare = p.fare !== undefined && p.fare !== null ? Number(p.fare) : pFares[pIdx]
+        const pPaid = p.paid !== undefined && p.paid !== null ? Number(p.paid) : pPaids[pIdx]
         const pBalance = Math.max(0, pFare - pPaid)
+        const isUp = isSeatUpper(p.seatId)
+        const deck = isUp ? "Upper" : "Lower"
 
         passengers.push({
           id: p._id || p.id,
@@ -230,6 +316,7 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
           name: p.name || "",
           seat: p.seatId || "",
           seatId: p.seatId || "",
+          deck,
           gender: p.gender || "",
           age: p.age !== undefined && p.age !== null ? p.age : "",
           mobile: p.contact || b.contactPhone || "",
@@ -283,6 +370,8 @@ router.get("/:key/manifest", verifyToken, departureReadLimiter, async (req, res)
         totalFare: departureTotalFare,
         advanceCollected: departureAdvanceCollected,
         balanceDue: Math.max(0, departureTotalFare - departureAdvanceCollected),
+        lowerPrice,
+        upperPrice,
       },
       passengers,
     })

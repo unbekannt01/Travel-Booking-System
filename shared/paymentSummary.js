@@ -18,7 +18,13 @@
 
 import { escapeHtml } from "./escapeHtml.js"
 import { toPaise, fromPaise } from "./groupPayments.js"
-import { formatSeatDisplayName, resolveSeatId, layoutKeyForBusType } from "./seatLayouts.js"
+import {
+  formatSeatDisplayName,
+  resolveSeatId,
+  layoutKeyForBusType,
+  formatShortPassengerName,
+  isUpperBerthSeat,
+} from "./seatLayouts.js"
 import { isGroupBooking, getGroupInfo } from "./groupHelpers.js"
 
 export const PAYMENT_SUMMARY_I18N = Object.freeze({
@@ -168,8 +174,12 @@ export function calculatePassengerBreakdown({
   payments = [],
   groupPayments = [],
   memberBookings = [],
+  lowerPrice = 0,
+  upperPrice = 0,
 }) {
   const paxList = []
+  const lPrice = Number(lowerPrice || group?.lowerPrice || booking?.lowerPrice || memberBookings[0]?.lowerPrice || 0)
+  const uPrice = Number(upperPrice || group?.upperPrice || booking?.upperPrice || memberBookings[0]?.upperPrice || 0)
 
   // Case A: Explicit Group Booking breakdown
   if (group || memberBookings.length > 0) {
@@ -200,41 +210,122 @@ export function calculatePassengerBreakdown({
 
       const cappedPaidPaise = Math.min(memberTotalFarePaise, Math.max(0, memberPaidPaise))
 
-      const isWholeRupees = (memberTotalFarePaise % 100 === 0) && (cappedPaidPaise % 100 === 0)
-      let baseFarePaise, fareRemainder
-      let basePaidPaise, paidRemainder
-      let step = 1
+      // 1. Calculate passenger fares based on Upper vs Lower pricing
+      const expectedFarePaiseList = mPaxList.map((p) => {
+        if (p.fare !== undefined && p.fare !== null && Number(p.fare) > 0) {
+          return toPaise(p.fare)
+        }
+        const isUp = isUpperBerthSeat(p.seatId || p.seat)
+        if (isUp && uPrice > 0) return toPaise(uPrice)
+        if (!isUp && lPrice > 0) return toPaise(lPrice)
+        return 0
+      })
+      const sumExpectedPaise = expectedFarePaiseList.reduce((a, c) => a + c, 0)
+      let pFarePaiseList = []
 
-      if (isWholeRupees) {
-        step = 100
-        const fareRupees = Math.round(memberTotalFarePaise / 100)
-        const baseFareRupees = Math.floor(fareRupees / paxCount)
-        fareRemainder = (fareRupees - baseFareRupees * paxCount) * 100
-        baseFarePaise = baseFareRupees * 100
-
-        const paidRupees = Math.round(cappedPaidPaise / 100)
-        const basePaidRupees = Math.floor(paidRupees / paxCount)
-        paidRemainder = (paidRupees - basePaidRupees * paxCount) * 100
-        basePaidPaise = basePaidRupees * 100
+      if (sumExpectedPaise > 0 && sumExpectedPaise === memberTotalFarePaise) {
+        pFarePaiseList = expectedFarePaiseList
+      } else if (sumExpectedPaise > 0 && memberTotalFarePaise > 0) {
+        let assignedPaise = 0
+        pFarePaiseList = expectedFarePaiseList.map((fPaise) => {
+          const scaled = Math.floor((memberTotalFarePaise * fPaise) / sumExpectedPaise)
+          assignedPaise += scaled
+          return scaled
+        })
+        let remPaise = memberTotalFarePaise - assignedPaise
+        let idx = 0
+        while (remPaise > 0 && idx < pFarePaiseList.length * 2) {
+          const add = remPaise >= 100 ? 100 : remPaise
+          pFarePaiseList[idx % pFarePaiseList.length] += add
+          remPaise -= add
+          idx++
+        }
       } else {
-        baseFarePaise = Math.floor(memberTotalFarePaise / paxCount)
-        fareRemainder = memberTotalFarePaise - baseFarePaise * paxCount
+        const isWholeRupees = memberTotalFarePaise % 100 === 0
+        const step = isWholeRupees ? 100 : 1
+        const basePaise = Math.floor(memberTotalFarePaise / paxCount / step) * step
+        let fareRem = memberTotalFarePaise - basePaise * paxCount
+        pFarePaiseList = mPaxList.map(() => {
+          const f = basePaise + (fareRem > 0 ? step : 0)
+          if (fareRem > 0) fareRem -= step
+          return f
+        })
+      }
 
-        basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
-        paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+      // 2. Allocate payments (cappedPaidPaise) proportionally or by explicit passenger payments
+      let pPaidPaiseList = []
+      const hasExplicitPassengerPaid = mPaxList.some((p) => p.paid !== undefined && p.paid !== null)
+
+      if (hasExplicitPassengerPaid) {
+        pPaidPaiseList = mPaxList.map((p, idx) => {
+          if (p.paid !== undefined && p.paid !== null) {
+            return Math.min(pFarePaiseList[idx], toPaise(p.paid))
+          }
+          return 0
+        })
+        const allocatedExplicit = pPaidPaiseList.reduce((a, c) => a + c, 0)
+        let unallocatedPaid = Math.max(0, cappedPaidPaise - allocatedExplicit)
+        if (unallocatedPaid > 0) {
+          for (let i = 0; i < pPaidPaiseList.length && unallocatedPaid > 0; i++) {
+            const room = pFarePaiseList[i] - pPaidPaiseList[i]
+            if (room > 0) {
+              const add = Math.min(room, unallocatedPaid)
+              pPaidPaiseList[i] += add
+              unallocatedPaid -= add
+            }
+          }
+        }
+      } else if (cappedPaidPaise >= memberTotalFarePaise && memberTotalFarePaise > 0) {
+        pPaidPaiseList = pFarePaiseList.slice()
+      } else if (cappedPaidPaise > 0 && memberTotalFarePaise > 0) {
+        const isWhole = memberTotalFarePaise % 100 === 0 && cappedPaidPaise % 100 === 0
+        if (isWhole) {
+          const totRupees = Math.round(memberTotalFarePaise / 100)
+          const paidRupees = Math.round(cappedPaidPaise / 100)
+          const fRupeesList = pFarePaiseList.map((fp) => Math.round(fp / 100))
+          let assignedRupees = 0
+          const pPaidRupees = fRupeesList.map((f) => {
+            const pd = Math.min(f, Math.floor((paidRupees * f) / totRupees))
+            assignedRupees += pd
+            return pd
+          })
+          let remRupees = paidRupees - assignedRupees
+          let idx = 0
+          while (remRupees > 0 && idx < pPaidRupees.length * 2) {
+            const currIdx = idx % pPaidRupees.length
+            if (pPaidRupees[currIdx] < fRupeesList[currIdx]) {
+              pPaidRupees[currIdx] += 1
+              remRupees -= 1
+            }
+            idx++
+          }
+          pPaidPaiseList = pPaidRupees.map((r) => r * 100)
+        } else {
+          let assignedPaidPaise = 0
+          pPaidPaiseList = pFarePaiseList.map((fPaise) => {
+            const pd = Math.min(fPaise, Math.floor((cappedPaidPaise * fPaise) / memberTotalFarePaise))
+            assignedPaidPaise += pd
+            return pd
+          })
+          let remPaidPaise = cappedPaidPaise - assignedPaidPaise
+          let idx = 0
+          while (remPaidPaise > 0 && idx < pPaidPaiseList.length * 2) {
+            const currIdx = idx % pPaidPaiseList.length
+            if (pPaidPaiseList[currIdx] < pFarePaiseList[currIdx]) {
+              pPaidPaiseList[currIdx] += 1
+              remPaidPaise -= 1
+            }
+            idx++
+          }
+        }
+      } else {
+        pPaidPaiseList = mPaxList.map(() => 0)
       }
 
       for (let i = 0; i < mPaxList.length; i++) {
         const p = mPaxList[i]
-        const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? step : 0)
-        if (!p.fare && fareRemainder > 0) fareRemainder -= step
-
-        const pPaidPaise = Math.min(
-          pFarePaise,
-          p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? step : 0),
-        )
-        if (p.paid === undefined && paidRemainder > 0) paidRemainder -= step
-
+        const pFarePaise = pFarePaiseList[i]
+        const pPaidPaise = pPaidPaiseList[i]
         const pBalPaise = Math.max(0, pFarePaise - pPaidPaise)
         const status = pBalPaise === 0 ? "PAID" : pPaidPaise > 0 ? "PARTIAL" : "DUE"
 
@@ -267,41 +358,122 @@ export function calculatePassengerBreakdown({
 
     const cappedPaidPaise = Math.min(bookingTotalFarePaise, Math.max(0, bookingPaidPaise))
 
-    const isWholeRupees = (bookingTotalFarePaise % 100 === 0) && (cappedPaidPaise % 100 === 0)
-    let baseFarePaise, fareRemainder
-    let basePaidPaise, paidRemainder
-    let step = 1
+    // 1. Calculate passenger fares based on Lower vs Upper pricing
+    const expectedFarePaiseList = bPaxList.map((p) => {
+      if (p.fare !== undefined && p.fare !== null && Number(p.fare) > 0) {
+        return toPaise(p.fare)
+      }
+      const isUp = isUpperBerthSeat(p.seatId || p.seat)
+      if (isUp && uPrice > 0) return toPaise(uPrice)
+      if (!isUp && lPrice > 0) return toPaise(lPrice)
+      return 0
+    })
+    const sumExpectedPaise = expectedFarePaiseList.reduce((a, c) => a + c, 0)
+    let pFarePaiseList = []
 
-    if (isWholeRupees) {
-      step = 100
-      const fareRupees = Math.round(bookingTotalFarePaise / 100)
-      const baseFareRupees = Math.floor(fareRupees / paxCount)
-      fareRemainder = (fareRupees - baseFareRupees * paxCount) * 100
-      baseFarePaise = baseFareRupees * 100
-
-      const paidRupees = Math.round(cappedPaidPaise / 100)
-      const basePaidRupees = Math.floor(paidRupees / paxCount)
-      paidRemainder = (paidRupees - basePaidRupees * paxCount) * 100
-      basePaidPaise = basePaidRupees * 100
+    if (sumExpectedPaise > 0 && sumExpectedPaise === bookingTotalFarePaise) {
+      pFarePaiseList = expectedFarePaiseList
+    } else if (sumExpectedPaise > 0 && bookingTotalFarePaise > 0) {
+      let assignedPaise = 0
+      pFarePaiseList = expectedFarePaiseList.map((fPaise) => {
+        const scaled = Math.floor((bookingTotalFarePaise * fPaise) / sumExpectedPaise)
+        assignedPaise += scaled
+        return scaled
+      })
+      let remPaise = bookingTotalFarePaise - assignedPaise
+      let idx = 0
+      while (remPaise > 0 && idx < pFarePaiseList.length * 2) {
+        const add = remPaise >= 100 ? 100 : remPaise
+        pFarePaiseList[idx % pFarePaiseList.length] += add
+        remPaise -= add
+        idx++
+      }
     } else {
-      baseFarePaise = Math.floor(bookingTotalFarePaise / paxCount)
-      fareRemainder = bookingTotalFarePaise - baseFarePaise * paxCount
+      const isWholeRupees = bookingTotalFarePaise % 100 === 0
+      const step = isWholeRupees ? 100 : 1
+      const basePaise = Math.floor(bookingTotalFarePaise / paxCount / step) * step
+      let fareRem = bookingTotalFarePaise - basePaise * paxCount
+      pFarePaiseList = bPaxList.map(() => {
+        const f = basePaise + (fareRem > 0 ? step : 0)
+        if (fareRem > 0) fareRem -= step
+        return f
+      })
+    }
 
-      basePaidPaise = Math.floor(cappedPaidPaise / paxCount)
-      paidRemainder = cappedPaidPaise - basePaidPaise * paxCount
+    // 2. Allocate payments (cappedPaidPaise) proportionally or by explicit passenger payments
+    let pPaidPaiseList = []
+    const hasExplicitPassengerPaid = bPaxList.some((p) => p.paid !== undefined && p.paid !== null)
+
+    if (hasExplicitPassengerPaid) {
+      pPaidPaiseList = bPaxList.map((p, idx) => {
+        if (p.paid !== undefined && p.paid !== null) {
+          return Math.min(pFarePaiseList[idx], toPaise(p.paid))
+        }
+        return 0
+      })
+      const allocatedExplicit = pPaidPaiseList.reduce((a, c) => a + c, 0)
+      let unallocatedPaid = Math.max(0, cappedPaidPaise - allocatedExplicit)
+      if (unallocatedPaid > 0) {
+        for (let i = 0; i < pPaidPaiseList.length && unallocatedPaid > 0; i++) {
+          const room = pFarePaiseList[i] - pPaidPaiseList[i]
+          if (room > 0) {
+            const add = Math.min(room, unallocatedPaid)
+            pPaidPaiseList[i] += add
+            unallocatedPaid -= add
+          }
+        }
+      }
+    } else if (cappedPaidPaise >= bookingTotalFarePaise && bookingTotalFarePaise > 0) {
+      pPaidPaiseList = pFarePaiseList.slice()
+    } else if (cappedPaidPaise > 0 && bookingTotalFarePaise > 0) {
+      const isWhole = bookingTotalFarePaise % 100 === 0 && cappedPaidPaise % 100 === 0
+      if (isWhole) {
+        const totRupees = Math.round(bookingTotalFarePaise / 100)
+        const paidRupees = Math.round(cappedPaidPaise / 100)
+        const fRupeesList = pFarePaiseList.map((fp) => Math.round(fp / 100))
+        let assignedRupees = 0
+        const pPaidRupees = fRupeesList.map((f) => {
+          const pd = Math.min(f, Math.floor((paidRupees * f) / totRupees))
+          assignedRupees += pd
+          return pd
+        })
+        let remRupees = paidRupees - assignedRupees
+        let idx = 0
+        while (remRupees > 0 && idx < pPaidRupees.length * 2) {
+          const currIdx = idx % pPaidRupees.length
+          if (pPaidRupees[currIdx] < fRupeesList[currIdx]) {
+            pPaidRupees[currIdx] += 1
+            remRupees -= 1
+          }
+          idx++
+        }
+        pPaidPaiseList = pPaidRupees.map((r) => r * 100)
+      } else {
+        let assignedPaidPaise = 0
+        pPaidPaiseList = pFarePaiseList.map((fPaise) => {
+          const pd = Math.min(fPaise, Math.floor((cappedPaidPaise * fPaise) / bookingTotalFarePaise))
+          assignedPaidPaise += pd
+          return pd
+        })
+        let remPaidPaise = cappedPaidPaise - assignedPaidPaise
+        let idx = 0
+        while (remPaidPaise > 0 && idx < pPaidPaiseList.length * 2) {
+          const currIdx = idx % pPaidPaiseList.length
+          if (pPaidPaiseList[currIdx] < pFarePaiseList[currIdx]) {
+            pPaidPaiseList[currIdx] += 1
+            remPaidPaise -= 1
+          }
+          idx++
+        }
+      }
+    } else {
+      pPaidPaiseList = bPaxList.map(() => 0)
     }
 
     for (let i = 0; i < bPaxList.length; i++) {
       const p = bPaxList[i]
-      const pFarePaise = p.fare ? toPaise(p.fare) : baseFarePaise + (fareRemainder > 0 ? step : 0)
-      if (!p.fare && fareRemainder > 0) fareRemainder -= step
-
-      const pPaidPaise = Math.min(
-        pFarePaise,
-        p.paid !== undefined ? toPaise(p.paid) : basePaidPaise + (paidRemainder > 0 ? step : 0),
-      )
-      if (p.paid === undefined && paidRemainder > 0) paidRemainder -= step
-
+      const pFarePaise = pFarePaiseList[i]
+      const pPaidPaise = pPaidPaiseList[i]
       const pBalPaise = Math.max(0, pFarePaise - pPaidPaise)
       const status = pBalPaise === 0 ? "PAID" : pPaidPaise > 0 ? "PARTIAL" : "DUE"
 
@@ -318,6 +490,18 @@ export function calculatePassengerBreakdown({
     }
   }
 
+  const lowerPax = paxList.filter((p) => !isUpperBerthSeat(p.seat))
+  const upperPax = paxList.filter((p) => isUpperBerthSeat(p.seat))
+  const hasDecks = lowerPax.length > 0 && upperPax.length > 0
+
+  const lowerFarePaise = lowerPax.reduce((sum, p) => sum + p.farePaise, 0)
+  const lowerPaidPaise = lowerPax.reduce((sum, p) => sum + p.paidPaise, 0)
+  const lowerBalPaise = lowerPax.reduce((sum, p) => sum + p.balancePaise, 0)
+
+  const upperFarePaise = upperPax.reduce((sum, p) => sum + p.farePaise, 0)
+  const upperPaidPaise = upperPax.reduce((sum, p) => sum + p.paidPaise, 0)
+  const upperBalPaise = upperPax.reduce((sum, p) => sum + p.balancePaise, 0)
+
   const totalFarePaise = paxList.reduce((sum, p) => sum + p.farePaise, 0)
   const totalPaidPaise = paxList.reduce((sum, p) => sum + p.paidPaise, 0)
   const totalBalancePaise = Math.max(0, totalFarePaise - totalPaidPaise)
@@ -327,6 +511,27 @@ export function calculatePassengerBreakdown({
     totalFarePaise,
     totalPaidPaise,
     totalBalancePaise,
+    deckBreakdown: {
+      hasDecks,
+      lower: {
+        count: lowerPax.length,
+        farePaise: lowerFarePaise,
+        paidPaise: lowerPaidPaise,
+        balancePaise: lowerBalPaise,
+      },
+      upper: {
+        count: upperPax.length,
+        farePaise: upperFarePaise,
+        paidPaise: upperPaidPaise,
+        balancePaise: upperBalPaise,
+      },
+      overall: {
+        count: paxList.length,
+        farePaise: totalFarePaise,
+        paidPaise: totalPaidPaise,
+        balancePaise: totalBalancePaise,
+      },
+    },
   }
 }
 
@@ -391,6 +596,8 @@ export function renderPaymentSummaryHtml({
     memberBookings,
     payments,
     groupPayments,
+    lowerPrice: group?.lowerPrice || booking?.lowerPrice || memberBookings[0]?.lowerPrice || 0,
+    upperPrice: group?.upperPrice || booking?.upperPrice || memberBookings[0]?.upperPrice || 0,
   })
 
   // Header metadata
@@ -558,6 +765,7 @@ export function renderPaymentSummaryHtml({
       const paidRupees = fromPaise(p.paidPaise)
       const balanceRupees = fromPaise(p.balancePaise)
       const isDue = p.balancePaise > 0
+      const isUp = isUpperBerthSeat(p.seat)
 
       const balanceCellHtml = isDue
         ? `<strong class="text-due">₹${formatRupees(balanceRupees)}</strong>`
@@ -570,13 +778,18 @@ export function renderPaymentSummaryHtml({
         : `<span class="badge-paid">${escapeHtml(statusLabel)}</span>`
 
       const seatDisplay = p.seat ? escapeHtml(formatSeatDisplayName(layoutKey, p.seat)) : "—"
+      const deckTag = p.seat
+        ? ` <span class="seat-deck-tag ${isUp ? "tag-upper" : "tag-lower"}">${isUp ? "UPPER" : "LOWER"}</span>`
+        : ""
+
+      const displayName = formatShortPassengerName(p.name) || p.name || "Traveler"
 
       return `<tr>
         <td class="text-center font-bold">${p.srNo}</td>
-        <td class="cell-wrap"><strong>${escapeHtml(p.name)}</strong>${hasMultipleBookings && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
-        <td class="seat-cell">${seatDisplay}</td>
-        <td class="text-right">₹${formatRupees(fareRupees)}</td>
-        <td class="text-right font-medium">₹${formatRupees(paidRupees)}</td>
+        <td class="cell-wrap"><strong>${escapeHtml(displayName)}</strong>${hasMultipleBookings && p.bookingRef ? ` <span class="ref-sub">(${escapeHtml(p.bookingRef)})</span>` : ""}</td>
+        <td class="seat-cell">${seatDisplay}${deckTag}</td>
+        <td class="text-right font-medium">₹${formatRupees(fareRupees)}</td>
+        <td class="text-right font-bold text-paid">₹${formatRupees(paidRupees)}</td>
         <td class="text-right">${balanceCellHtml}</td>
         <td class="text-center">${statusBadge}</td>
       </tr>`
@@ -588,14 +801,41 @@ export function renderPaymentSummaryHtml({
   const totalBalance = fromPaise(breakdown.totalBalancePaise)
   const hasTotalDue = breakdown.totalBalancePaise > 0
 
-  // Passenger Table tfoot using colspan for leading columns
-  const passengerTfootHtml = `<tr>
-    <td colspan="3" class="text-right font-bold totals-label" style="white-space: nowrap; padding-right: 8px;">${escapeHtml(t.totals)}</td>
-    <td class="text-right font-bold">₹${formatRupees(totalFare)}</td>
-    <td class="text-right font-bold">₹${formatRupees(totalPaid)}</td>
-    <td class="text-right font-bold ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</td>
-    <td class="text-center font-bold">${hasTotalDue ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
-  </tr>`
+  // Passenger Table tfoot with Upper vs Lower subtotal rows when applicable
+  let passengerTfootHtml = ""
+  if (breakdown.deckBreakdown?.hasDecks) {
+    const l = breakdown.deckBreakdown.lower
+    const u = breakdown.deckBreakdown.upper
+    passengerTfootHtml += `<tr class="deck-subtotal-row">
+      <td colspan="3" class="text-right font-bold totals-label">🛏️ Lower Berths (${l.count} pax):</td>
+      <td class="text-right font-bold">₹${formatRupees(fromPaise(l.farePaise))}</td>
+      <td class="text-right font-bold text-paid">₹${formatRupees(fromPaise(l.paidPaise))}</td>
+      <td class="text-right font-bold ${l.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(l.balancePaise))}</td>
+      <td class="text-center font-bold">${l.balancePaise > 0 ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
+    </tr>`
+    passengerTfootHtml += `<tr class="deck-subtotal-row">
+      <td colspan="3" class="text-right font-bold totals-label">🛏️ Upper Berths (${u.count} pax):</td>
+      <td class="text-right font-bold">₹${formatRupees(fromPaise(u.farePaise))}</td>
+      <td class="text-right font-bold text-paid">₹${formatRupees(fromPaise(u.paidPaise))}</td>
+      <td class="text-right font-bold ${u.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(u.balancePaise))}</td>
+      <td class="text-center font-bold">${u.balancePaise > 0 ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
+    </tr>`
+    passengerTfootHtml += `<tr class="grand-totals-row">
+      <td colspan="3" class="text-right font-bold totals-label font-black" style="white-space: nowrap; padding-right: 8px;">👥 ${escapeHtml(t.totals)} (${totalPaxCount} pax):</td>
+      <td class="text-right font-bold font-black">₹${formatRupees(totalFare)}</td>
+      <td class="text-right font-bold font-black text-paid">₹${formatRupees(totalPaid)}</td>
+      <td class="text-right font-bold font-black ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</td>
+      <td class="text-center font-bold font-black">${hasTotalDue ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
+    </tr>`
+  } else {
+    passengerTfootHtml = `<tr>
+      <td colspan="3" class="text-right font-bold totals-label" style="white-space: nowrap; padding-right: 8px;">${escapeHtml(t.totals)}:</td>
+      <td class="text-right font-bold">₹${formatRupees(totalFare)}</td>
+      <td class="text-right font-bold text-paid">₹${formatRupees(totalPaid)}</td>
+      <td class="text-right font-bold ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</td>
+      <td class="text-center font-bold">${hasTotalDue ? `<span class="badge-due">${escapeHtml(t.statusDue)}</span>` : `<span class="badge-paid">${escapeHtml(t.statusPaid)}</span>`}</td>
+    </tr>`
+  }
 
   // Payment History Rows HTML
   const historyRowsHtml =
@@ -880,7 +1120,137 @@ export function renderPaymentSummaryHtml({
     border: 1px solid #cbd5e1;
   }
 
-
+  .seat-deck-tag {
+    display: inline-block;
+    font-size: 7.5px;
+    font-weight: 800;
+    padding: 0 3px;
+    border-radius: 2px;
+    border: 1px solid #000000;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+  .tag-lower {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  .tag-upper {
+    background: #ede9fe;
+    color: #6d28d9;
+  }
+  .deck-pricing-box {
+    border: 1px solid #000000;
+    background: #f8fafc;
+    border-radius: 3px;
+    padding: 6px 10px;
+    margin-bottom: 12px;
+  }
+  .deck-pricing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed #cbd5e1;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+  .deck-pricing-title {
+    font-size: 9.5px;
+    font-weight: 900;
+    color: #000000;
+    letter-spacing: 0.02em;
+  }
+  .deck-pricing-subtitle {
+    font-size: 8px;
+    color: #475569;
+    font-weight: 700;
+  }
+  .deck-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.15fr;
+    gap: 8px;
+  }
+  .deck-card {
+    border: 1px solid #000000;
+    border-radius: 3px;
+    padding: 5px 8px;
+    background: #ffffff;
+  }
+  .deck-card-lower {
+    background: #f0f9ff;
+  }
+  .deck-card-upper {
+    background: #faf5ff;
+  }
+  .deck-card-total {
+    background: #f1f5f9;
+  }
+  .deck-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .deck-pill {
+    font-size: 8px;
+    font-weight: 900;
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid #000000;
+  }
+  .deck-pill-lower {
+    background: #bae6fd;
+    color: #0369a1;
+  }
+  .deck-pill-upper {
+    background: #ddd6fe;
+    color: #6d28d9;
+  }
+  .deck-pill-total {
+    background: #000000;
+    color: #ffffff;
+  }
+  .deck-count {
+    font-size: 9px;
+    color: #0f172a;
+  }
+  .deck-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 9px;
+  }
+  .deck-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .deck-balance-row {
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top: 1px dashed #cbd5e1;
+  }
+  .stat-lbl {
+    color: #475569;
+    font-size: 8.5px;
+  }
+  .stat-val {
+    color: #000000;
+  }
+  .font-black {
+    font-weight: 900 !important;
+  }
+  .deck-subtotal-row td {
+    background: #f8fafc !important;
+    font-size: 9.5px;
+    font-weight: 700;
+  }
+  .grand-totals-row td {
+    background: #e2e8f0 !important;
+    font-weight: 900;
+    font-size: 10.5px;
+  }
 
   .footer-notice {
     margin-top: 10px;
@@ -931,6 +1301,85 @@ export function renderPaymentSummaryHtml({
       <span class="meta-value">${escapeHtml(contactName)}${contactPhone ? ` (${escapeHtml(contactPhone)})` : ""}</span>
     </div>
   </div>
+
+  ${
+    breakdown.deckBreakdown?.hasDecks
+      ? `<!-- Upper & Lower Berth Pricing Breakdown -->
+  <div class="deck-pricing-box">
+    <div class="deck-pricing-header">
+      <span class="deck-pricing-title">🛏️ UPPER &amp; LOWER BERTH PRICING BREAKDOWN</span>
+      <span class="deck-pricing-subtitle">Independent Deck Collections &amp; Group Balances</span>
+    </div>
+    <div class="deck-cards-grid">
+      <!-- Lower Deck Card -->
+      <div class="deck-card deck-card-lower">
+        <div class="deck-card-top">
+          <span class="deck-pill deck-pill-lower">LOWER BERTHS</span>
+          <span class="deck-count font-bold">${breakdown.deckBreakdown.lower.count} Berths</span>
+        </div>
+        <div class="deck-stats-list">
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Total Fare:</span>
+            <span class="stat-val font-bold">₹${formatRupees(fromPaise(breakdown.deckBreakdown.lower.farePaise))}</span>
+          </div>
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Advance Paid:</span>
+            <span class="stat-val font-bold text-paid">₹${formatRupees(fromPaise(breakdown.deckBreakdown.lower.paidPaise))}</span>
+          </div>
+          <div class="deck-stat-row deck-balance-row">
+            <span class="stat-lbl font-bold">Balance Due:</span>
+            <span class="stat-val font-black ${breakdown.deckBreakdown.lower.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(breakdown.deckBreakdown.lower.balancePaise))}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upper Deck Card -->
+      <div class="deck-card deck-card-upper">
+        <div class="deck-card-top">
+          <span class="deck-pill deck-pill-upper">UPPER BERTHS</span>
+          <span class="deck-count font-bold">${breakdown.deckBreakdown.upper.count} Berths</span>
+        </div>
+        <div class="deck-stats-list">
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Total Fare:</span>
+            <span class="stat-val font-bold">₹${formatRupees(fromPaise(breakdown.deckBreakdown.upper.farePaise))}</span>
+          </div>
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Advance Paid:</span>
+            <span class="stat-val font-bold text-paid">₹${formatRupees(fromPaise(breakdown.deckBreakdown.upper.paidPaise))}</span>
+          </div>
+          <div class="deck-stat-row deck-balance-row">
+            <span class="stat-lbl font-bold">Balance Due:</span>
+            <span class="stat-val font-black ${breakdown.deckBreakdown.upper.balancePaise > 0 ? "text-due" : "text-paid"}">₹${formatRupees(fromPaise(breakdown.deckBreakdown.upper.balancePaise))}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Combined Group Total Card -->
+      <div class="deck-card deck-card-total">
+        <div class="deck-card-top">
+          <span class="deck-pill deck-pill-total">GROUP OVERALL</span>
+          <span class="deck-count font-bold">${totalPaxCount} Berths</span>
+        </div>
+        <div class="deck-stats-list">
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Total Fare:</span>
+            <span class="stat-val font-bold">₹${formatRupees(totalFare)}</span>
+          </div>
+          <div class="deck-stat-row">
+            <span class="stat-lbl">Total Paid:</span>
+            <span class="stat-val font-bold text-paid">₹${formatRupees(totalPaid)}</span>
+          </div>
+          <div class="deck-stat-row deck-balance-row">
+            <span class="stat-lbl font-bold">Group Balance:</span>
+            <span class="stat-val font-black ${hasTotalDue ? "text-due" : "text-paid"}">₹${formatRupees(totalBalance)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`
+      : ""
+  }
 
   <!-- Passenger Breakdown Section -->
   <div class="section-title">

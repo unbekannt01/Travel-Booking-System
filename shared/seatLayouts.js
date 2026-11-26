@@ -766,3 +766,39 @@ export function formatSeatDisplayName(layoutKey, rawId) {
 
   return String(rawId)
 }
+
+/**
+ * Formats a passenger name to show Last Name + First Name (e.g. "Ghetiya Bipinbhai").
+ * Does NOT use the middle name.
+ * e.g., "Ghetiya Bipinchandra Devrajbhai" -> "Ghetiya Bipinchandra"
+ * e.g., "Hansaliya Sarojben Gandubhai"   -> "Hansaliya Sarojben"
+ * e.g., "Ghetiya Bipinbhai"              -> "Ghetiya Bipinbhai"
+ *
+ * @param {string | null | undefined} fullName
+ * @returns {string}
+ */
+export function formatShortPassengerName(fullName) {
+  if (!fullName || typeof fullName !== "string") return ""
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return parts[0] || ""
+  return `${parts[0]} ${parts[1]}`
+}
+
+/**
+ * Checks whether a given seat ID or seat label corresponds to an Upper berth.
+ * @param {string|null|undefined} seatId
+ * @returns {boolean}
+ */
+export function isUpperBerthSeat(seatId) {
+  if (!seatId) return false
+  const s = String(seatId).toLowerCase().trim()
+  return (
+    s.startsWith("upper") ||
+    s.startsWith("u") ||
+    s.includes("-u") ||
+    /\bu\d+/i.test(s) ||
+    s === "rear-b2" ||
+    s === "b2"
+  )
+}
+
