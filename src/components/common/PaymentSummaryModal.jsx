@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import {
   X,
   Printer,
@@ -80,7 +81,7 @@ export default function PaymentSummaryModal({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isOpen, onClose])
 
-  if (!isOpen) return null
+  if (!isOpen || typeof document === "undefined") return null
 
   const isGroup = Boolean(group || memberBookings.length > 0)
   const titleRef = isGroup
@@ -117,9 +118,9 @@ export default function PaymentSummaryModal({
     handlePrint()
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="payment-summary-title"
@@ -219,6 +220,7 @@ export default function PaymentSummaryModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
